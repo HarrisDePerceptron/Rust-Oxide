@@ -7,21 +7,8 @@ use futures_util::future::BoxFuture;
 use std::task::{Context, Poll};
 use tower::{Layer, Service};
 
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Role {
-    User,
-    Admin,
-}
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Claims {
-    pub sub: String, // user id / email
-    pub exp: usize,  // expiry (unix)
-    pub iat: usize,  // issued at
-    pub roles: Vec<Role>,
-}
+use super::Claims;
+use crate::auth::Role;
 
 #[derive(Clone)]
 pub struct RequireRoleLayer {
@@ -38,25 +25,6 @@ impl RequireRoleLayer {
 pub struct RequireRole<S> {
     inner: S,
     required: Role,
-}
-
-// Helper extractor: get Claims from extensions in handler signature.
-impl<S> axum::extract::FromRequestParts<S> for Claims
-where
-    S: Send + Sync,
-{
-    type Rejection = (StatusCode, &'static str);
-
-    async fn from_request_parts(
-        parts: &mut axum::http::request::Parts,
-        _state: &S,
-    ) -> Result<Self, Self::Rejection> {
-        parts
-            .extensions
-            .get::<Claims>()
-            .cloned()
-            .ok_or((StatusCode::UNAUTHORIZED, "No claims in request"))
-    }
 }
 
 impl<S> Layer<S> for RequireRoleLayer {
@@ -86,8 +54,6 @@ where
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
         let required = self.required.clone();
-
-        // tower Services are allowed to be called concurrently, so clone inner
         let mut inner = self.inner.clone();
 
         Box::pin(async move {

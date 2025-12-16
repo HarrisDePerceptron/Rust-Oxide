@@ -1,12 +1,14 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `src/main.rs`: Axum entrypoint; sets up public, JWT-protected, and role-gated routes, plus middleware and logging.  
-- `src/role_layer.rs`: Custom `RequireRole` tower layer and shared JWT `Claims` extractor.  
-- `src/lib.rs`: Re-exports the role layer for downstream use.  
-- `examples/client.rs`: Minimal Reqwest client that logs in and calls the protected routes.  
-- `target/`: Build artifacts (ignore in diffs).  
-- Config lives in `Cargo.toml`; change the demo JWT secret in `main.rs` before shipping.
+- `src/main.rs`: bootstraps config, state, logging, and mounts the router.  
+- `src/config.rs`: env-driven settings (HOST, PORT, JWT_SECRET, RUST_LOG).  
+- `src/state.rs`: shared `AppState` (JWT keys, HTTP client).  
+- `src/auth/`: JWT helpers (`jwt.rs`) and role gate layer (`role_layer.rs`) with shared `Claims`/`Role` types.  
+- `src/routes/`: feature routers — `public.rs`, `auth.rs` (login), `protected.rs` (/me), `admin.rs` (/admin/stats); merged in `routes/mod.rs`.  
+- `src/error.rs`: consistent JSON error responses; `src/logging.rs`: tracing setup.  
+- `examples/client.rs`: Reqwest demo hitting the API; uses `BASE_URL`, `USERNAME`, `PASSWORD`.  
+- `target/`: build artifacts (ignore in diffs).
 
 ## Build, Test, and Development Commands
 - `cargo run` — start the server on `0.0.0.0:3000` with trace logging.  
@@ -17,9 +19,9 @@
 
 ## Coding Style & Naming Conventions
 - Rust 2024 edition; keep `rustfmt` defaults and fix clippy warnings.  
-- Files and modules: `snake_case`; types and traits: `PascalCase`; functions/vars: `snake_case`; constants: `SCREAMING_SNAKE_CASE`.  
-- Prefer `Result<T, anyhow::Error>` for new fallible code and bubble errors with `?`.  
-- Keep middleware/state lightweight; avoid storing secrets in source—pull from env when possible.
+- Files/modules: `snake_case`; types/traits: `PascalCase`; functions/vars: `snake_case`; constants: `SCREAMING_SNAKE_CASE`.  
+- Prefer `Result<T, anyhow::Error>` for new fallible code; use `?` to bubble errors.  
+- Keep middleware/state thin; load secrets from env, not source.
 
 ## Testing Guidelines
 - Add fast, isolated tests under `tests/` or in the same module with `#[cfg(test)]`.  
@@ -34,6 +36,6 @@
 - Keep PRs small and focused; ensure CI (fmt, clippy, tests) is green before requesting review.
 
 ## Security & Configuration Tips
-- Replace the demo secret (`super-secret-change-me`) with a strong key via env var before deploying.  
-- Run locally with minimal privileges; bind to `127.0.0.1` when not containerized.  
-- Avoid checking tokens or secrets into git; prefer `.env` (untracked) or a secrets manager.
+- Set a strong `JWT_SECRET` (required in release); defaults only in debug.  
+- Bind to `127.0.0.1:3000` by default; override with `HOST`/`PORT`.  
+- Keep secrets out of git; use `.env` (gitignored) or a secrets manager.
