@@ -6,6 +6,11 @@ pub struct AppConfig {
     pub port: u16,
     pub jwt_secret: String,
     pub log_level: String,
+    pub database_url: String,
+    pub db_max_connections: u32,
+    pub db_min_idle: u32,
+    pub admin_email: String,
+    pub admin_password: String,
 }
 
 impl AppConfig {
@@ -21,6 +26,42 @@ impl AppConfig {
         let log_level =
             std::env::var("RUST_LOG").unwrap_or_else(|_| "info,tower_http=info".to_string());
 
+        let database_url = match std::env::var("DATABASE_URL") {
+            Ok(val) => val,
+            Err(_) if cfg!(debug_assertions) => {
+                "postgres://postgres:postgres@localhost:5432/sample_server".to_string()
+            }
+            Err(err) => {
+                Err(anyhow::anyhow!(err)).context("DATABASE_URL is required in release builds")?
+            }
+        };
+
+        let db_max_connections = std::env::var("DB_MAX_CONNS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(10);
+
+        let db_min_idle = std::env::var("DB_MIN_IDLE")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(2);
+
+        let admin_email = match std::env::var("ADMIN_EMAIL") {
+            Ok(val) => val,
+            Err(_) if cfg!(debug_assertions) => "admin@example.com".to_string(),
+            Err(err) => {
+                Err(anyhow::anyhow!(err)).context("ADMIN_EMAIL is required in release builds")?
+            }
+        };
+
+        let admin_password = match std::env::var("ADMIN_PASSWORD") {
+            Ok(val) => val,
+            Err(_) if cfg!(debug_assertions) => "adminpassword".to_string(),
+            Err(err) => {
+                Err(anyhow::anyhow!(err)).context("ADMIN_PASSWORD is required in release builds")?
+            }
+        };
+
         let jwt_secret = match std::env::var("JWT_SECRET") {
             Ok(val) => val,
             Err(_) if cfg!(debug_assertions) => "super-secret-change-me".to_string(),
@@ -34,6 +75,11 @@ impl AppConfig {
             port,
             jwt_secret,
             log_level,
+            database_url,
+            db_max_connections,
+            db_min_idle,
+            admin_email,
+            admin_password,
         })
     }
 }

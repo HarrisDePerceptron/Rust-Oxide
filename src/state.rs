@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
 use jsonwebtoken::{DecodingKey, EncodingKey};
+use sea_orm::DatabaseConnection;
 
 #[derive(Clone)]
 pub struct AppState {
     pub jwt: JwtKeys,
+    pub db: DatabaseConnection,
 }
 
 #[derive(Clone)]
@@ -23,9 +25,10 @@ impl JwtKeys {
 }
 
 impl AppState {
-    pub fn new(secret: &[u8]) -> Arc<Self> {
+    pub fn new(secret: &[u8], db: DatabaseConnection) -> Arc<Self> {
         Arc::new(Self {
             jwt: JwtKeys::from_secret(secret),
+            db,
         })
     }
 }

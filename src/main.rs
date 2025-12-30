@@ -1,26 +1,50 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::Router;
+use sea_orm::{ConnectOptions, Database};
+use sea_orm_migration::MigratorTrait;
 use tower_http::trace::TraceLayer;
 
 mod auth;
 mod config;
+mod db;
 mod error;
 mod logging;
+mod migration;
 mod routes;
 mod state;
 
 use crate::config::AppConfig;
+use crate::db::user_repo;
 use crate::logging::init_tracing;
+use crate::migration::Migrator;
 use crate::routes::router;
 use crate::state::AppState;
 
 #[tokio::main]
 async fn main() {
+    if let Err(err) = run().await {
+        tracing::error!("server failed: {err:?}");
+        std::process::exit(1);
+    }
+}
+
+async fn run() -> anyhow::Result<()> {
     let cfg = AppConfig::from_env().expect("failed to load config");
     init_tracing(&cfg.log_level);
 
-    let state = AppState::new(cfg.jwt_secret.as_bytes());
+    let mut opt = ConnectOptions::new(cfg.database_url.clone());
+    opt.max_connections(cfg.db_max_connections)
+        .min_connections(cfg.db_min_idle)
+        .connect_timeout(Duration::from_secs(5))
+        .sqlx_logging(false);
+
+    let db = Database::connect(opt).await?;
+    Migrator::up(&db, None).await?;
+
+    seed_admin(&cfg, &db).await?;
+
+    let state = AppState::new(cfg.jwt_secret.as_bytes(), db);
 
     let app = Router::new()
         .merge(router(Arc::clone(&state)))
@@ -31,6 +55,23 @@ async fn main() {
         .expect("invalid host/port");
     tracing::info!("listening on http://{}", addr);
 
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
+    Ok(())
+}
+
+async fn seed_admin(cfg: &AppConfig, db: &sea_orm::DatabaseConnection) -> anyhow::Result<()> {
+    use auth::Role;
+    use auth::password::hash_password;
+
+    if let Some(existing) = user_repo::find_by_email(db, &cfg.admin_email).await? {
+        tracing::info!("admin user already present: {}", existing.email);
+        return Ok(());
+    }
+
+    let hash = hash_password(&cfg.admin_password)
+        .map_err(|e| anyhow::anyhow!("admin seed hash error: {}", e.message))?;
+    let user = user_repo::create_user(db, &cfg.admin_email, &hash, Role::Admin.as_str()).await?;
+    tracing::info!("seeded admin user {}", user.email);
+    Ok(())
 }

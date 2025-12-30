@@ -9,9 +9,9 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use jsonwebtoken::{Algorithm, Validation, decode};
+use jsonwebtoken::{Algorithm, Header, Validation, decode, encode};
 
-use super::Claims;
+use super::{Claims, Role};
 use crate::{error::AppError, state::AppState};
 
 pub fn now_unix() -> usize {
@@ -19,6 +19,29 @@ pub fn now_unix() -> usize {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs() as usize
+}
+
+pub fn encode_token(state: &AppState, claims: &Claims) -> Result<String, AppError> {
+    let mut header = Header::new(Algorithm::HS256);
+    header.typ = Some("JWT".into());
+
+    encode(&header, claims, &state.jwt.enc).map_err(|_| {
+        AppError::new(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Token encoding failed",
+        )
+    })
+}
+
+pub fn make_access_claims(user_id: &uuid::Uuid, roles: Vec<Role>, ttl_secs: usize) -> Claims {
+    let iat = now_unix();
+    let exp = iat + ttl_secs;
+    Claims {
+        sub: user_id.to_string(),
+        roles,
+        iat,
+        exp,
+    }
 }
 
 pub async fn jwt_auth(

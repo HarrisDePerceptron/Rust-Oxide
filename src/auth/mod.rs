@@ -1,4 +1,5 @@
 pub mod jwt;
+pub mod password;
 pub mod role_layer;
 
 use axum::{extract::FromRequestParts, http::StatusCode};
@@ -9,6 +10,27 @@ use serde::{Deserialize, Serialize};
 pub enum Role {
     User,
     Admin,
+}
+
+impl Role {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Role::User => "user",
+            Role::Admin => "admin",
+        }
+    }
+}
+
+impl TryFrom<&str> for Role {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "user" => Ok(Role::User),
+            "admin" => Ok(Role::Admin),
+            _ => Err(()),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
