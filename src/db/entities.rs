@@ -12,6 +12,7 @@ pub mod user {
     pub struct Model {
         #[sea_orm(primary_key)]
         pub id: Uuid,
+        #[sea_orm(unique)]
         pub email: String,
         pub password_hash: String,
         pub role: String,
@@ -43,7 +44,9 @@ pub mod refresh_token {
     pub struct Model {
         #[sea_orm(primary_key)]
         pub id: Uuid,
+        #[sea_orm(unique)]
         pub token: String,
+        #[sea_orm(indexed)]
         pub user_id: Uuid,
         pub expires_at: DateTimeWithTimeZone,
         pub created_at: DateTimeWithTimeZone,

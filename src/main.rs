@@ -2,7 +2,6 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::Router;
 use sea_orm::{ConnectOptions, Database};
-use sea_orm_migration::MigratorTrait;
 use tower_http::trace::TraceLayer;
 
 use sample_server::{
@@ -10,7 +9,6 @@ use sample_server::{
     config::AppConfig,
     db::user_repo,
     logging::init_tracing,
-    migration::Migrator,
     routes::router,
     state::AppState,
 };
@@ -34,7 +32,10 @@ async fn run() -> anyhow::Result<()> {
         .sqlx_logging(false);
 
     let db = Database::connect(opt).await?;
-    Migrator::up(&db, None).await?;
+    tracing::info!("syncing database schema from entities");
+    db.get_schema_registry("sample_server::db::entities::*")
+        .sync(&db)
+        .await?;
 
     seed_admin(&cfg, &db).await?;
 
