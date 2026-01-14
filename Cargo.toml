@@ -25,3 +25,5 @@ tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 uuid = { version = "1.11", features = ["v4", "serde"] }
 dotenvy="0.15.7"
 
+[build-dependencies]
+syn = { version = "2", features = ["full", "visit"] }

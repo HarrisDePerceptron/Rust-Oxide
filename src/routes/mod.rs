@@ -8,6 +8,7 @@ pub mod admin;
 pub mod auth;
 pub mod protected;
 pub mod public;
+pub mod route_list;
 
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
