@@ -1,0 +1,592 @@
+CREATE TABLE person (
+  id BIGSERIAL NOT NULL PRIMARY KEY,
+  firstname VARCHAR(200) NOT NULL,
+  lastname VARCHAR(200) NOT NULL,
+  gender VARCHAR(20) NULL,
+  date_of_birth  DATE NULL,
+  email VARCHAR(200) NOT NULL
+);
+
+INSERT INTO person (
+  firstname,
+  lastname,
+  gender,
+  email,
+  date_of_birth
+)
+VALUES (
+  'harris',
+  'muhammad',
+  'male',
+  'harris.perceptron@gmail.com',
+  DATE '2026-01-01'
+);
+
+
+
+CREATE ROLE postgres WITH
+  LOGIN
+  SUPERUSER
+  CREATEDB
+  CREATEROLE
+  INHERIT
+  REPLICATION
+  BYPASSRLS;
+
+
+   SELECT a.address, a.city_id, c.city, c.country_id, co.country
+   FROM address a 
+   JOIN city c ON a.city_id=c.city_id 
+   JOIN country co ON co.country_id=c.country_id
+   
+   ORDER BY co.country DESC
+   LIMIT 10;
+
+
+  SELECT co.country, COUNT(co.country) as counts
+   FROM address a 
+   JOIN city c ON a.city_id=c.city_id 
+   JOIN country co ON co.country_id=c.country_id
+   GROUP BY co.country
+   ORDER BY counts DESC;
+
+
+
+SELECT co.country, SUM(
+  CASE
+      WHEN postal_code ~ '^\d+$' THEN postal_code::int
+      ELSE 0
+    END
+) AS counts
+FROM address a 
+JOIN city c ON a.city_id=c.city_id 
+JOIN country co ON co.country_id=c.country_id
+GROUP BY co.country
+ORDER BY counts DESC;
+
+
+SELECT email, NOW() AS now, 
+last_update, 
+ROUND(
+  ((EXTRACT(DAYS FROM (NOW() - last_update))/30)/12)
+  ,2) AS  YEARS  
+FROM customer 
+LIMIT 5;
+
+
+INSERT INTO person (
+id,
+  firstname,
+  lastname,
+  gender,
+  email,
+  date_of_birth
+)
+VALUES (
+1,
+  'harris',
+  'muhammad',
+  'male',
+  'harris.perceptron@gmail.com',
+  DATE '2026-01-01'
+);
+
+
+
+ALTER TABLE person  ADD PRIMARY KEY (id);
+
+ALTER TABLE person ADD CONSTRAINT unique_email UNIQUE (email);
+
+ALTER TABLE person ADD CONSTRAINT gender_check CHECK (gender='Female' OR gender='Male');
+
+CREATE TABLE car (
+  id BIGSERIAL NOT NULL PRIMARY KEY,
+  make VARCHAR(100) NOT NULL,
+  model INT NOT NULL,
+  price numeric
+);
+
+
+
+ALTER TABLE person ADD COLUMN car_id BIGINT UNIQUE NULL;
+ALTER TABLE person ADD CONSTRAINT fk_perosn_car FOREIGN KEY (car_id) REFERENCES car (id) ;
+
+
+
+INSERT INTO person (
+  firstname,
+  lastname,
+  gender,
+  email,
+  date_of_birth,
+  car_id
+)
+VALUES (
+  'hassan',
+  'ali',
+  'male',
+  'hassan.perceptron@gmail.com',
+  DATE '2026-01-01',
+  NULL
+);
+
+
+INSERT INTO car (
+ make,
+ model,
+ price
+)
+VALUES (
+  'honda',
+  'city',
+  1000
+);
+
+
+ALTER TABLE car 
+ALTER COLUMN model TYPE VARCHAR(100),
+ALTER CONSTRAINT model NOT NULL;
+
+
+
+SELECT * FROM person 
+JOIN car ON car.id = person.car_id;
+
+SELECT person.id, person.email, person.firstname, car.make, car.model FROM person
+JOIN car ON car.id = person.car_id;
+
+SELECT person.id, person.email, person.firstname, car.make, car.model FROM person
+LEFT JOIN car ON car.id = person.car_id;
+
+
+\copy 
+(
+  SELECT person.id, person.email, person.firstname, car.make, car.model 
+  FROM person 
+  LEFT JOIN car ON car.id = person.car_id
+) 
+TO /data/results.csv 
+DELIMITER ',' CSV HEADER;
+
+CREATE view person_car_view AS
+SELECT person.id AS person_id, CONCAT(person.firstname, ' ', person.lastname) AS name, person.gender, car.id AS car_id, car.make, car.model, car.price FROM person
+LEFT JOIN car
+ON person.car_id = car.id;
+
+
+CREATE or REPLACE FUNCTION fn_add_ints(int, int)
+RETURNS  int AS
+$body$
+SELECT $1 + $2 
+$body$
+LANGUAGE SQL;
+
+CREATE or REPLACE FUNCTION fn_set_default_gender(varchar)
+RETURNS  void AS
+$body$
+  UPDATE person SET gender=$1 WHERE gender IS NULL
+$body$
+LANGUAGE SQL;
+
+CREATE or REPLACE FUNCTION fn_get_last_person()
+RETURNS  person AS
+$body$
+  SELECT * FROM person ORDER BY id  DESC LIMIT 1
+$body$
+LANGUAGE SQL;
+
+
+CREATE OR REPLACE FUNCTION fn_get_person_gender(in_gen varchar)
+RETURNS TABLE (
+  person_id BIGINT,
+  car_id BIGINT,
+  firstname  VARCHAR,
+  lastname VARCHAR,
+  model VARCHAR,
+  make VARCHAR
+) AS
+$body$
+  SELECT person.id AS person_id, car_id, firstname, lastname, car.model AS model , car.make AS make 
+  FROM person
+  LEFT JOIN car ON car.id = person.car_id
+  WHERE gender=in_gen
+$body$
+LANGUAGE SQL;
+
+
+CREATE OR REPLACE FUNCTION fn_get_price_car(in_car_name varchar) 
+RETURNS numeric AS
+
+$body$
+BEGIN
+  RETURN price 
+  FROM car 
+  WHERE make=in_car_name;
+END
+$body$
+
+LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION fn_get_sum_two(v1 int, v2 int) 
+RETURNS INT AS
+
+$body$
+
+DECLARE
+  ans INT;
+
+BEGIN
+  ans := v1 + v2;
+  RETURN ans;
+END
+$body$
+
+LANGUAGE plpgsql;
+
+
+
+CREATE OR REPLACE FUNCTION fn_get_random_between(min_val int, max_val int) 
+RETURNS INT AS
+
+$body$
+
+DECLARE
+  ans INT;
+
+BEGIN
+  ans:= (random()* (max_val - min_val) ) + min_val;
+  RETURN ans;
+END
+$body$
+
+LANGUAGE plpgsql;
+
+
+
+
+
+CREATE OR REPLACE FUNCTION fn_get_random_person() 
+RETURNS VARCHAR AS
+
+$body$
+
+DECLARE
+  ans VARCHAR;
+  rand int;
+  per record;
+
+  max_val INT;
+  min_val INT;
+
+  full_name VARCHAR;
+  count INT;
+
+  msg VARCHAR;
+  
+BEGIN
+  min_val:= 0;
+  SELECT id FROM person ORDER by id DESC LIMIT 1 INTO max_val;  
+
+  rand:= (random()* (max_val - min_val) ) + min_val;
+  
+
+  SELECT * from person 
+  WHERE id IN (rand) INTO per;
+
+  full_name := CONCAT(per.firstname, per.lastname);
+  
+
+  msg := Concat('Not found for id ', rand::varchar);
+  
+  IF full_name  IS NULL OR  trim(full_name) =  '' THEN 
+    ans := msg;
+  ELSE
+    ans := full_name;
+  END IF;
+  
+  RETURN ans;
+END
+$body$
+
+LANGUAGE plpgsql;
+
+
+/*
+ LOOP TEST
+*/
+CREATE OR REPLACE FUNCTION fn_sum_upto(max_val INT) 
+RETURNS INT AS
+
+$body$
+
+DECLARE
+  ans INT;
+  i INT;
+  
+BEGIN
+  ans := 0;
+  i := 0;
+  LOOP
+    ans := ans + i;
+
+    i := i+1;
+    EXIT WHEN i >= max_val;
+  END LOOP;
+
+  RETURN ans;
+END
+$body$
+
+LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION fn_test_for(max_val INT) 
+RETURNS INT AS
+
+$body$
+
+DECLARE
+  sum_result INT DEFAULT 0;
+BEGIN
+  FOR i IN 1 .. max_val BY 1
+  LOOP 
+    sum_result := sum_result + i;
+  END LOOP;
+
+  RETURN sum_result;
+END
+$body$
+
+
+LANGUAGE plpgsql;
+
+
+
+DO
+$body$
+  DECLARE
+    rec record;
+  BEGIN
+    FOR rec IN SELECT * FROM person LIMIT 10
+    LOOP
+      RAISE NOTICE '% %', rec.firstname, rec.lastname;
+    END LOOP;
+
+  END;
+
+$body$
+
+LANGUAGE plpgsql;
+
+
+DO
+$body$
+  DECLARE
+    arr INT[] := array[1,2,3];
+    i INT;
+  BEGIN
+    FOREACH i IN ARRAY arr
+    LOOP
+      RAISE NOTICE '%', i;
+    END LOOP;
+  END;
+
+$body$
+
+LANGUAGE plpgsql;
+
+
+DO
+$body$
+  DECLARE
+    max_val INT := 10;
+    i INT := 0;
+  BEGIN
+    WHILE i< max_val
+    LOOP
+      i := i + 1;
+      
+      IF MOD(i,2) = 0 THEN 
+        CONTINUE;
+      END IF;
+      
+      RAISE NOTICE 'Num = %', i;
+    END LOOP;
+  END;
+
+$body$
+
+LANGUAGE plpgsql;
+
+
+
+CREATE TABLE past_due (
+  id BIGSERIAL PRIMARY KEY,
+  person_id BIGINT NOT NULL UNIQUE,
+  balance NUMERIC DEFAULT 0.0 CHECK (balance >= 0.0),
+
+  CONSTRAINT fk_person_past_due 
+    FOREIGN KEY (person_id) 
+    REFERENCES person (id)
+
+);
+
+INSERT INTO past_due (person_id, balance)
+VALUES 
+  (1, 10),
+  (2, 20),
+  (9, 50);
+
+
+
+ALTER TABLE past_due 
+ALTER COLUMN person_id TYPE BIGINT,
+ALTER COLUMN person_id SET NOT NULL,
+ADD CONSTRAINT person_id_unique UNIQUE (person_id);
+
+
+
+CREATE OR REPLACE VIEW view_person_balance AS
+  SELECT pd.id AS id, pd.person_id, CONCAT(p.firstname, ' ', p.lastname) AS name, pd.balance 
+  FROM past_due AS pd
+  LEFT JOIN person as p
+  ON p.id = pd.person_id;
+
+/*
+  Procedure Starts
+*/
+
+CREATE OR REPLACE PROCEDURE  person_pay_debt ( in_person_id BIGINT, amount NUMERIC)
+AS 
+$body$
+
+DECLARE
+  past_due_id BIGINT;
+  balance_val NUMERIC;
+  
+BEGIN
+  SELECT id, balance FROM past_due 
+  WHERE person_id= in_person_id
+  LIMIT 1
+  INTO STRICT past_due_id, balance_val;
+
+  balGance_val := balance_val - amount;
+  
+  IF balance_val < 0 THEN
+      balance_val := 0;
+  END IF;
+
+  RAISE NOTICE 'Past due id is %. New balance is %. Trying to update now....', past_due_id::varchar, balance_val::varchar;
+
+
+
+  UPDATE past_due
+  SET balance=balance_val
+  WHERE id = past_due_id;
+  
+  RAISE NOTICE 'Person % debit payed. New balance  %', in_person_id::varchar, balance_val::varchar;
+  COMMIT;
+
+  
+END;
+$body$
+
+LANGUAGE plpgsql;
+
+/*
+TRIGGER Functions
+*/
+
+CREATE OR REPLACE FUNCTION trigger_function()
+RETURNS TRIGGER
+LANGUAGE PLPGSQL
+AS 
+$body$
+
+DECLARE
+BEGIN
+  
+END;
+
+$body$
+;
+
+
+CREATE TRIGGER trigger_name 
+ {BEFORE| AFTER} {event} -- EVENT - insert, update, truncate
+
+ ON TABLE  table_name 
+  [FOR [EACH] {ROW | STATEMENT}]
+    EXECUTE PROCEDURE trigger_function;
+
+CREATE TABLE distributor (
+  id BIGSERIAL NOT NULL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL UNIQUE
+
+);
+
+
+INSERT INTO distributor (name)
+VALUES 
+  ('mezzan'),
+  ('al habib'),
+  ('JS'),
+  ('ITIFAQ');
+
+CREATE TABLE distributor_audit (
+  id BIGSERIAL NOT NULL PRIMARY KEY,
+  distributor_id BIGINT  NOT NULL,
+  name varchar(100) NOT NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT now(),
+  created_at TIMESTAMP NOT NULL DEFAULT now(),
+
+  CONSTRAINT fk_distributor_audit_id 
+    FOREIGN KEY (distributor_id) 
+    REFERENCES distributor (id)
+  
+);
+
+
+CREATE OR REPLACE FUNCTION tf_distributor_log()
+RETURNS TRIGGER
+LANGUAGE PLPGSQL
+AS 
+$body$
+
+DECLARE
+BEGIN
+  IF NEW.name <> OLD.name THEN 
+    INSERT INTO distributor_audit (distributor_id, name)
+    VALUES (NEW.id,  OLD.name);
+
+  END IF;
+
+  RAISE NOTICE 'TRIGGER NAME: %', TG_NAME;
+  RAISE NOTICE 'TABLE NAME: %', TG_TABLE_NAME;
+  RAISE NOTICE 'Operation: %', TG_OP;
+  RAISE NOTICE 'WHEN EXECUTED: %', TG_WHEN;
+  RAISE NOTICE 'Row or statement: %', TG_LEVEL;
+  RAISE NOTICE 'TABLE Schema: %', TG_TABLE_SCHEMA;
+
+  RETURN NEW;
+  
+END;
+
+$body$
+;
+
+
+CREATE TRIGGER tr_distributor_audit_before 
+BEFORE UPDATE 
+ON distributor 
+FOR EACH ROW
+EXECUTE PROCEDURE tf_distributor_log();
+
+
+INSERT INTO distributor (name)
+VALUES ('old name');
+
+UPDATE distributor SET name='new name' WHERE id = 5;
+
+
+

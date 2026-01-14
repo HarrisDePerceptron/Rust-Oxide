@@ -5,21 +5,15 @@ use sea_orm::{ConnectOptions, Database};
 use sea_orm_migration::MigratorTrait;
 use tower_http::trace::TraceLayer;
 
-mod auth;
-mod config;
-mod db;
-mod error;
-mod logging;
-mod migration;
-mod routes;
-mod state;
-
-use crate::config::AppConfig;
-use crate::db::user_repo;
-use crate::logging::init_tracing;
-use crate::migration::Migrator;
-use crate::routes::router;
-use crate::state::AppState;
+use sample_server::{
+    auth::{Role, password},
+    config::AppConfig,
+    db::user_repo,
+    logging::init_tracing,
+    migration::Migrator,
+    routes::router,
+    state::AppState,
+};
 
 #[tokio::main]
 async fn main() {
@@ -61,15 +55,12 @@ async fn run() -> anyhow::Result<()> {
 }
 
 async fn seed_admin(cfg: &AppConfig, db: &sea_orm::DatabaseConnection) -> anyhow::Result<()> {
-    use auth::Role;
-    use auth::password::hash_password;
-
     if let Some(existing) = user_repo::find_by_email(db, &cfg.admin_email).await? {
         tracing::info!("admin user already present: {}", existing.email);
         return Ok(());
     }
 
-    let hash = hash_password(&cfg.admin_password)
+    let hash = password::hash_password(&cfg.admin_password)
         .map_err(|e| anyhow::anyhow!("admin seed hash error: {}", e.message))?;
     let user = user_repo::create_user(db, &cfg.admin_email, &hash, Role::Admin.as_str()).await?;
     tracing::info!("seeded admin user {}", user.email);
