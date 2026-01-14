@@ -9,6 +9,7 @@
 - `src/routes/`: feature routers — `public.rs`, `auth.rs` (register/login/refresh), `protected.rs` (/me), `admin.rs` (/admin/stats); merged in `routes/mod.rs`.  
 - `src/error.rs`: consistent JSON error responses; `src/logging.rs`: tracing setup.  
 - `examples/client.rs`: Reqwest demo hitting the API; uses `BASE_URL`, `USERNAME`, `PASSWORD`.  
+- `views/`: HTML templates rendered with Askama (e.g., index page).  
 - `target/`: build artifacts (ignore in diffs).
 
 ## Build, Test, and Development Commands
