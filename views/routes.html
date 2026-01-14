@@ -1,103 +1,11 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta
-      name="description"
-      content="Route directory for the Sample Server template."
-    />
-    <title>Sample Server | Routes</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;650&family=Space+Grotesk:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ["Space Grotesk", "ui-sans-serif", "system-ui"],
-              display: ["Fraunces", "ui-serif", "serif"],
-            },
-          },
-        },
-      };
-    </script>
-    <style>
-      :root {
-        --sand: #f6efe6;
-        --clay: #d18b5a;
-        --pine: #163b36;
-        --sky: #bfe3e0;
-        --ink: #0f1f1d;
-        --mist: #e8f1f0;
-      }
+{% extends "base.html" %}
 
-      .bg-landing {
-        background: radial-gradient(
-            960px 560px at 12% -10%,
-            var(--sky) 0%,
-            transparent 60%
-          ),
-          radial-gradient(
-            840px 520px at 88% 6%,
-            rgba(209, 139, 90, 0.35) 0%,
-            transparent 55%
-          ),
-          linear-gradient(180deg, var(--sand) 0%, #ffffff 45%, #f7fbfb 100%);
-      }
+{% block title %}Sample Server | Routes{% endblock %}
+{% block description %}Route directory for the Sample Server template.{% endblock %}
 
-      @keyframes fade-up {
-        from {
-          opacity: 0;
-          transform: translateY(18px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
-      .fade-1 {
-        animation: fade-up 0.8s ease-out both;
-      }
-    </style>
-    <link rel="icon" href="/images/favicon.svg" type="image/svg+xml" />
-  </head>
-  <body class="bg-landing text-[color:var(--ink)] antialiased">
-    <div class="min-h-screen px-6 pb-16 pt-10 sm:px-10">
-      <header class="mx-auto max-w-6xl">
-        <div class="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-          <div class="flex items-center gap-3">
-            <div
-              class="grid h-11 w-11 place-items-center rounded-2xl bg-[color:var(--pine)] text-sm font-semibold text-white shadow-lg shadow-black/10"
-            >
-              RS
-            </div>
-            <div>
-              <p
-                class="text-xs uppercase tracking-[0.35em] text-[color:var(--pine)]"
-              >
-                Sample Server
-              </p>
-              <p class="text-xs text-black/50">Route directory</p>
-            </div>
-          </div>
-          <nav class="flex items-center gap-4 text-sm">
-            <a class="text-black/60 hover:text-black" href="/">Home</a>
-            <a class="text-black/60 hover:text-black" href="/routes.json"
-              >Routes JSON</a
-            >
-          </nav>
-        </div>
-      </header>
-
-      <main class="fade-1 mx-auto mt-10 max-w-6xl space-y-8">
-        <section class="rounded-3xl border border-black/10 bg-white/95 p-8 shadow-xl shadow-black/10">
+{% block content %}
+      <main class="fade-1 px-6 pb-16 pt-10 sm:px-10">
+        <section class="mx-auto max-w-6xl rounded-3xl border border-black/10 bg-white/95 p-8 shadow-xl shadow-black/10">
           <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p class="text-xs uppercase tracking-[0.3em] text-black/50">
@@ -111,9 +19,21 @@
               Generated at build time. Rendered at {{ now }}.
             </p>
           </div>
+          <div class="mt-6 flex flex-wrap gap-3 text-xs">
+            <a
+              class="rounded-full border border-black/10 bg-[color:var(--mist)] px-4 py-2 font-semibold text-[color:var(--pine)]"
+              href="/"
+              >Back to home</a
+            >
+            <a
+              class="rounded-full border border-black/10 bg-[color:var(--mist)] px-4 py-2 font-semibold text-[color:var(--pine)]"
+              href="/routes.json"
+              >View JSON</a
+            >
+          </div>
         </section>
 
-        <section class="space-y-6">
+        <section class="mx-auto mt-8 max-w-6xl space-y-6">
           {% for group in route_groups %}
           <details
             class="group rounded-2xl border border-black/10 bg-white/90 p-5 shadow-lg shadow-black/5"
@@ -176,6 +96,4 @@
           {% endfor %}
         </section>
       </main>
-    </div>
-  </body>
-</html>
+{% endblock %}
