@@ -114,6 +114,11 @@
             </div>
           </div>
           <nav class="hidden items-center gap-6 text-sm md:flex">
+            <a
+              class="rounded-full bg-[color:var(--pine)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-lg shadow-black/10 transition hover:-translate-y-0.5"
+              href="/routes"
+              >Routes</a
+            >
             <a class="text-black/60 hover:text-black" href="#features"
               >Features</a
             >
@@ -343,83 +348,26 @@ let app = Router::new().route("/", get(hello));</code></pre>
         </section>
 
         <section
-          id="routes"
           class="fade-3 mx-auto mt-16 max-w-6xl rounded-3xl border border-black/10 bg-white/95 p-8 shadow-xl shadow-black/10"
         >
-          <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div class="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div>
               <p class="text-xs uppercase tracking-[0.3em] text-black/50">
-                Route map
+                Route directory
               </p>
               <h2 class="mt-2 text-2xl font-semibold text-[color:var(--pine)]">
-                Live routes, grouped by source file
+                Browse every endpoint in one place.
               </h2>
+              <p class="mt-2 text-sm text-black/60">
+                Explore the generated route catalog grouped by source file.
+              </p>
             </div>
-            <p class="text-sm text-black/60">
-              Generated at build time from the Axum router tree.
-            </p>
-          </div>
-          <div class="mt-6 space-y-6">
-            {% for group in route_groups %}
-            <details
-              class="group rounded-2xl border border-black/10 bg-[color:var(--mist)]/40 p-5"
+            <a
+              class="rounded-full bg-[color:var(--pine)] px-6 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-lg shadow-black/15 transition hover:-translate-y-0.5"
+              href="/routes"
             >
-              <summary
-                class="flex cursor-pointer list-none items-center justify-between gap-4"
-              >
-                <div>
-                  <p
-                    class="text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)]"
-                  >
-                    {{ group.source }}
-                  </p>
-                  <p class="mt-1 text-xs text-black/50">
-                    Click to expand routes
-                  </p>
-                </div>
-                <div class="flex items-center gap-3">
-                  <span
-                    class="rounded-full border border-black/10 bg-white/80 px-3 py-1 text-xs font-semibold text-[color:var(--pine)]"
-                  >
-                    {{ group.route_count }} routes
-                  </span>
-                  <span
-                    class="text-xs font-semibold uppercase tracking-[0.2em] text-black/40 transition group-open:rotate-180"
-                    aria-hidden="true"
-                    >↓</span
-                  >
-                </div>
-              </summary>
-              <div
-                class="mt-4 overflow-x-auto rounded-xl border border-black/10 bg-white/90"
-              >
-                <table class="w-full text-left text-sm text-black/70">
-                  <thead
-                    class="border-b border-black/10 text-[11px] uppercase tracking-[0.2em] text-black/50"
-                  >
-                    <tr>
-                      <th class="px-4 py-2">Endpoint</th>
-                      <th class="px-4 py-2 text-right">Method</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-black/10">
-                    {% for route in group.routes %}
-                    <tr>
-                      <td class="px-4 py-2 font-mono text-xs text-black/70">
-                        {{ route.path }}
-                      </td>
-                      <td
-                        class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--clay)]"
-                      >
-                        {{ route.method }}
-                      </td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-            {% endfor %}
+              View routes
+            </a>
           </div>
         </section>
 

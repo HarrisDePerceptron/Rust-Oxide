@@ -28,24 +28,49 @@ struct IndexTemplate {
     route_groups: Vec<RouteGroup>,
 }
 
+#[derive(Template)]
+#[template(path = "routes.html")]
+struct RoutesTemplate {
+    now: String,
+    route_groups: Vec<RouteGroup>,
+}
+
 pub fn router() -> Router {
     Router::new()
         .route_service("/{*file}", ServeDir::new("public"))
         .route("/", get(index))
         .route("/public", get(handler))
-        .route("/routes", get(list_routes))
+        .route("/routes", get(routes_view))
+        .route("/routes.json", get(list_routes_json))
 }
 
 async fn handler() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "ok": true, "route": "public" }))
 }
 
-async fn list_routes() -> Json<&'static [RouteInfo]> {
+async fn list_routes_json() -> Json<&'static [RouteInfo]> {
     Json(routes())
 }
 
 async fn index() -> Result<Html<String>, AppError> {
     let now = Local::now().to_rfc3339();
+    let route_groups = build_route_groups();
+    let rendered = IndexTemplate { now, route_groups }
+        .render()
+        .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render index"))?;
+    Ok(Html(rendered))
+}
+
+async fn routes_view() -> Result<Html<String>, AppError> {
+    let now = Local::now().to_rfc3339();
+    let route_groups = build_route_groups();
+    let rendered = RoutesTemplate { now, route_groups }
+        .render()
+        .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render routes"))?;
+    Ok(Html(rendered))
+}
+
+fn build_route_groups() -> Vec<RouteGroup> {
     let mut grouped: BTreeMap<String, Vec<RouteItem>> = BTreeMap::new();
     for route in routes() {
         grouped
@@ -70,9 +95,5 @@ async fn index() -> Result<Html<String>, AppError> {
         })
         .collect();
     route_groups.sort_by(|a, b| a.source.cmp(&b.source));
-
-    let rendered = IndexTemplate { now, route_groups }
-        .render()
-        .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render index"))?;
-    Ok(Html(rendered))
+    route_groups
 }
