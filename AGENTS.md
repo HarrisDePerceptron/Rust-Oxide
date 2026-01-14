@@ -1,19 +1,18 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `src/main.rs`: bootstraps config, state, logging, runs SeaORM migrations, and mounts the router.  
+- `src/main.rs`: bootstraps config, state, logging, uses SeaORM's entity-first schema sync, and mounts the router.  
 - `src/config.rs`: env-driven settings (HOST, PORT, JWT_SECRET, RUST_LOG, DATABASE_URL, DB_MAX_CONNS, DB_MIN_IDLE).  
 - `src/state.rs`: shared `AppState` (JWT keys, SeaORM `DatabaseConnection`).  
 - `src/auth/`: JWT helpers (`jwt.rs`), password hashing (`password.rs`), and role gate layer (`role_layer.rs`) with shared `Claims`/`Role` types.  
 - `src/db/`: SeaORM entities and repos (`entities.rs`, `user_repo.rs`, `refresh_token_repo.rs`).  
-- `src/migration/`: SeaORM migrations (users, refresh_tokens).  
 - `src/routes/`: feature routers — `public.rs`, `auth.rs` (register/login/refresh), `protected.rs` (/me), `admin.rs` (/admin/stats); merged in `routes/mod.rs`.  
 - `src/error.rs`: consistent JSON error responses; `src/logging.rs`: tracing setup.  
 - `examples/client.rs`: Reqwest demo hitting the API; uses `BASE_URL`, `USERNAME`, `PASSWORD`.  
 - `target/`: build artifacts (ignore in diffs).
 
 ## Build, Test, and Development Commands
-- `cargo run` — start the server on `0.0.0.0:3000` with trace logging; runs pending SeaORM migrations automatically.  
+- `cargo run` — start the server on `0.0.0.0:3000` with trace logging; uses SeaORM's entity-first schema sync automatically.  
 - `cargo test` — run unit/integration tests (add tests under `tests/` or alongside modules; DB-backed tests currently `#[ignore]` until a real Postgres is wired).  
 - `cargo fmt` — format with Rust 2024 defaults; run before opening a PR.  
 - `cargo clippy --all-targets --all-features` — lint for correctness and style.  
@@ -44,6 +43,6 @@
 - Keep secrets out of git; use `.env` (gitignored) or a secrets manager.
 
 ## Database & ORM Standard
-- Use SeaORM v2.x for all database access; keep entities and migrations in `src/db` and `src/migration`.  
-- Run migrations on startup (current behavior) or via `cargo run --bin sea-orm-cli migrate up` if added later.  
+- Use SeaORM v2.x for all database access; keep entities in `src/db` and follow the entity-first workflow.  
+- Sync schema from entities on startup (entity-first, current behavior).  
 - Passwords hashed with Argon2 (min length 8); auth uses access/refresh tokens backed by Postgres.
