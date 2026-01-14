@@ -7,18 +7,26 @@ use std::{
 
 use quote::ToTokens;
 use syn::{
+    Attribute,
     Expr,
     ExprLit,
     ExprMethodCall,
     File,
     FnArg,
+    GenericArgument,
     Item,
     ItemFn,
+    ItemStruct,
     Lit,
     PatType,
+    Path as SynPath,
+    PathArguments,
     ReturnType,
     Type,
     visit::Visit,
+    Fields,
+    punctuated::Punctuated,
+    Token,
 };
 
 #[derive(Debug, Clone)]
@@ -34,6 +42,52 @@ struct RouteEntry {
 struct HandlerInfo {
     request: String,
     response: String,
+}
+
+#[derive(Debug, Clone)]
+struct FieldDoc {
+    name: String,
+    ty: String,
+}
+
+#[derive(Debug, Clone)]
+struct TypeDoc {
+    fields: Vec<FieldDoc>,
+}
+
+#[derive(Debug, Default)]
+struct TypeRegistry {
+    docs: HashMap<String, TypeDoc>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ExtractorKind {
+    Json,
+    Query,
+    Path,
+}
+
+impl ExtractorKind {
+    fn label(self) -> &'static str {
+        match self {
+            ExtractorKind::Json => "json",
+            ExtractorKind::Query => "query",
+            ExtractorKind::Path => "path",
+        }
+    }
+}
+
+impl TypeDoc {
+    fn render(&self) -> String {
+        if self.fields.is_empty() {
+            return "{}".to_string();
+        }
+        let mut parts = Vec::new();
+        for field in &self.fields {
+            parts.push(format!("\"{}\": {}", field.name, field.ty));
+        }
+        format!("{{ {} }}", parts.join(", "))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -259,6 +313,130 @@ fn escape_rust_string(value: &str) -> String {
         .replace('\t', "\\t")
 }
 
+fn parse_rust_file(path: &Path) -> File {
+    let content = fs::read_to_string(path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {}", path.display(), err));
+    syn::parse_file(&content)
+        .unwrap_or_else(|err| panic!("failed to parse {}: {}", path.display(), err))
+}
+
+fn module_path_for_file(path: &Path, src_dir: &Path) -> String {
+    let relative = path.strip_prefix(src_dir).unwrap_or(path);
+    let mut parts = Vec::new();
+    for component in relative.components() {
+        if let std::path::Component::Normal(part) = component {
+            let part = part.to_string_lossy();
+            if part.ends_with(".rs") {
+                let stem = Path::new(part.as_ref())
+                    .file_stem()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or("");
+                if stem != "mod" && stem != "lib" && stem != "main" {
+                    parts.push(stem.to_string());
+                }
+            } else {
+                parts.push(part.to_string());
+            }
+        }
+    }
+    parts.join("::")
+}
+
+fn collect_rust_files(root: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    collect_rust_files_inner(root, &mut files);
+    files.sort();
+    files
+}
+
+fn collect_rust_files_inner(dir: &Path, out: &mut Vec<PathBuf>) {
+    let entries = fs::read_dir(dir)
+        .unwrap_or_else(|err| panic!("failed to read {}: {}", dir.display(), err));
+    for entry in entries {
+        let entry = entry.unwrap_or_else(|err| panic!("failed to read dir entry: {}", err));
+        let path = entry.path();
+        if path.is_dir() {
+            collect_rust_files_inner(&path, out);
+        } else if path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
+            out.push(path);
+        }
+    }
+}
+
+fn has_serde_derive(attrs: &[Attribute]) -> bool {
+    for attr in attrs {
+        if !attr.path().is_ident("derive") {
+            continue;
+        }
+        let paths = attr.parse_args_with(Punctuated::<SynPath, Token![,]>::parse_terminated);
+        if let Ok(paths) = paths {
+            for path in paths {
+                if let Some(segment) = path.segments.last() {
+                    let ident = segment.ident.to_string();
+                    if ident == "Serialize" || ident == "Deserialize" {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+fn build_struct_doc(item_struct: &ItemStruct) -> TypeDoc {
+    let mut fields = Vec::new();
+    match &item_struct.fields {
+        Fields::Named(named) => {
+            for field in &named.named {
+                let mut name = field
+                    .ident
+                    .as_ref()
+                    .map(|ident| ident.to_string())
+                    .unwrap_or_else(|| "field".to_string());
+                if let Some(stripped) = name.strip_prefix("r#") {
+                    name = stripped.to_string();
+                }
+                let ty = type_to_string(&field.ty);
+                fields.push(FieldDoc { name, ty });
+            }
+        }
+        Fields::Unnamed(unnamed) => {
+            for (index, field) in unnamed.unnamed.iter().enumerate() {
+                let name = index.to_string();
+                let ty = type_to_string(&field.ty);
+                fields.push(FieldDoc { name, ty });
+            }
+        }
+        Fields::Unit => {}
+    }
+    TypeDoc { fields }
+}
+
+fn register_type_doc(
+    registry: &mut TypeRegistry,
+    module_path: &str,
+    name: &str,
+    doc: TypeDoc,
+) {
+    registry.docs.entry(name.to_string()).or_insert_with(|| doc.clone());
+    if !module_path.is_empty() {
+        let qualified = format!("{}::{}", module_path, name);
+        registry.docs.entry(qualified).or_insert(doc);
+    }
+}
+
+fn collect_type_docs(file: &File, module_path: &str, registry: &mut TypeRegistry) {
+    for item in &file.items {
+        if let Item::Struct(item_struct) = item {
+            if has_serde_derive(&item_struct.attrs) {
+                let doc = build_struct_doc(item_struct);
+                let name = item_struct.ident.to_string();
+                register_type_doc(registry, module_path, &name, doc);
+            }
+        }
+    }
+}
+
 fn type_to_string(ty: &Type) -> String {
     compact_type_string(ty.to_token_stream().to_string())
 }
@@ -270,6 +448,7 @@ fn compact_type_string(mut value: String) -> String {
         (" >", ">"),
         (" , ", ", "),
         (" & ", "&"),
+        ("& '", "&'"),
         (" * ", "*"),
         (" ( ", "("),
         (" ) ", ")"),
@@ -284,49 +463,238 @@ fn compact_type_string(mut value: String) -> String {
     value
 }
 
-fn build_handler_info(item_fn: &ItemFn) -> HandlerInfo {
-    let mut params = Vec::new();
-    for input in &item_fn.sig.inputs {
-        match input {
-            FnArg::Typed(PatType { ty, .. }) => {
-                let ty = type_to_string(ty);
-                if !ty.is_empty() {
-                    params.push(ty);
-                }
+fn is_unit_type(ty: &Type) -> bool {
+    matches!(ty, Type::Tuple(tuple) if tuple.elems.is_empty())
+}
+
+fn type_path_parts(ty: &Type) -> (Option<String>, Option<String>) {
+    match ty {
+        Type::Path(type_path) => {
+            let mut segments = Vec::new();
+            for segment in &type_path.path.segments {
+                segments.push(segment.ident.to_string());
             }
-            FnArg::Receiver(_) => {
-                params.push("self".to_string());
+            if segments.is_empty() {
+                return (None, None);
+            }
+            let full = segments.join("::");
+            let last = segments.last().cloned();
+            (Some(full), last)
+        }
+        Type::Reference(reference) => type_path_parts(&reference.elem),
+        Type::Paren(paren) => type_path_parts(&paren.elem),
+        _ => (None, None),
+    }
+}
+
+fn resolve_type_doc<'a>(
+    registry: &'a TypeRegistry,
+    ty: &Type,
+    module_path: &str,
+) -> Option<&'a TypeDoc> {
+    let (full_path, last_ident) = type_path_parts(ty);
+    if let Some(full_path) = full_path {
+        if let Some(doc) = registry.docs.get(&full_path) {
+            return Some(doc);
+        }
+        if let Some(stripped) = full_path.strip_prefix("crate::") {
+            if let Some(doc) = registry.docs.get(stripped) {
+                return Some(doc);
             }
         }
     }
-    let request = if params.is_empty() {
-        "None".to_string()
-    } else {
-        params.join(", ")
-    };
+    if let Some(last_ident) = last_ident {
+        if !module_path.is_empty() {
+            let scoped = format!("{}::{}", module_path, last_ident);
+            if let Some(doc) = registry.docs.get(&scoped) {
+                return Some(doc);
+            }
+        }
+        if let Some(doc) = registry.docs.get(&last_ident) {
+            return Some(doc);
+        }
+    }
+    None
+}
+
+fn is_serde_json_value(ty: &Type) -> bool {
+    matches!(type_path_parts(ty).0.as_deref(), Some("serde_json::Value"))
+}
+
+fn extract_generic_inner<'a>(ty: &'a Type, ident: &str) -> Option<&'a Type> {
+    match ty {
+        Type::Path(type_path) => {
+            let last = type_path.path.segments.last()?;
+            if last.ident != ident {
+                return None;
+            }
+            if let PathArguments::AngleBracketed(args) = &last.arguments {
+                for arg in &args.args {
+                    if let GenericArgument::Type(inner) = arg {
+                        return Some(inner);
+                    }
+                }
+            }
+            None
+        }
+        Type::Reference(reference) => extract_generic_inner(&reference.elem, ident),
+        Type::Paren(paren) => extract_generic_inner(&paren.elem, ident),
+        _ => None,
+    }
+}
+
+fn extract_generic_types<'a>(ty: &'a Type, ident: &str) -> Vec<&'a Type> {
+    match ty {
+        Type::Path(type_path) => {
+            let last = match type_path.path.segments.last() {
+                Some(segment) => segment,
+                None => return Vec::new(),
+            };
+            if last.ident != ident {
+                return Vec::new();
+            }
+            if let PathArguments::AngleBracketed(args) = &last.arguments {
+                let mut out = Vec::new();
+                for arg in &args.args {
+                    if let GenericArgument::Type(inner) = arg {
+                        out.push(inner);
+                    }
+                }
+                return out;
+            }
+            Vec::new()
+        }
+        Type::Reference(reference) => extract_generic_types(&reference.elem, ident),
+        Type::Paren(paren) => extract_generic_types(&paren.elem, ident),
+        _ => Vec::new(),
+    }
+}
+
+fn describe_type(ty: &Type, module_path: &str, registry: &TypeRegistry) -> String {
+    if is_unit_type(ty) {
+        return "None".to_string();
+    }
+    if let Some(inner) = extract_generic_inner(ty, "Option") {
+        return format!("Option<{}>", describe_type(inner, module_path, registry));
+    }
+    if let Some(inner) = extract_generic_inner(ty, "Vec") {
+        return format!("Vec<{}>", describe_type(inner, module_path, registry));
+    }
+    if let Some(inner) = extract_generic_inner(ty, "Arc") {
+        return format!("Arc<{}>", describe_type(inner, module_path, registry));
+    }
+    if let Some(doc) = resolve_type_doc(registry, ty, module_path) {
+        return doc.render();
+    }
+    if is_serde_json_value(ty) {
+        return "JSON".to_string();
+    }
+    type_to_string(ty)
+}
+
+fn extract_request_extractor<'a>(ty: &'a Type) -> Option<(ExtractorKind, &'a Type)> {
+    if let Some(inner) = extract_generic_inner(ty, "Json") {
+        return Some((ExtractorKind::Json, inner));
+    }
+    if let Some(inner) = extract_generic_inner(ty, "Query") {
+        return Some((ExtractorKind::Query, inner));
+    }
+    if let Some(inner) = extract_generic_inner(ty, "Path") {
+        return Some((ExtractorKind::Path, inner));
+    }
+    None
+}
+
+fn format_request(parts: Vec<(ExtractorKind, String)>) -> String {
+    if parts.is_empty() {
+        return "None".to_string();
+    }
+    if parts.len() == 1 {
+        let (kind, desc) = parts[0].clone();
+        return if matches!(kind, ExtractorKind::Json) {
+            desc
+        } else {
+            format!("{}: {}", kind.label(), desc)
+        };
+    }
+    let mut formatted = Vec::new();
+    for (kind, desc) in parts {
+        formatted.push(format!("{}: {}", kind.label(), desc));
+    }
+    formatted.join(" | ")
+}
+
+fn describe_response_ok(ty: &Type, module_path: &str, registry: &TypeRegistry) -> String {
+    if let Some(inner) = extract_generic_inner(ty, "Json") {
+        return describe_type(inner, module_path, registry);
+    }
+    if let Some(inner) = extract_generic_inner(ty, "Html") {
+        return format!("Html<{}>", describe_type(inner, module_path, registry));
+    }
+    if is_unit_type(ty) {
+        return "None".to_string();
+    }
+    describe_type(ty, module_path, registry)
+}
+
+fn describe_response_type(ty: &Type, module_path: &str, registry: &TypeRegistry) -> String {
+    let result_args = extract_generic_types(ty, "Result");
+    if result_args.len() >= 2 {
+        let ok_desc = describe_response_ok(result_args[0], module_path, registry);
+        let err_desc = describe_type(result_args[1], module_path, registry);
+        return format!("ok: {}, err: {}", ok_desc, err_desc);
+    }
+    describe_response_ok(ty, module_path, registry)
+}
+
+fn build_handler_info(
+    item_fn: &ItemFn,
+    module_path: &str,
+    registry: &TypeRegistry,
+) -> HandlerInfo {
+    let mut request_parts = Vec::new();
+    for input in &item_fn.sig.inputs {
+        if let FnArg::Typed(PatType { ty, .. }) = input {
+            if let Some((kind, inner)) = extract_request_extractor(ty) {
+                let desc = describe_type(inner, module_path, registry);
+                request_parts.push((kind, desc));
+            }
+        }
+    }
+    let request = format_request(request_parts);
     let response = match &item_fn.sig.output {
-        ReturnType::Default => "()".to_string(),
-        ReturnType::Type(_, ty) => type_to_string(ty),
+        ReturnType::Default => "None".to_string(),
+        ReturnType::Type(_, ty) => describe_response_type(ty, module_path, registry),
     };
     HandlerInfo { request, response }
 }
 
-fn collect_handlers(file: &File) -> HashMap<String, HandlerInfo> {
+fn collect_handlers(
+    file: &File,
+    module_path: &str,
+    registry: &TypeRegistry,
+) -> HashMap<String, HandlerInfo> {
     let mut handlers = HashMap::new();
     for item in &file.items {
         if let Item::Fn(item_fn) = item {
-            handlers.insert(item_fn.sig.ident.to_string(), build_handler_info(item_fn));
+            handlers.insert(
+                item_fn.sig.ident.to_string(),
+                build_handler_info(item_fn, module_path, registry),
+            );
         }
     }
     handlers
 }
 
-fn parse_file(path: &Path, manifest_dir: &Path) -> Vec<RouteEntry> {
-    let content = fs::read_to_string(path)
-        .unwrap_or_else(|err| panic!("failed to read {}: {}", path.display(), err));
-    let parsed: File = syn::parse_file(&content)
-        .unwrap_or_else(|err| panic!("failed to parse {}: {}", path.display(), err));
-    let handlers = collect_handlers(&parsed);
+fn parse_routes_file(
+    path: &Path,
+    manifest_dir: &Path,
+    src_dir: &Path,
+    registry: &TypeRegistry,
+) -> Vec<RouteEntry> {
+    let parsed = parse_rust_file(path);
+    let module_path = module_path_for_file(path, src_dir);
+    let handlers = collect_handlers(&parsed, &module_path, registry);
     let source = path
         .strip_prefix(manifest_dir)
         .unwrap_or(path)
@@ -342,18 +710,7 @@ fn parse_file(path: &Path, manifest_dir: &Path) -> Vec<RouteEntry> {
 }
 
 fn collect_route_files(routes_dir: &Path) -> Vec<PathBuf> {
-    let mut files = Vec::new();
-    let entries = fs::read_dir(routes_dir)
-        .unwrap_or_else(|err| panic!("failed to read {}: {}", routes_dir.display(), err));
-    for entry in entries {
-        let entry = entry.unwrap_or_else(|err| panic!("failed to read dir entry: {}", err));
-        let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
-            files.push(path);
-        }
-    }
-    files.sort();
-    files
+    collect_rust_files(routes_dir)
 }
 
 fn main() {
@@ -361,16 +718,24 @@ fn main() {
 
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("missing CARGO_MANIFEST_DIR");
     let manifest_path = Path::new(&manifest_dir);
-    let routes_dir = manifest_path.join("src/routes");
+    let src_dir = manifest_path.join("src");
+    let routes_dir = src_dir.join("routes");
 
-    let files = collect_route_files(&routes_dir);
-    for file in &files {
+    let src_files = collect_rust_files(&src_dir);
+    for file in &src_files {
         println!("cargo:rerun-if-changed={}", file.display());
     }
 
+    let mut registry = TypeRegistry::default();
+    for file in &src_files {
+        let parsed = parse_rust_file(file);
+        let module_path = module_path_for_file(file, &src_dir);
+        collect_type_docs(&parsed, &module_path, &mut registry);
+    }
+
     let mut routes = Vec::new();
-    for file in files {
-        routes.extend(parse_file(&file, manifest_path));
+    for file in collect_route_files(&routes_dir) {
+        routes.extend(parse_routes_file(&file, manifest_path, &src_dir, &registry));
     }
 
     routes.sort_by(|a, b| a.path.cmp(&b.path).then(a.method.cmp(&b.method)));
