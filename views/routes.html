@@ -73,6 +73,8 @@
                 >
                   <tr>
                     <th class="px-4 py-2">Endpoint</th>
+                    <th class="px-4 py-2">Request</th>
+                    <th class="px-4 py-2">Response</th>
                     <th class="px-4 py-2 text-right">Method</th>
                   </tr>
                 </thead>
@@ -81,6 +83,12 @@
                   <tr>
                     <td class="px-4 py-2 font-mono text-xs text-black/70">
                       {{ route.path }}
+                    </td>
+                    <td class="px-4 py-2 font-mono text-xs text-black/70">
+                      {{ route.request }}
+                    </td>
+                    <td class="px-4 py-2 font-mono text-xs text-black/70">
+                      {{ route.response }}
                     </td>
                     <td
                       class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--clay)]"

@@ -26,4 +26,5 @@ uuid = { version = "1.11", features = ["v4", "serde"] }
 dotenvy="0.15.7"
 
 [build-dependencies]
+quote = "1"
 syn = { version = "2", features = ["full", "visit"] }

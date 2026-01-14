@@ -12,6 +12,8 @@ use crate::routes::route_list::{RouteInfo, routes};
 struct RouteItem {
     method: String,
     path: String,
+    request: String,
+    response: String,
 }
 
 #[derive(Clone)]
@@ -79,6 +81,8 @@ fn build_route_groups() -> Vec<RouteGroup> {
             .push(RouteItem {
                 method: route.method.to_string(),
                 path: route.path.to_string(),
+                request: route.request.to_string(),
+                response: route.response.to_string(),
             });
     }
 
