@@ -7,6 +7,7 @@ pub mod prelude {
 pub mod user {
     use sea_orm::entity::prelude::*;
 
+    #[sea_orm::model]
     #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
     #[sea_orm(table_name = "users")]
     pub struct Model {
@@ -19,18 +20,8 @@ pub mod user {
         pub created_at: DateTimeWithTimeZone,
         pub updated_at: DateTimeWithTimeZone,
         pub last_login_at: Option<DateTimeWithTimeZone>,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {
-        #[sea_orm(has_many = "super::refresh_token::Entity")]
-        RefreshToken,
-    }
-
-    impl Related<super::refresh_token::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::RefreshToken.def()
-        }
+        #[sea_orm(has_many)]
+        pub refresh_tokens: HasMany<super::refresh_token::Entity>,
     }
 
     impl ActiveModelBehavior for ActiveModel {}
@@ -39,6 +30,7 @@ pub mod user {
 pub mod refresh_token {
     use sea_orm::entity::prelude::*;
 
+    #[sea_orm::model]
     #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
     #[sea_orm(table_name = "refresh_tokens")]
     pub struct Model {
@@ -51,23 +43,8 @@ pub mod refresh_token {
         pub expires_at: DateTimeWithTimeZone,
         pub created_at: DateTimeWithTimeZone,
         pub revoked: bool,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {
-        #[sea_orm(
-            belongs_to = "super::user::Entity",
-            from = "Column::UserId",
-            to = "super::user::Column::Id",
-            on_delete = "Cascade"
-        )]
-        User,
-    }
-
-    impl Related<super::user::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::User.def()
-        }
+        #[sea_orm(belongs_to, from = "user_id", to = "id", on_delete = "Cascade")]
+        pub user: HasOne<super::user::Entity>,
     }
 
     impl ActiveModelBehavior for ActiveModel {}

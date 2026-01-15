@@ -476,8 +476,15 @@ fn parse_field_sea_orm_attrs(attrs: &[Attribute]) -> FieldSeaOrmAttrs {
 }
 
 fn to_pascal_case(value: &str) -> String {
+    if !value.contains('_') && !value.contains('-') {
+        let has_upper = value.chars().any(|ch| ch.is_uppercase());
+        if has_upper {
+            return value.to_string();
+        }
+    }
+
     let mut out = String::new();
-    for part in value.split('_') {
+    for part in value.split(|ch| ch == '_' || ch == '-') {
         if part.is_empty() {
             continue;
         }
@@ -503,20 +510,87 @@ fn add_attribute(attrs: &mut Vec<String>, value: &str) {
     }
 }
 
-fn extract_column_variant(value: &str) -> Option<String> {
-    value.rsplit("::").next().map(|name| name.to_string())
+fn field_has_relation_attr(attrs: &[Attribute]) -> bool {
+    for attr in attrs {
+        if !attr.path().is_ident("sea_orm") {
+            continue;
+        }
+        let mut is_relation = false;
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("has_many")
+                || meta.path.is_ident("has_one")
+                || meta.path.is_ident("belongs_to")
+            {
+                is_relation = true;
+            }
+            Ok(())
+        });
+        if is_relation {
+            return true;
+        }
+    }
+    false
+}
+
+fn is_relation_type(ty: &Type) -> bool {
+    let (_, last) = type_path_parts(ty);
+    if let Some(last) = last.as_deref() {
+        if last == "HasOne" || last == "HasMany" {
+            return true;
+        }
+    }
+    if let Some(inner) = extract_generic_inner(ty, "Option")
+        .or_else(|| extract_generic_inner(ty, "Vec"))
+    {
+        let (_, last) = type_path_parts(inner);
+        return matches!(last.as_deref(), Some("Entity"));
+    }
+    false
+}
+
+fn parse_fk_column_variants(value: &str) -> Vec<String> {
+    let trimmed = value.trim();
+    let parts: Vec<&str> = if trimmed.starts_with('(') && trimmed.ends_with(')') {
+        trimmed[1..trimmed.len() - 1]
+            .split(',')
+            .map(|part| part.trim())
+            .collect()
+    } else {
+        vec![trimmed]
+    };
+
+    let mut columns = Vec::new();
+    for part in parts {
+        if part.is_empty() {
+            continue;
+        }
+        let last = part.rsplit("::").next().unwrap_or(part).trim();
+        let variant = if last.contains('_') || last.contains('-') {
+            to_pascal_case(last)
+        } else {
+            last.to_string()
+        };
+        columns.push(variant);
+    }
+    columns
 }
 
 fn collect_fk_columns(items: &[Item]) -> HashSet<String> {
     let mut columns = HashSet::new();
     for item in items {
-        let Item::Enum(item_enum) = item else {
-            continue;
-        };
-        if item_enum.ident != "Relation" {
-            continue;
+        match item {
+            Item::Enum(item_enum) => {
+                if item_enum.ident == "Relation" {
+                    collect_fk_columns_from_enum(item_enum, &mut columns);
+                }
+            }
+            Item::Struct(item_struct) => {
+                if has_derive_entity_model(&item_struct.attrs) {
+                    collect_fk_columns_from_model(item_struct, &mut columns);
+                }
+            }
+            _ => {}
         }
-        collect_fk_columns_from_enum(item_enum, &mut columns);
     }
     columns
 }
@@ -540,13 +614,50 @@ fn collect_fk_columns_from_enum(item_enum: &ItemEnum, out: &mut HashSet<String>)
             });
             if belongs_to {
                 if let Some(value) = from_value.as_deref() {
-                    if let Some(column) = extract_column_variant(value) {
+                    for column in parse_fk_column_variants(value) {
                         out.insert(column);
                     }
                 }
             }
         }
     }
+}
+
+fn collect_fk_columns_from_model(item_struct: &ItemStruct, out: &mut HashSet<String>) {
+    let Fields::Named(fields) = &item_struct.fields else {
+        return;
+    };
+    for field in &fields.named {
+        for column in extract_belongs_to_from_field(&field.attrs) {
+            out.insert(column);
+        }
+    }
+}
+
+fn extract_belongs_to_from_field(attrs: &[Attribute]) -> Vec<String> {
+    let mut columns = Vec::new();
+    for attr in attrs {
+        if !attr.path().is_ident("sea_orm") {
+            continue;
+        }
+        let mut belongs_to = false;
+        let mut from_value: Option<String> = None;
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("belongs_to") {
+                belongs_to = true;
+            } else if meta.path.is_ident("from") {
+                let value: LitStr = meta.value()?.parse()?;
+                from_value = Some(value.value());
+            }
+            Ok(())
+        });
+        if belongs_to {
+            if let Some(value) = from_value.as_deref() {
+                columns.extend(parse_fk_column_variants(value));
+            }
+        }
+    }
+    columns
 }
 
 fn collect_entity_entries(items: &[Item], module_path: &str, out: &mut Vec<EntityEntry>) {
@@ -605,6 +716,9 @@ fn build_entity_columns(
         return columns;
     };
     for field in &named.named {
+        if field_has_relation_attr(&field.attrs) || is_relation_type(&field.ty) {
+            continue;
+        }
         let mut name = field
             .ident
             .as_ref()
