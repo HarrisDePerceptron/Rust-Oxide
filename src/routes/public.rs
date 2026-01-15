@@ -43,6 +43,7 @@ struct RoutesTemplate {
 struct EntitiesTemplate {
     now: String,
     entities: &'static [EntityInfo],
+    erd_mermaid: &'static str,
 }
 
 pub fn router() -> Router {
@@ -84,7 +85,12 @@ async fn routes_view() -> Result<Html<String>, AppError> {
 async fn entities_view() -> Result<Html<String>, AppError> {
     let now = Local::now().to_rfc3339();
     let entities = entity_catalog::entities();
-    let rendered = EntitiesTemplate { now, entities }
+    let erd_mermaid = entity_catalog::erd_mermaid();
+    let rendered = EntitiesTemplate {
+        now,
+        entities,
+        erd_mermaid,
+    }
         .render()
         .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render entities"))?;
     Ok(Html(rendered))

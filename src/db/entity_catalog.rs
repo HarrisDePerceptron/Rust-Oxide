@@ -13,8 +13,24 @@ pub struct EntityInfo {
     pub columns: &'static [EntityColumnInfo],
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct EntityRelationInfo {
+    pub from: &'static str,
+    pub to: &'static str,
+    pub kind: &'static str,
+    pub label: &'static str,
+}
+
 include!(concat!(env!("OUT_DIR"), "/entities_generated.rs"));
 
 pub fn entities() -> &'static [EntityInfo] {
     ENTITIES
+}
+
+pub fn relations() -> &'static [EntityRelationInfo] {
+    RELATIONS
+}
+
+pub fn erd_mermaid() -> &'static str {
+    ERD_MERMAID
 }

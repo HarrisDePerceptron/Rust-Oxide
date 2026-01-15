@@ -54,6 +54,31 @@ struct EntityColumnEntry {
     attributes: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum RelationKind {
+    HasMany,
+    HasOne,
+    BelongsTo,
+}
+
+impl RelationKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            RelationKind::HasMany => "has_many",
+            RelationKind::HasOne => "has_one",
+            RelationKind::BelongsTo => "belongs_to",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct EntityRelationEntry {
+    from: String,
+    to: String,
+    kind: RelationKind,
+    label: String,
+}
+
 #[derive(Debug, Clone)]
 struct HandlerInfo {
     request: String,
@@ -688,16 +713,20 @@ fn collect_entity_entries(items: &[Item], module_path: &str, out: &mut Vec<Entit
     }
 }
 
+fn entity_name_from_module_path(module_path: &str) -> Option<String> {
+    module_path
+        .split("::")
+        .filter(|part| !part.is_empty())
+        .last()
+        .map(|value| value.to_string())
+}
+
 fn build_entity_entry(
     item_struct: &ItemStruct,
     module_path: &str,
     fk_columns: &HashSet<String>,
 ) -> Option<EntityEntry> {
-    let entity = module_path
-        .split("::")
-        .filter(|part| !part.is_empty())
-        .last()
-        .map(|value| value.to_string())?;
+    let entity = entity_name_from_module_path(module_path)?;
     let table = extract_table_name(&item_struct.attrs).unwrap_or_else(|| entity.clone());
     let columns = build_entity_columns(item_struct, fk_columns);
     Some(EntityEntry {
@@ -758,6 +787,145 @@ fn build_entity_columns(
     columns
 }
 
+fn collect_entity_relations(items: &[Item], module_path: &str, out: &mut Vec<EntityRelationEntry>) {
+    for item in items {
+        match item {
+            Item::Struct(item_struct) => {
+                if has_derive_entity_model(&item_struct.attrs) {
+                    out.extend(build_entity_relations(item_struct, module_path));
+                }
+            }
+            Item::Mod(item_mod) => {
+                if let Some((_, nested)) = &item_mod.content {
+                    let nested_path = if module_path.is_empty() {
+                        item_mod.ident.to_string()
+                    } else {
+                        format!("{}::{}", module_path, item_mod.ident)
+                    };
+                    collect_entity_relations(nested, &nested_path, out);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn build_entity_relations(
+    item_struct: &ItemStruct,
+    module_path: &str,
+) -> Vec<EntityRelationEntry> {
+    let mut relations = Vec::new();
+    let Some(entity) = entity_name_from_module_path(module_path) else {
+        return relations;
+    };
+    let Fields::Named(fields) = &item_struct.fields else {
+        return relations;
+    };
+    for field in &fields.named {
+        if !field_has_relation_attr(&field.attrs) && !is_relation_type(&field.ty) {
+            continue;
+        }
+        let kind = relation_kind_from_attrs(&field.attrs)
+            .or_else(|| relation_kind_from_type(&field.ty));
+        let Some(kind) = kind else {
+            continue;
+        };
+        let Some(target) = relation_target_entity(&field.ty) else {
+            continue;
+        };
+        let mut label = field
+            .ident
+            .as_ref()
+            .map(|ident| ident.to_string())
+            .unwrap_or_else(|| "relation".to_string());
+        if let Some(stripped) = label.strip_prefix("r#") {
+            label = stripped.to_string();
+        }
+        relations.push(EntityRelationEntry {
+            from: entity.clone(),
+            to: target,
+            kind,
+            label,
+        });
+    }
+    relations
+}
+
+fn relation_kind_from_attrs(attrs: &[Attribute]) -> Option<RelationKind> {
+    for attr in attrs {
+        if !attr.path().is_ident("sea_orm") {
+            continue;
+        }
+        let mut kind = None;
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("has_many") {
+                kind = Some(RelationKind::HasMany);
+            } else if meta.path.is_ident("has_one") {
+                kind = Some(RelationKind::HasOne);
+            } else if meta.path.is_ident("belongs_to") {
+                kind = Some(RelationKind::BelongsTo);
+            }
+            Ok(())
+        });
+        if kind.is_some() {
+            return kind;
+        }
+    }
+    None
+}
+
+fn relation_kind_from_type(ty: &Type) -> Option<RelationKind> {
+    if extract_generic_inner(ty, "HasMany").is_some() {
+        return Some(RelationKind::HasMany);
+    }
+    if extract_generic_inner(ty, "HasOne").is_some() {
+        return Some(RelationKind::HasOne);
+    }
+    if extract_generic_inner(ty, "Vec").is_some() {
+        return Some(RelationKind::HasMany);
+    }
+    if extract_generic_inner(ty, "Option").is_some() {
+        return Some(RelationKind::HasOne);
+    }
+    None
+}
+
+fn relation_target_entity(ty: &Type) -> Option<String> {
+    if let Some(inner) = extract_generic_inner(ty, "HasMany")
+        .or_else(|| extract_generic_inner(ty, "HasOne"))
+        .or_else(|| extract_generic_inner(ty, "Vec"))
+        .or_else(|| extract_generic_inner(ty, "Option"))
+    {
+        return entity_name_from_type(inner);
+    }
+    entity_name_from_type(ty)
+}
+
+fn entity_name_from_type(ty: &Type) -> Option<String> {
+    match ty {
+        Type::Path(type_path) => {
+            let segments: Vec<String> = type_path
+                .path
+                .segments
+                .iter()
+                .map(|segment| segment.ident.to_string())
+                .collect();
+            if segments.is_empty() {
+                return None;
+            }
+            if segments.last().map(|value| value == "Entity").unwrap_or(false) {
+                if segments.len() >= 2 {
+                    return Some(segments[segments.len() - 2].clone());
+                }
+            }
+            segments.last().cloned()
+        }
+        Type::Reference(reference) => entity_name_from_type(&reference.elem),
+        Type::Paren(paren) => entity_name_from_type(&paren.elem),
+        _ => None,
+    }
+}
+
 fn build_struct_doc(item_struct: &ItemStruct) -> TypeDoc {
     let mut fields = Vec::new();
     match &item_struct.fields {
@@ -785,6 +953,149 @@ fn build_struct_doc(item_struct: &ItemStruct) -> TypeDoc {
         Fields::Unit => {}
     }
     TypeDoc { fields }
+}
+
+fn render_mermaid_er_diagram(
+    entities: &[EntityEntry],
+    relations: &[EntityRelationEntry],
+) -> String {
+    let mut output = String::from("erDiagram\n");
+
+    let mut preferred = HashSet::new();
+    for relation in relations {
+        if relation.kind != RelationKind::BelongsTo {
+            preferred.insert((relation.from.clone(), relation.to.clone()));
+        }
+    }
+
+    for relation in relations {
+        if relation.kind == RelationKind::BelongsTo
+            && preferred.contains(&(relation.to.clone(), relation.from.clone()))
+        {
+            continue;
+        }
+        let marker = mermaid_relation_marker(relation.kind);
+        let label = mermaid_label(&relation.label);
+        output.push_str(&format!(
+            "    {} {} {} : {}\n",
+            relation.from, marker, relation.to, label
+        ));
+    }
+
+    for entity in entities {
+        if entity.columns.is_empty() {
+            continue;
+        }
+        output.push_str(&format!("    {} {{\n", entity.entity));
+        for column in &entity.columns {
+            let mermaid_type = mermaid_type_name(&column.rust_type);
+            let mermaid_name = mermaid_attribute_name(&column.name);
+            let suffix = mermaid_attribute_suffix(&column.attributes);
+            output.push_str(&format!(
+                "        {} {}{}\n",
+                mermaid_type, mermaid_name, suffix
+            ));
+        }
+        output.push_str("    }\n");
+    }
+
+    output
+}
+
+fn mermaid_relation_marker(kind: RelationKind) -> &'static str {
+    match kind {
+        RelationKind::HasMany => "||--o{",
+        RelationKind::HasOne => "||--||",
+        RelationKind::BelongsTo => "}o--||",
+    }
+}
+
+fn mermaid_label(value: &str) -> String {
+    if value.trim().is_empty() {
+        "relates_to".to_string()
+    } else {
+        mermaid_sanitize_word(value)
+    }
+}
+
+fn mermaid_attribute_suffix(attributes: &[String]) -> String {
+    let mut tokens = Vec::new();
+    let mut notes = Vec::new();
+    for attr in attributes {
+        match attr.as_str() {
+            "Primary Key" => tokens.push("PK"),
+            "Foreign Key" => tokens.push("FK"),
+            "Unique" => tokens.push("UK"),
+            "Indexed" => notes.push("IDX"),
+            "Nullable" => notes.push("NULL"),
+            _ => {}
+        }
+    }
+    let mut out = String::new();
+    if !tokens.is_empty() {
+        out.push(' ');
+        out.push_str(&tokens.join(", "));
+    }
+    if !notes.is_empty() {
+        out.push(' ');
+        out.push('"');
+        out.push_str(&notes.join(" "));
+        out.push('"');
+    }
+    out
+}
+
+fn mermaid_attribute_name(value: &str) -> String {
+    mermaid_sanitize_word(value)
+}
+
+fn mermaid_type_name(value: &str) -> String {
+    let mut current = value.trim().to_string();
+    loop {
+        if let Some(inner) = strip_generic(&current, "Option")
+            .or_else(|| strip_generic(&current, "Vec"))
+        {
+            current = inner.to_string();
+            continue;
+        }
+        break;
+    }
+    mermaid_sanitize_word(&current)
+}
+
+fn strip_generic<'a>(value: &'a str, prefix: &str) -> Option<&'a str> {
+    let prefix = format!("{}<", prefix);
+    if value.starts_with(&prefix) && value.ends_with('>') && value.len() > prefix.len() + 1 {
+        return Some(&value[prefix.len()..value.len() - 1]);
+    }
+    None
+}
+
+fn mermaid_sanitize_word(value: &str) -> String {
+    let mut out = String::new();
+    for ch in value.trim().chars() {
+        if ch.is_ascii_alphanumeric() || ch == '_' {
+            out.push(ch);
+        } else {
+            out.push('_');
+        }
+    }
+    while out.contains("__") {
+        out = out.replace("__", "_");
+    }
+    let out = out.trim_matches('_').to_string();
+    if out.is_empty() {
+        "field".to_string()
+    } else if out
+        .chars()
+        .next()
+        .map(|ch| ch.is_ascii_alphabetic() || ch == '_')
+        .unwrap_or(false)
+    {
+        out
+    } else {
+        format!("field_{}", out)
+    }
 }
 
 fn register_type_doc(
@@ -1128,6 +1439,27 @@ fn main() {
 
     entities.sort_by(|a, b| a.entity.cmp(&b.entity));
 
+    let mut relations = Vec::new();
+    for file in &src_files {
+        let parsed = parse_rust_file(file);
+        let module_path = module_path_for_file(file, &src_dir);
+        collect_entity_relations(&parsed.items, &module_path, &mut relations);
+    }
+
+    let entity_names: HashSet<String> =
+        entities.iter().map(|entity| entity.entity.clone()).collect();
+    relations.retain(|relation| {
+        entity_names.contains(&relation.from) && entity_names.contains(&relation.to)
+    });
+    relations.sort_by(|a, b| {
+        a.from
+            .cmp(&b.from)
+            .then(a.to.cmp(&b.to))
+            .then(a.kind.as_str().cmp(b.kind.as_str()))
+            .then(a.label.cmp(&b.label))
+    });
+    relations.dedup();
+
     let out_dir = env::var("OUT_DIR").expect("missing OUT_DIR");
     let out_path = Path::new(&out_dir).join("routes_generated.rs");
     let mut output = String::from("pub static ROUTES: &[RouteInfo] = &[\n");
@@ -1148,14 +1480,14 @@ fn main() {
 
     let entity_out_path = Path::new(&out_dir).join("entities_generated.rs");
     let mut entity_output = String::from("pub static ENTITIES: &[EntityInfo] = &[\n");
-    for entity in entities {
+    for entity in &entities {
         entity_output.push_str(&format!(
             "    EntityInfo {{ entity: \"{}\", table: \"{}\", column_count: {}, columns: &[\n",
             escape_rust_string(&entity.entity),
             escape_rust_string(&entity.table),
             entity.columns.len()
         ));
-        for column in entity.columns {
+        for column in &entity.columns {
             let attributes = if column.attributes.is_empty() {
                 "None".to_string()
             } else {
@@ -1171,6 +1503,22 @@ fn main() {
         entity_output.push_str("    ] },\n");
     }
     entity_output.push_str("];\n");
+    entity_output.push_str("pub static RELATIONS: &[EntityRelationInfo] = &[\n");
+    for relation in &relations {
+        entity_output.push_str(&format!(
+            "    EntityRelationInfo {{ from: \"{}\", to: \"{}\", kind: \"{}\", label: \"{}\" }},\n",
+            escape_rust_string(&relation.from),
+            escape_rust_string(&relation.to),
+            relation.kind.as_str(),
+            escape_rust_string(&relation.label)
+        ));
+    }
+    entity_output.push_str("];\n");
+    let mermaid = render_mermaid_er_diagram(&entities, &relations);
+    entity_output.push_str(&format!(
+        "pub static ERD_MERMAID: &str = \"{}\";\n",
+        escape_rust_string(&mermaid)
+    ));
 
     fs::write(&entity_out_path, entity_output).unwrap_or_else(|err| {
         panic!(
