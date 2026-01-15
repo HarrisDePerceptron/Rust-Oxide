@@ -7,6 +7,7 @@ use tower_http::services::ServeDir;
 
 use crate::error::AppError;
 use crate::routes::route_list::{RouteInfo, routes};
+use crate::db::entity_catalog::{self, EntityInfo};
 
 #[derive(Clone)]
 struct RouteItem {
@@ -37,11 +38,19 @@ struct RoutesTemplate {
     route_groups: Vec<RouteGroup>,
 }
 
+#[derive(Template)]
+#[template(path = "entities.html")]
+struct EntitiesTemplate {
+    now: String,
+    entities: &'static [EntityInfo],
+}
+
 pub fn router() -> Router {
     Router::new()
         .route_service("/{*file}", ServeDir::new("public"))
         .route("/", get(index))
         .route("/public", get(handler))
+        .route("/entities", get(entities_view))
         .route("/routes", get(routes_view))
         .route("/routes.json", get(list_routes_json))
 }
@@ -69,6 +78,15 @@ async fn routes_view() -> Result<Html<String>, AppError> {
     let rendered = RoutesTemplate { now, route_groups }
         .render()
         .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render routes"))?;
+    Ok(Html(rendered))
+}
+
+async fn entities_view() -> Result<Html<String>, AppError> {
+    let now = Local::now().to_rfc3339();
+    let entities = entity_catalog::entities();
+    let rendered = EntitiesTemplate { now, entities }
+        .render()
+        .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render entities"))?;
     Ok(Html(rendered))
 }
 

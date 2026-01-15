@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Sample Server | Entities{% endblock %}
+{% block description %}Entity directory for SeaORM models.{% endblock %}
+
+{% block content %}
+      <main class="fade-1 px-6 pb-16 pt-10 sm:px-10">
+        <section class="mx-auto max-w-6xl rounded-3xl border border-black/10 bg-white/95 p-8 shadow-xl shadow-black/10">
+          <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p class="text-xs uppercase tracking-[0.3em] text-black/50">
+                Entity catalog
+              </p>
+              <h1 class="mt-2 text-3xl font-semibold text-[color:var(--pine)]">
+                SeaORM entities and their Rust types
+              </h1>
+            </div>
+            <p class="text-sm text-black/60">
+              Generated at build time. Rendered at {{ now }}.
+            </p>
+          </div>
+          <div class="mt-6 flex flex-wrap gap-3 text-xs">
+            <a
+              class="rounded-full border border-black/10 bg-[color:var(--mist)] px-4 py-2 font-semibold text-[color:var(--pine)]"
+              href="/"
+              >Back to home</a
+            >
+            <a
+              class="rounded-full border border-black/10 bg-[color:var(--mist)] px-4 py-2 font-semibold text-[color:var(--pine)]"
+              href="/routes"
+              >View routes</a
+            >
+          </div>
+        </section>
+
+        <section class="mx-auto mt-8 max-w-6xl space-y-6">
+          {% for entity in entities %}
+          <details
+            class="group rounded-2xl border border-black/10 bg-white/90 p-5 shadow-lg shadow-black/5"
+          >
+            <summary
+              class="flex cursor-pointer list-none items-center justify-between gap-4"
+            >
+              <div>
+                <p
+                  class="text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)]"
+                >
+                  {{ entity.entity }}
+                </p>
+                <p class="mt-1 text-xs text-black/50">
+                  Table: {{ entity.table }}
+                </p>
+              </div>
+              <div class="flex items-center gap-3">
+                <span
+                  class="rounded-full border border-black/10 bg-[color:var(--mist)] px-3 py-1 text-xs font-semibold text-[color:var(--pine)]"
+                >
+                  {{ entity.column_count }} columns
+                </span>
+                <span
+                  class="text-xs font-semibold uppercase tracking-[0.2em] text-black/40 transition group-open:rotate-180"
+                  aria-hidden="true"
+                  >↓</span
+                >
+              </div>
+            </summary>
+            <div
+              class="mt-4 overflow-x-auto rounded-xl border border-black/10 bg-[color:var(--mist)]/60"
+            >
+              <table class="w-full text-left text-sm text-black/70">
+                <thead
+                  class="border-b border-black/10 text-[11px] uppercase tracking-[0.2em] text-black/50"
+                >
+                  <tr>
+                    <th class="px-4 py-2">Column</th>
+                    <th class="px-4 py-2">Rust type</th>
+                    <th class="px-4 py-2">Attributes</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-black/10">
+                  {% for column in entity.columns %}
+                  <tr>
+                    <td class="px-4 py-2 font-mono text-xs text-black/70">
+                      {{ column.name }}
+                    </td>
+                    <td class="px-4 py-2 font-mono text-xs text-black/70">
+                      {{ column.rust_type }}
+                    </td>
+                    <td class="px-4 py-2 text-xs text-black/60">
+                      {{ column.attributes }}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </details>
+          {% endfor %}
+        </section>
+      </main>
+{% endblock %}

@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     env,
     fs,
     path::{Path, PathBuf},
@@ -15,9 +15,11 @@ use syn::{
     FnArg,
     GenericArgument,
     Item,
+    ItemEnum,
     ItemFn,
     ItemStruct,
     Lit,
+    LitStr,
     PatType,
     Path as SynPath,
     PathArguments,
@@ -36,6 +38,20 @@ struct RouteEntry {
     source: String,
     request: String,
     response: String,
+}
+
+#[derive(Debug, Clone)]
+struct EntityEntry {
+    entity: String,
+    table: String,
+    columns: Vec<EntityColumnEntry>,
+}
+
+#[derive(Debug, Clone)]
+struct EntityColumnEntry {
+    name: String,
+    rust_type: String,
+    attributes: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +74,16 @@ struct TypeDoc {
 #[derive(Debug, Default)]
 struct TypeRegistry {
     docs: HashMap<String, TypeDoc>,
+}
+
+#[derive(Debug, Default)]
+struct FieldSeaOrmAttrs {
+    column_name: Option<String>,
+    primary_key: bool,
+    unique: bool,
+    unique_key: bool,
+    indexed: bool,
+    nullable: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -383,6 +409,241 @@ fn has_serde_derive(attrs: &[Attribute]) -> bool {
     false
 }
 
+fn has_derive_entity_model(attrs: &[Attribute]) -> bool {
+    for attr in attrs {
+        if !attr.path().is_ident("derive") {
+            continue;
+        }
+        let paths = attr.parse_args_with(Punctuated::<SynPath, Token![,]>::parse_terminated);
+        if let Ok(paths) = paths {
+            for path in paths {
+                if let Some(segment) = path.segments.last() {
+                    if segment.ident == "DeriveEntityModel" {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+fn extract_table_name(attrs: &[Attribute]) -> Option<String> {
+    for attr in attrs {
+        if !attr.path().is_ident("sea_orm") {
+            continue;
+        }
+        let mut table_name = None;
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("table_name") {
+                let value: LitStr = meta.value()?.parse()?;
+                table_name = Some(value.value());
+            }
+            Ok(())
+        });
+        if table_name.is_some() {
+            return table_name;
+        }
+    }
+    None
+}
+
+fn parse_field_sea_orm_attrs(attrs: &[Attribute]) -> FieldSeaOrmAttrs {
+    let mut out = FieldSeaOrmAttrs::default();
+    for attr in attrs {
+        if !attr.path().is_ident("sea_orm") {
+            continue;
+        }
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("column_name") {
+                let value: LitStr = meta.value()?.parse()?;
+                out.column_name = Some(value.value());
+            } else if meta.path.is_ident("primary_key") {
+                out.primary_key = true;
+            } else if meta.path.is_ident("unique") {
+                out.unique = true;
+            } else if meta.path.is_ident("unique_key") {
+                out.unique_key = true;
+            } else if meta.path.is_ident("indexed") {
+                out.indexed = true;
+            } else if meta.path.is_ident("nullable") {
+                out.nullable = true;
+            }
+            Ok(())
+        });
+    }
+    out
+}
+
+fn to_pascal_case(value: &str) -> String {
+    let mut out = String::new();
+    for part in value.split('_') {
+        if part.is_empty() {
+            continue;
+        }
+        let mut chars = part.chars();
+        if let Some(first) = chars.next() {
+            out.extend(first.to_uppercase());
+            for ch in chars {
+                out.extend(ch.to_lowercase());
+            }
+        }
+    }
+    out
+}
+
+fn column_variant_from_field(field_name: &str) -> String {
+    let stripped = field_name.strip_prefix("r#").unwrap_or(field_name);
+    to_pascal_case(stripped)
+}
+
+fn add_attribute(attrs: &mut Vec<String>, value: &str) {
+    if !attrs.iter().any(|item| item == value) {
+        attrs.push(value.to_string());
+    }
+}
+
+fn extract_column_variant(value: &str) -> Option<String> {
+    value.rsplit("::").next().map(|name| name.to_string())
+}
+
+fn collect_fk_columns(items: &[Item]) -> HashSet<String> {
+    let mut columns = HashSet::new();
+    for item in items {
+        let Item::Enum(item_enum) = item else {
+            continue;
+        };
+        if item_enum.ident != "Relation" {
+            continue;
+        }
+        collect_fk_columns_from_enum(item_enum, &mut columns);
+    }
+    columns
+}
+
+fn collect_fk_columns_from_enum(item_enum: &ItemEnum, out: &mut HashSet<String>) {
+    for variant in &item_enum.variants {
+        for attr in &variant.attrs {
+            if !attr.path().is_ident("sea_orm") {
+                continue;
+            }
+            let mut belongs_to = false;
+            let mut from_value: Option<String> = None;
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("belongs_to") {
+                    belongs_to = true;
+                } else if meta.path.is_ident("from") {
+                    let value: LitStr = meta.value()?.parse()?;
+                    from_value = Some(value.value());
+                }
+                Ok(())
+            });
+            if belongs_to {
+                if let Some(value) = from_value.as_deref() {
+                    if let Some(column) = extract_column_variant(value) {
+                        out.insert(column);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn collect_entity_entries(items: &[Item], module_path: &str, out: &mut Vec<EntityEntry>) {
+    let fk_columns = collect_fk_columns(items);
+    for item in items {
+        match item {
+            Item::Struct(item_struct) => {
+                if has_derive_entity_model(&item_struct.attrs) {
+                    if let Some(entity) =
+                        build_entity_entry(item_struct, module_path, &fk_columns)
+                    {
+                        out.push(entity);
+                    }
+                }
+            }
+            Item::Mod(item_mod) => {
+                if let Some((_, nested)) = &item_mod.content {
+                    let nested_path = if module_path.is_empty() {
+                        item_mod.ident.to_string()
+                    } else {
+                        format!("{}::{}", module_path, item_mod.ident)
+                    };
+                    collect_entity_entries(nested, &nested_path, out);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn build_entity_entry(
+    item_struct: &ItemStruct,
+    module_path: &str,
+    fk_columns: &HashSet<String>,
+) -> Option<EntityEntry> {
+    let entity = module_path
+        .split("::")
+        .filter(|part| !part.is_empty())
+        .last()
+        .map(|value| value.to_string())?;
+    let table = extract_table_name(&item_struct.attrs).unwrap_or_else(|| entity.clone());
+    let columns = build_entity_columns(item_struct, fk_columns);
+    Some(EntityEntry {
+        entity,
+        table,
+        columns,
+    })
+}
+
+fn build_entity_columns(
+    item_struct: &ItemStruct,
+    fk_columns: &HashSet<String>,
+) -> Vec<EntityColumnEntry> {
+    let mut columns = Vec::new();
+    let Fields::Named(named) = &item_struct.fields else {
+        return columns;
+    };
+    for field in &named.named {
+        let mut name = field
+            .ident
+            .as_ref()
+            .map(|ident| ident.to_string())
+            .unwrap_or_else(|| "field".to_string());
+        if let Some(stripped) = name.strip_prefix("r#") {
+            name = stripped.to_string();
+        }
+        let attrs = parse_field_sea_orm_attrs(&field.attrs);
+        let rust_type = type_to_string(&field.ty);
+        let column_variant = column_variant_from_field(&name);
+        let column_name = attrs.column_name.clone().unwrap_or_else(|| name.clone());
+
+        let mut attributes = Vec::new();
+        if attrs.primary_key {
+            add_attribute(&mut attributes, "Primary Key");
+        }
+        if fk_columns.contains(&column_variant) {
+            add_attribute(&mut attributes, "Foreign Key");
+        }
+        if attrs.unique || attrs.unique_key {
+            add_attribute(&mut attributes, "Unique");
+        }
+        if attrs.indexed {
+            add_attribute(&mut attributes, "Indexed");
+        }
+        if attrs.nullable || is_option_type(&field.ty) {
+            add_attribute(&mut attributes, "Nullable");
+        }
+
+        columns.push(EntityColumnEntry {
+            name: column_name,
+            rust_type,
+            attributes,
+        });
+    }
+    columns
+}
+
 fn build_struct_doc(item_struct: &ItemStruct) -> TypeDoc {
     let mut fields = Vec::new();
     match &item_struct.fields {
@@ -541,6 +802,10 @@ fn extract_generic_inner<'a>(ty: &'a Type, ident: &str) -> Option<&'a Type> {
         Type::Paren(paren) => extract_generic_inner(&paren.elem, ident),
         _ => None,
     }
+}
+
+fn is_option_type(ty: &Type) -> bool {
+    extract_generic_inner(ty, "Option").is_some()
 }
 
 fn extract_generic_types<'a>(ty: &'a Type, ident: &str) -> Vec<&'a Type> {
@@ -740,6 +1005,15 @@ fn main() {
 
     routes.sort_by(|a, b| a.path.cmp(&b.path).then(a.method.cmp(&b.method)));
 
+    let mut entities = Vec::new();
+    for file in &src_files {
+        let parsed = parse_rust_file(file);
+        let module_path = module_path_for_file(file, &src_dir);
+        collect_entity_entries(&parsed.items, &module_path, &mut entities);
+    }
+
+    entities.sort_by(|a, b| a.entity.cmp(&b.entity));
+
     let out_dir = env::var("OUT_DIR").expect("missing OUT_DIR");
     let out_path = Path::new(&out_dir).join("routes_generated.rs");
     let mut output = String::from("pub static ROUTES: &[RouteInfo] = &[\n");
@@ -757,4 +1031,38 @@ fn main() {
 
     fs::write(&out_path, output)
         .unwrap_or_else(|err| panic!("failed to write {}: {}", out_path.display(), err));
+
+    let entity_out_path = Path::new(&out_dir).join("entities_generated.rs");
+    let mut entity_output = String::from("pub static ENTITIES: &[EntityInfo] = &[\n");
+    for entity in entities {
+        entity_output.push_str(&format!(
+            "    EntityInfo {{ entity: \"{}\", table: \"{}\", column_count: {}, columns: &[\n",
+            escape_rust_string(&entity.entity),
+            escape_rust_string(&entity.table),
+            entity.columns.len()
+        ));
+        for column in entity.columns {
+            let attributes = if column.attributes.is_empty() {
+                "None".to_string()
+            } else {
+                column.attributes.join(", ")
+            };
+            entity_output.push_str(&format!(
+                "        EntityColumnInfo {{ name: \"{}\", rust_type: \"{}\", attributes: \"{}\" }},\n",
+                escape_rust_string(&column.name),
+                escape_rust_string(&column.rust_type),
+                escape_rust_string(&attributes)
+            ));
+        }
+        entity_output.push_str("    ] },\n");
+    }
+    entity_output.push_str("];\n");
+
+    fs::write(&entity_out_path, entity_output).unwrap_or_else(|err| {
+        panic!(
+            "failed to write {}: {}",
+            entity_out_path.display(),
+            err
+        )
+    });
 }
