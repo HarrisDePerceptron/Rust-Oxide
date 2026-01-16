@@ -4,7 +4,7 @@ use axum::{Json, Router, extract::State, middleware, routing::get};
 
 use crate::{
     auth::{Claims, jwt::jwt_auth},
-    db::user_repo,
+    services::user_service,
     state::AppState,
 };
 
@@ -17,7 +17,7 @@ pub fn router(state: Arc<AppState>) -> Router {
 
 async fn me(State(state): State<Arc<AppState>>, claims: Claims) -> Json<serde_json::Value> {
     let user = if let Ok(id) = claims.sub.parse() {
-        user_repo::find_by_id(&state.db, &id).await.ok().flatten()
+        user_service::find_by_id(&state.db, &id).await.ok().flatten()
     } else {
         None
     };

@@ -5,8 +5,8 @@ use sea_orm::{
 };
 use uuid::Uuid;
 
-use super::entities::{todo_item, todo_list};
-use super::entities::prelude::{TodoItem, TodoList};
+use crate::db::entities::{todo_item, todo_list};
+use crate::db::entities::prelude::{TodoItem, TodoList};
 
 pub async fn create_list(
     db: &DatabaseConnection,

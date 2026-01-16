@@ -12,7 +12,7 @@ use uuid::Uuid;
 use sample_server::{
     auth::{Claims, Role, jwt::now_unix, password},
     config::AppConfig,
-    db::user_repo,
+    db::dao::user_dao,
     routes::router,
     state::AppState,
 };
@@ -71,7 +71,7 @@ async fn login_returns_token() {
     let email = format!("login-{}@example.com", Uuid::new_v4());
     let password_value = "password123";
     let hash = password::hash_password(password_value).unwrap();
-    user_repo::create_user(&state.db, &email, &hash, Role::User.as_str())
+    user_dao::create_user(&state.db, &email, &hash, Role::User.as_str())
         .await
         .unwrap();
     let app = router(state);

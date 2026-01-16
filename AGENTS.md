@@ -5,7 +5,9 @@
 - `src/config.rs`: env-driven settings (HOST, PORT, JWT_SECRET, RUST_LOG, DATABASE_URL, DB_MAX_CONNS, DB_MIN_IDLE).  
 - `src/state.rs`: shared `AppState` (JWT keys, SeaORM `DatabaseConnection`).  
 - `src/auth/`: JWT helpers (`jwt.rs`), password hashing (`password.rs`), and role gate layer (`role_layer.rs`) with shared `Claims`/`Role` types.  
-- `src/db/`: SeaORM entities and repos (`entities.rs`, `user_repo.rs`, `refresh_token_repo.rs`).  
+- `src/db/entities/`: SeaORM entities (one module per entity).  
+- `src/db/dao/`: data access objects for queries/transactions.  
+- `src/services/`: business logic that orchestrates DAOs.  
 - `src/routes/`: feature routers — `public.rs`, `auth.rs` (register/login/refresh), `protected.rs` (/me), `admin.rs` (/admin/stats); merged in `routes/mod.rs`.  
 - `src/error.rs`: consistent JSON error responses; `src/logging.rs`: tracing setup.  
 - `examples/client.rs`: Reqwest demo hitting the API; uses `BASE_URL`, `USERNAME`, `PASSWORD`.  
@@ -45,6 +47,11 @@
 - Keep secrets out of git; use `.env` (gitignored) or a secrets manager.
 
 ## Database & ORM Standard
-- Use SeaORM v2.x for all database access; keep entities in `src/db` and follow the entity-first workflow.  
+- Use SeaORM v2.x for all database access; keep entities in `src/db/entities` and queries in `src/db/dao`.  
 - Sync schema from entities on startup (entity-first, current behavior).  
 - Passwords hashed with Argon2 (min length 8); auth uses access/refresh tokens backed by Postgres.
+
+## Layered Workflow
+- Routes call services only; keep handlers thin and HTTP-focused.  
+- Services hold business logic and can orchestrate multiple DAOs.  
+- DAOs contain all SeaORM queries/transactions; entities stay schema-only.  

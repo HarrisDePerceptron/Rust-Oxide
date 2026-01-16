@@ -5,7 +5,7 @@ use sea_orm::{
 };
 use uuid::Uuid;
 
-use super::entities::{prelude::User, user};
+use crate::db::entities::{prelude::User, user};
 
 pub async fn find_by_email(
     db: &DatabaseConnection,

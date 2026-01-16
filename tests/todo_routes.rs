@@ -9,7 +9,7 @@ use serde_json::json;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use sample_server::{config::AppConfig, db::todo_repo, routes::router, state::AppState};
+use sample_server::{config::AppConfig, db::dao::todo_dao, routes::router, state::AppState};
 
 async fn app_state() -> std::sync::Arc<AppState> {
     let cfg = AppConfig::from_env().expect("load app config");
@@ -200,7 +200,7 @@ async fn todo_crud_flow() {
     .await;
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
-    let remaining = todo_repo::count_items_by_list(&state.db, &list_id)
+    let remaining = todo_dao::count_items_by_list(&state.db, &list_id)
         .await
         .expect("count items");
     assert_eq!(remaining, 0);

@@ -2,7 +2,7 @@ use chrono::{Duration, Utc};
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use uuid::Uuid;
 
-use super::entities::refresh_token::{self, Entity as RefreshToken};
+use crate::db::entities::refresh_token::{self, Entity as RefreshToken};
 
 const DEFAULT_REFRESH_TTL_DAYS: i64 = 30;
 

@@ -7,7 +7,7 @@ use tower_http::trace::TraceLayer;
 use sample_server::{
     auth::{Role, password},
     config::AppConfig,
-    db::user_repo,
+    db::dao::user_dao,
     logging::init_tracing,
     routes::router,
     state::AppState,
@@ -56,14 +56,14 @@ async fn run() -> anyhow::Result<()> {
 }
 
 async fn seed_admin(cfg: &AppConfig, db: &sea_orm::DatabaseConnection) -> anyhow::Result<()> {
-    if let Some(existing) = user_repo::find_by_email(db, &cfg.admin_email).await? {
+    if let Some(existing) = user_dao::find_by_email(db, &cfg.admin_email).await? {
         tracing::info!("admin user already present: {}", existing.email);
         return Ok(());
     }
 
     let hash = password::hash_password(&cfg.admin_password)
         .map_err(|e| anyhow::anyhow!("admin seed hash error: {}", e.message))?;
-    let user = user_repo::create_user(db, &cfg.admin_email, &hash, Role::Admin.as_str()).await?;
+    let user = user_dao::create_user(db, &cfg.admin_email, &hash, Role::Admin.as_str()).await?;
     tracing::info!("seeded admin user {}", user.email);
     Ok(())
 }
