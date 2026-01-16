@@ -30,15 +30,13 @@ pub async fn create_user(
     password_hash: &str,
     role: &str,
 ) -> Result<user::Model, sea_orm::DbErr> {
-    let now = Utc::now().fixed_offset();
     let model = user::ActiveModel {
         id: Set(Uuid::new_v4()),
         email: Set(email.to_string()),
         password_hash: Set(password_hash.to_string()),
         role: Set(role.to_string()),
-        created_at: Set(now),
-        updated_at: Set(now),
         last_login_at: Set(None),
+        ..Default::default()
     };
     model.insert(db).await
 }

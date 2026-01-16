@@ -18,8 +18,8 @@ pub async fn create_refresh_token(
         token: Set(Uuid::new_v4().to_string()),
         user_id: Set(*user_id),
         expires_at: Set(expires_at),
-        created_at: Set(Utc::now().fixed_offset()),
         revoked: Set(false),
+        ..Default::default()
     };
     model.insert(db).await
 }

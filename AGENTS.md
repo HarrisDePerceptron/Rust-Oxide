@@ -24,6 +24,7 @@
 - Files/modules: `snake_case`; types/traits: `PascalCase`; functions/vars: `snake_case`; constants: `SCREAMING_SNAKE_CASE`.  
 - Prefer `Result<T, anyhow::Error>` for new fallible code; use `?` to bubble errors.  
 - Keep middleware/state thin; load secrets from env, not source.
+- Axum route params must use `{param}` segments (e.g., `/todo/{id}`), not `:param`.
 
 ## Testing Guidelines
 - Add fast, isolated tests under `tests/` or in the same module with `#[cfg(test)]`.  

@@ -1,13 +1,18 @@
+use std::time::Duration;
+
 use axum::{
     body::{self, Body},
     http::{Request, StatusCode},
 };
-use sea_orm::{DatabaseBackend, MockDatabase};
+use sea_orm::{ConnectOptions, Database, DatabaseBackend, MockDatabase};
 use serde_json::json;
 use tower::ServiceExt; // for `oneshot`
+use uuid::Uuid;
 
 use sample_server::{
-    auth::{Claims, Role, jwt::now_unix},
+    auth::{Claims, Role, jwt::now_unix, password},
+    config::AppConfig,
+    db::user_repo,
     routes::router,
     state::AppState,
 };
@@ -20,6 +25,23 @@ fn app() -> axum::Router {
     let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
     let state = AppState::new(secret, db);
     router(state)
+}
+
+async fn app_with_db() -> std::sync::Arc<AppState> {
+    let cfg = AppConfig::from_env().expect("load app config");
+    let mut opt = ConnectOptions::new(cfg.database_url);
+    opt.max_connections(cfg.db_max_connections)
+        .min_connections(cfg.db_min_idle)
+        .connect_timeout(Duration::from_secs(5))
+        .sqlx_logging(false);
+
+    let db = Database::connect(opt).await.expect("connect to database");
+    db.get_schema_registry("sample_server::db::entities::*")
+        .sync(&db)
+        .await
+        .expect("sync schema");
+
+    AppState::new(b"test-secret", db)
 }
 
 #[tokio::test]
@@ -43,11 +65,18 @@ async fn public_route_works() {
 }
 
 #[tokio::test]
-#[ignore = "requires DB with seeded user"]
+#[ignore = "requires Postgres database"]
 async fn login_returns_token() {
-    let app = app();
+    let state = app_with_db().await;
+    let email = format!("login-{}@example.com", Uuid::new_v4());
+    let password_value = "password123";
+    let hash = password::hash_password(password_value).unwrap();
+    user_repo::create_user(&state.db, &email, &hash, Role::User.as_str())
+        .await
+        .unwrap();
+    let app = router(state);
 
-    let payload = json!({"username": "admin", "password": "admin"});
+    let payload = json!({"email": email, "password": password_value});
     let res = app
         .oneshot(
             Request::builder()
