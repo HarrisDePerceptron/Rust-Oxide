@@ -1,0 +1,1010 @@
+{% extends "base.html" %}
+
+{% block title %}Sample Server | Todo Lists{% endblock %}
+{% block description %}A focused todo list experience for creating lists, managing tasks, and staying on top of work.{% endblock %}
+
+{% block content %}
+      <main class="relative px-6 pb-16 pt-10 sm:px-10">
+        <div class="pointer-events-none absolute inset-0 overflow-hidden">
+          <div class="absolute -left-32 top-24 h-72 w-72 rounded-full bg-[color:var(--sky)]/60 blur-3xl"></div>
+          <div class="absolute -right-28 top-0 h-80 w-80 rounded-full bg-[color:var(--clay)]/20 blur-3xl"></div>
+          <div
+            class="absolute inset-0 opacity-70"
+            style="background-image: radial-gradient(circle at top, rgba(15, 31, 29, 0.12) 0, transparent 55%);"
+          ></div>
+        </div>
+
+        <section class="relative mx-auto max-w-6xl">
+          <div class="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
+            <div class="fade-1 space-y-6">
+              <div
+                class="inline-flex items-center gap-3 rounded-full border border-black/10 bg-white/80 px-4 py-2 text-xs uppercase tracking-[0.3em] text-black/60 shadow-sm"
+              >
+                <span class="h-2 w-2 rounded-full bg-[color:var(--clay)]"></span>
+                Focused Planning
+              </div>
+              <h1
+                class="font-display text-3xl leading-tight text-[color:var(--pine)] sm:text-4xl lg:text-5xl"
+              >
+                A calm space to capture lists, finish tasks, and keep momentum.
+              </h1>
+              <p class="max-w-xl text-base text-black/70 sm:text-lg">
+                Organize work into lists, add tasks, and track progress with a
+                simple, fast experience. The UI is built for flow, not fuss.
+              </p>
+              <div class="flex flex-wrap gap-3 text-xs uppercase tracking-[0.25em] text-black/40">
+                <span class="rounded-full bg-white/80 px-4 py-2">Create</span>
+                <span class="rounded-full bg-white/80 px-4 py-2">Prioritize</span>
+                <span class="rounded-full bg-white/80 px-4 py-2">Complete</span>
+              </div>
+            </div>
+
+            <div
+              class="fade-2 rounded-3xl border border-black/10 bg-white/90 p-6 shadow-xl shadow-black/10"
+            >
+              <p class="text-xs uppercase tracking-[0.3em] text-black/50">Today</p>
+              <h2 class="mt-3 text-2xl font-semibold text-[color:var(--pine)]">
+                {{ now }}
+              </h2>
+              <p class="mt-4 text-sm text-black/65">
+                Pick a list on the left, then add tasks to keep everything in
+                one place.
+              </p>
+              <div
+                class="mt-6 rounded-2xl border border-dashed border-black/10 bg-[color:var(--mist)]/70 p-4 text-xs text-black/50"
+              >
+                Tip: Press Enter to add a task quickly.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="relative mx-auto mt-12 grid max-w-6xl gap-6 lg:grid-cols-[0.9fr_1.4fr_0.7fr]"
+        >
+          <div
+            class="fade-2 rounded-3xl border border-black/10 bg-white/90 p-6 shadow-xl shadow-black/5"
+          >
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <p class="text-xs uppercase tracking-[0.3em] text-black/40">Lists</p>
+                <h2 class="mt-2 text-lg font-semibold text-[color:var(--pine)]">
+                  Projects
+                </h2>
+                <p class="text-xs text-black/50">
+                  <span id="list-count">0</span> total
+                </p>
+              </div>
+              <button
+                id="refresh-lists"
+                class="rounded-full border border-black/10 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] shadow-sm transition hover:-translate-y-0.5"
+                type="button"
+              >
+                Refresh
+              </button>
+            </div>
+
+            <form id="list-form" class="mt-5 space-y-3">
+              <label class="text-xs font-semibold uppercase tracking-[0.25em] text-black/40">
+                New list
+              </label>
+              <input
+                id="list-title-input"
+                class="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black/70 shadow-sm outline-none transition focus:border-[color:var(--pine)]"
+                placeholder="Launch checklist"
+                type="text"
+              />
+              <button
+                class="w-full rounded-2xl bg-[color:var(--pine)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-lg shadow-black/10 transition hover:-translate-y-0.5"
+                type="submit"
+              >
+                Create list
+              </button>
+              <p id="list-error" class="hidden text-xs text-rose-600"></p>
+            </form>
+
+            <div class="mt-6 space-y-3" id="lists"></div>
+            <div
+              id="lists-empty"
+              class="mt-6 rounded-2xl border border-dashed border-black/10 bg-[color:var(--mist)]/70 px-4 py-3 text-xs text-black/50"
+            >
+              No lists yet. Create one to begin.
+            </div>
+          </div>
+
+          <div
+            class="fade-3 rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5"
+          >
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p class="text-xs uppercase tracking-[0.3em] text-black/40">
+                  Active list
+                </p>
+                <h2
+                  id="active-list-title"
+                  class="mt-2 text-lg font-semibold text-[color:var(--pine)]"
+                >
+                  Select a list
+                </h2>
+                <p id="active-list-meta" class="text-xs text-black/50">
+                  Choose a list to load its tasks.
+                </p>
+              </div>
+              <button
+                id="delete-list"
+                class="rounded-full border border-black/10 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-black/50 shadow-sm transition hover:-translate-y-0.5"
+                type="button"
+              >
+                Delete list
+              </button>
+            </div>
+
+            <div class="mt-5 rounded-2xl border border-black/10 bg-[color:var(--mist)]/70 p-4">
+              <div id="rename-view" class="flex flex-wrap items-center justify-between gap-3">
+                <p class="text-xs uppercase tracking-[0.3em] text-black/40">List name</p>
+                <button
+                  id="rename-toggle"
+                  class="rounded-full bg-white px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] shadow-sm"
+                  type="button"
+                >
+                  Rename
+                </button>
+              </div>
+              <form id="rename-form" class="mt-3 hidden space-y-3">
+                <input
+                  id="rename-title"
+                  class="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black/70 shadow-sm outline-none transition focus:border-[color:var(--pine)]"
+                  placeholder="Updated list title"
+                  type="text"
+                />
+                <div class="flex flex-wrap gap-3">
+                  <button
+                    id="rename-save"
+                    class="rounded-2xl bg-[color:var(--pine)] px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-lg shadow-black/10"
+                    type="submit"
+                  >
+                    Save
+                  </button>
+                  <button
+                    id="rename-cancel"
+                    class="rounded-2xl border border-black/10 bg-white px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-black/50"
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <p id="rename-error" class="hidden text-xs text-rose-600"></p>
+              </form>
+            </div>
+
+            <form id="item-form" class="mt-6 space-y-3">
+              <label class="text-xs font-semibold uppercase tracking-[0.25em] text-black/40">
+                New task
+              </label>
+              <div class="flex flex-col gap-3 sm:flex-row">
+                <input
+                  id="item-input"
+                  class="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black/70 shadow-sm outline-none transition focus:border-[color:var(--pine)]"
+                  placeholder="Draft the proposal"
+                  type="text"
+                />
+                <button
+                  id="item-add-btn"
+                  class="rounded-2xl bg-[color:var(--pine)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-lg shadow-black/10 transition hover:-translate-y-0.5"
+                  type="submit"
+                >
+                  Add
+                </button>
+              </div>
+              <p id="item-error" class="hidden text-xs text-rose-600"></p>
+            </form>
+
+            <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
+              <div class="flex flex-wrap gap-2" id="filters">
+                <button
+                  class="filter-btn rounded-full bg-[color:var(--pine)] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.25em] text-white"
+                  data-filter="all"
+                  type="button"
+                >
+                  All
+                </button>
+                <button
+                  class="filter-btn rounded-full border border-black/10 bg-white px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.25em] text-black/50"
+                  data-filter="active"
+                  type="button"
+                >
+                  Active
+                </button>
+                <button
+                  class="filter-btn rounded-full border border-black/10 bg-white px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.25em] text-black/50"
+                  data-filter="done"
+                  type="button"
+                >
+                  Done
+                </button>
+              </div>
+              <button
+                id="clear-completed"
+                class="rounded-full border border-black/10 bg-white px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.25em] text-black/50"
+                type="button"
+              >
+                Clear done
+              </button>
+            </div>
+
+            <div class="mt-6 space-y-4" id="items"></div>
+            <div
+              id="list-empty"
+              class="mt-6 rounded-2xl border border-dashed border-black/10 bg-[color:var(--mist)]/70 px-4 py-3 text-xs text-black/50"
+            >
+              Select a list to see tasks.
+            </div>
+            <div
+              id="items-empty"
+              class="hidden mt-6 rounded-2xl border border-dashed border-black/10 bg-[color:var(--mist)]/70 px-4 py-3 text-xs text-black/50"
+            >
+              No tasks yet. Add the first one.
+            </div>
+            <div
+              id="items-empty-filter"
+              class="hidden mt-6 rounded-2xl border border-dashed border-black/10 bg-[color:var(--mist)]/70 px-4 py-3 text-xs text-black/50"
+            >
+              No tasks match this filter.
+            </div>
+          </div>
+
+          <div
+            class="fade-2 space-y-6 rounded-3xl border border-black/10 bg-white/90 p-6 shadow-xl shadow-black/5"
+          >
+            <div>
+              <p class="text-xs uppercase tracking-[0.3em] text-black/40">Progress</p>
+              <h3 class="mt-2 text-lg font-semibold text-[color:var(--pine)]">
+                List snapshot
+              </h3>
+              <p id="stats-meta" class="mt-2 text-xs text-black/50">
+                Select a list to see progress.
+              </p>
+            </div>
+            <div class="space-y-3">
+              <div class="flex items-center justify-between text-xs text-black/60">
+                <span>Completion</span>
+                <span id="stats-percent">0%</span>
+              </div>
+              <div class="h-2 w-full rounded-full bg-[color:var(--mist)]">
+                <div
+                  id="stats-progress"
+                  class="h-2 rounded-full bg-[color:var(--pine)]"
+                  style="width: 0%"
+                ></div>
+              </div>
+            </div>
+            <div class="grid gap-3 text-xs text-black/60">
+              <div class="flex items-center justify-between">
+                <span>Total tasks</span>
+                <span id="stats-total">0</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span>Active tasks</span>
+                <span id="stats-active">0</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span>Done tasks</span>
+                <span id="stats-done">0</span>
+              </div>
+            </div>
+            <div class="rounded-2xl border border-black/10 bg-[color:var(--mist)]/70 p-4">
+              <p class="text-xs uppercase tracking-[0.3em] text-black/40">
+                Recently completed
+              </p>
+              <div id="recent-completed" class="mt-3 space-y-2 text-xs text-black/60">
+                <p class="text-black/40">No completed tasks yet.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <div
+        id="toast"
+        class="pointer-events-none fixed inset-x-0 bottom-6 z-50 hidden justify-center px-6"
+      >
+        <div
+          id="toast-body"
+          class="rounded-full bg-[color:var(--pine)] px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-lg shadow-black/20"
+        >
+          <span id="toast-text">Saved</span>
+        </div>
+      </div>
+
+      <script>
+        (() => {
+          const byId = (id) => document.getElementById(id);
+          const state = {
+            lists: [],
+            activeListId: null,
+            activeList: null,
+            items: [],
+            filter: "all",
+            editingItemId: null,
+            isRenaming: false,
+          };
+
+          const listForm = byId("list-form");
+          const listTitleInput = byId("list-title-input");
+          const listError = byId("list-error");
+          const listsWrap = byId("lists");
+          const listsEmpty = byId("lists-empty");
+          const listCount = byId("list-count");
+          const refreshLists = byId("refresh-lists");
+          const activeListTitle = byId("active-list-title");
+          const activeListMeta = byId("active-list-meta");
+          const deleteListButton = byId("delete-list");
+          const renameView = byId("rename-view");
+          const renameToggle = byId("rename-toggle");
+          const renameForm = byId("rename-form");
+          const renameTitle = byId("rename-title");
+          const renameSave = byId("rename-save");
+          const renameCancel = byId("rename-cancel");
+          const renameError = byId("rename-error");
+          const itemForm = byId("item-form");
+          const itemInput = byId("item-input");
+          const itemAddButton = byId("item-add-btn");
+          const itemError = byId("item-error");
+          const itemsWrap = byId("items");
+          const listEmpty = byId("list-empty");
+          const itemsEmpty = byId("items-empty");
+          const itemsEmptyFilter = byId("items-empty-filter");
+          const filtersWrap = byId("filters");
+          const clearCompletedButton = byId("clear-completed");
+          const statsMeta = byId("stats-meta");
+          const statsPercent = byId("stats-percent");
+          const statsProgress = byId("stats-progress");
+          const statsTotal = byId("stats-total");
+          const statsActive = byId("stats-active");
+          const statsDone = byId("stats-done");
+          const recentCompleted = byId("recent-completed");
+          const toast = byId("toast");
+          const toastText = byId("toast-text");
+
+          const escapeHtml = (value) =>
+            String(value)
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;")
+              .replace(/\"/g, "&quot;")
+              .replace(/'/g, "&#39;");
+
+          const formatDate = (value) => {
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) {
+              return value;
+            }
+            return date.toLocaleString();
+          };
+
+          const setError = (element, message) => {
+            if (!element) {
+              return;
+            }
+            if (message) {
+              element.textContent = message;
+              element.classList.remove("hidden");
+            } else {
+              element.textContent = "";
+              element.classList.add("hidden");
+            }
+          };
+
+          const showToast = (message) => {
+            toastText.textContent = message;
+            toast.classList.remove("hidden");
+            toast.classList.add("flex");
+            setTimeout(() => {
+              toast.classList.add("hidden");
+              toast.classList.remove("flex");
+            }, 1800);
+          };
+
+          const apiRequest = async (method, path, body) => {
+            const url = `${window.location.origin}${path}`;
+            try {
+              const response = await fetch(url, {
+                method,
+                headers: { "Content-Type": "application/json" },
+                body: body ? JSON.stringify(body) : undefined,
+              });
+              const text = await response.text();
+              let data = null;
+              if (text) {
+                try {
+                  data = JSON.parse(text);
+                } catch {
+                  data = { raw: text };
+                }
+              }
+              return { ok: response.ok, status: response.status, data };
+            } catch (error) {
+              return { ok: false, status: 0, data: null };
+            }
+          };
+
+          const updateFilters = () => {
+            const buttons = filtersWrap.querySelectorAll(".filter-btn");
+            buttons.forEach((button) => {
+              const active = button.dataset.filter === state.filter;
+              button.className = active
+                ? "filter-btn rounded-full bg-[color:var(--pine)] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.25em] text-white"
+                : "filter-btn rounded-full border border-black/10 bg-white px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.25em] text-black/50";
+            });
+          };
+
+          const renderLists = () => {
+            listCount.textContent = state.lists.length.toString();
+            if (state.lists.length === 0) {
+              listsWrap.innerHTML = "";
+              listsEmpty.classList.remove("hidden");
+              return;
+            }
+            listsEmpty.classList.add("hidden");
+            listsWrap.innerHTML = state.lists
+              .map((list) => {
+                const isActive = list.id === state.activeListId;
+                const border = isActive ? "border-[color:var(--pine)]" : "border-black/10";
+                const background = isActive ? "bg-white" : "bg-white/80";
+                return `
+                  <div
+                    class="group flex items-start justify-between gap-3 rounded-2xl border ${border} ${background} p-3 shadow-sm"
+                    data-id="${escapeHtml(list.id)}"
+                  >
+                    <button
+                      class="flex-1 text-left"
+                      data-action="select-list"
+                      data-id="${escapeHtml(list.id)}"
+                      type="button"
+                    >
+                      <p class="text-sm font-semibold text-[color:var(--pine)]">
+                        ${escapeHtml(list.title)}
+                      </p>
+                      <p class="text-xs text-black/50">
+                        Updated ${formatDate(list.updated_at)}
+                      </p>
+                    </button>
+                    <button
+                      class="rounded-full border border-black/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-black/50"
+                      data-action="delete-list"
+                      data-id="${escapeHtml(list.id)}"
+                      type="button"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                `;
+              })
+              .join("");
+          };
+
+          const renderActiveList = () => {
+            if (!state.activeList) {
+              activeListTitle.textContent = "Select a list";
+              activeListMeta.textContent = "Choose a list to load its tasks.";
+              renameTitle.value = "";
+              state.isRenaming = false;
+              renameForm.classList.add("hidden");
+              renameView.classList.remove("hidden");
+              renameTitle.disabled = true;
+              renameSave.disabled = true;
+              renameCancel.disabled = true;
+              renameToggle.disabled = true;
+              deleteListButton.disabled = true;
+              itemInput.disabled = true;
+              itemAddButton.disabled = true;
+              clearCompletedButton.disabled = true;
+              listEmpty.classList.remove("hidden");
+              itemsEmpty.classList.add("hidden");
+              itemsEmptyFilter.classList.add("hidden");
+              return;
+            }
+            activeListTitle.textContent = state.activeList.title;
+            activeListMeta.textContent = `ID ${state.activeList.id} - Updated ${formatDate(
+              state.activeList.updated_at
+            )}`;
+            renameTitle.value = state.activeList.title;
+            state.isRenaming = false;
+            renameForm.classList.add("hidden");
+            renameView.classList.remove("hidden");
+            renameTitle.disabled = false;
+            renameSave.disabled = false;
+            renameCancel.disabled = false;
+            renameToggle.disabled = false;
+            deleteListButton.disabled = false;
+            itemInput.disabled = false;
+            itemAddButton.disabled = false;
+            clearCompletedButton.disabled = false;
+            listEmpty.classList.add("hidden");
+          };
+
+          const renderItems = () => {
+            if (!state.activeList) {
+              itemsWrap.innerHTML = "";
+              return;
+            }
+
+            const activeItems = state.items.filter((item) => !item.done);
+            const doneItems = state.items.filter((item) => item.done);
+            let filteredItems = state.items;
+            if (state.filter === "active") {
+              filteredItems = activeItems;
+            }
+            if (state.filter === "done") {
+              filteredItems = doneItems;
+            }
+
+            if (filteredItems.length === 0) {
+              itemsWrap.innerHTML = "";
+              if (state.items.length === 0) {
+                itemsEmpty.classList.remove("hidden");
+                itemsEmptyFilter.classList.add("hidden");
+              } else {
+                itemsEmpty.classList.add("hidden");
+                itemsEmptyFilter.classList.remove("hidden");
+              }
+              return;
+            }
+
+            itemsEmpty.classList.add("hidden");
+            itemsEmptyFilter.classList.add("hidden");
+
+            const renderItemRow = (item) => {
+              const isEditing = state.editingItemId === item.id;
+              const textStyle = item.done ? "line-through text-black/40" : "text-[color:var(--pine)]";
+              const doneBadge = item.done
+                ? "<span class=\"rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-700\">Done</span>"
+                : "<span class=\"rounded-full bg-[color:var(--mist)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[color:var(--pine)]\">Active</span>";
+              return `
+                <div
+                  class="rounded-2xl border border-black/10 bg-white/90 p-4 shadow-sm"
+                  data-item-row="true"
+                  data-id="${escapeHtml(item.id)}"
+                >
+                  <div class="flex flex-wrap items-start justify-between gap-4">
+                    <label class="flex items-start gap-3">
+                      <input
+                        class="mt-1 h-4 w-4 rounded border-black/20 text-[color:var(--pine)]"
+                        type="checkbox"
+                        data-action="toggle-item"
+                        data-id="${escapeHtml(item.id)}"
+                        ${item.done ? "checked" : ""}
+                      />
+                      <div>
+                        <p class="text-sm font-semibold ${textStyle}">
+                          ${escapeHtml(item.description)}
+                        </p>
+                        <p class="text-xs text-black/45">
+                          Updated ${formatDate(item.updated_at)}
+                        </p>
+                      </div>
+                    </label>
+                    <div class="flex items-center gap-2">
+                      ${doneBadge}
+                    </div>
+                  </div>
+                  <div class="mt-4 flex flex-col gap-3 sm:flex-row">
+                    <input
+                      class="w-full rounded-2xl border border-black/10 bg-white px-4 py-2 text-sm text-black/70 shadow-sm outline-none transition focus:border-[color:var(--pine)]"
+                      data-field="description"
+                      data-id="${escapeHtml(item.id)}"
+                      type="text"
+                      value="${escapeHtml(item.description)}"
+                      ${isEditing ? "" : "disabled"}
+                    />
+                    <div class="flex flex-wrap gap-2">
+                      <button
+                        class="rounded-2xl bg-[color:var(--pine)] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.25em] text-white"
+                        data-action="${isEditing ? "save-item" : "edit-item"}"
+                        data-id="${escapeHtml(item.id)}"
+                        type="button"
+                      >
+                        ${isEditing ? "Save" : "Edit"}
+                      </button>
+                      <button
+                        class="rounded-2xl border border-black/10 bg-white px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.25em] text-black/50"
+                        data-action="${isEditing ? "cancel-edit" : "delete-item"}"
+                        data-id="${escapeHtml(item.id)}"
+                        type="button"
+                      >
+                        ${isEditing ? "Cancel" : "Delete"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              `;
+            };
+
+            if (state.filter === "all") {
+              const activeSection = activeItems.map(renderItemRow).join("");
+              const doneSection = doneItems.length
+                ? `
+                  <div class="pt-4">
+                    <p class="text-xs uppercase tracking-[0.3em] text-black/40">Completed</p>
+                    <div class="mt-3 space-y-4">
+                      ${doneItems.map(renderItemRow).join("")}
+                    </div>
+                  </div>
+                `
+                : "";
+              itemsWrap.innerHTML = `${activeSection}${doneSection}`;
+              return;
+            }
+
+            itemsWrap.innerHTML = filteredItems.map(renderItemRow).join("");
+          };
+
+          const renderStats = () => {
+            if (!state.activeList) {
+              statsMeta.textContent = "Select a list to see progress.";
+              statsPercent.textContent = "0%";
+              statsProgress.style.width = "0%";
+              statsTotal.textContent = "0";
+              statsActive.textContent = "0";
+              statsDone.textContent = "0";
+              clearCompletedButton.disabled = true;
+              recentCompleted.innerHTML = "<p class=\"text-black/40\">No completed tasks yet.</p>";
+              return;
+            }
+            const total = state.items.length;
+            const done = state.items.filter((item) => item.done).length;
+            const active = total - done;
+            const percent = total === 0 ? 0 : Math.round((done / total) * 100);
+            statsMeta.textContent = `Updated ${formatDate(state.activeList.updated_at)}`;
+            statsPercent.textContent = `${percent}%`;
+            statsProgress.style.width = `${percent}%`;
+            statsTotal.textContent = total.toString();
+            statsActive.textContent = active.toString();
+            statsDone.textContent = done.toString();
+            clearCompletedButton.disabled = done === 0;
+            const recent = state.items
+              .filter((item) => item.done)
+              .slice(0, 3)
+              .map((item) =>
+                `<p class=\"rounded-xl bg-white/80 px-3 py-2 shadow-sm\">${escapeHtml(
+                  item.description
+                )}</p>`
+              )
+              .join("");
+            recentCompleted.innerHTML = recent || "<p class=\"text-black/40\">No completed tasks yet.</p>";
+          };
+
+          const loadLists = async () => {
+            const result = await apiRequest("GET", "/todo");
+            if (result.ok && Array.isArray(result.data)) {
+              state.lists = result.data;
+              if (state.activeListId && !state.lists.some((list) => list.id === state.activeListId)) {
+                state.activeListId = null;
+                state.activeList = null;
+                state.items = [];
+              }
+              renderLists();
+            }
+          };
+
+          const loadListDetail = async (listId) => {
+            const result = await apiRequest("GET", `/todo/${listId}`);
+            if (result.ok && result.data) {
+              state.activeListId = listId;
+              state.activeList = result.data.list;
+              state.items = result.data.items || [];
+              state.editingItemId = null;
+              renderActiveList();
+              renderItems();
+              renderStats();
+              renderLists();
+            }
+          };
+
+          const createList = async (title) => {
+            const result = await apiRequest("POST", "/todo", { title });
+            if (result.ok && result.data) {
+              showToast("List created");
+              await loadLists();
+              await loadListDetail(result.data.id);
+            } else {
+              setError(listError, "Unable to create list.");
+            }
+          };
+
+          const renameList = async (title) => {
+            if (!state.activeListId) {
+              return;
+            }
+            const result = await apiRequest("PATCH", `/todo/${state.activeListId}`, { title });
+            if (result.ok && result.data) {
+              state.activeList = result.data;
+              showToast("List updated");
+              await loadLists();
+              renderActiveList();
+              renderStats();
+            } else {
+              setError(renameError, "Unable to rename list.");
+            }
+          };
+
+          const deleteList = async (listId) => {
+            const result = await apiRequest("DELETE", `/todo/${listId}`);
+            if (result.ok) {
+              showToast("List deleted");
+              if (state.activeListId === listId) {
+                state.activeListId = null;
+                state.activeList = null;
+                state.items = [];
+                renderActiveList();
+                renderItems();
+                renderStats();
+              }
+              await loadLists();
+            }
+          };
+
+          const createItem = async (description) => {
+            if (!state.activeListId) {
+              return;
+            }
+            const result = await apiRequest(
+              "POST",
+              `/todo/${state.activeListId}/items`,
+              { description }
+            );
+            if (result.ok) {
+              showToast("Task added");
+              await loadListDetail(state.activeListId);
+            } else {
+              setError(itemError, "Unable to add task.");
+            }
+          };
+
+          const updateItem = async (itemId, payload) => {
+            if (!state.activeListId) {
+              return;
+            }
+            const result = await apiRequest(
+              "PATCH",
+              `/todo/${state.activeListId}/items/${itemId}`,
+              payload
+            );
+            if (result.ok) {
+              showToast("Task updated");
+              await loadListDetail(state.activeListId);
+            } else {
+              setError(itemError, "Unable to update task.");
+            }
+          };
+
+          const deleteItem = async (itemId) => {
+            if (!state.activeListId) {
+              return;
+            }
+            const result = await apiRequest(
+              "DELETE",
+              `/todo/${state.activeListId}/items/${itemId}`
+            );
+            if (result.ok) {
+              showToast("Task removed");
+              await loadListDetail(state.activeListId);
+            }
+          };
+
+          const clearCompleted = async () => {
+            const doneItems = state.items.filter((item) => item.done);
+            if (doneItems.length === 0) {
+              showToast("No completed tasks");
+              return;
+            }
+            const confirmed = window.confirm("Clear all completed tasks?");
+            if (!confirmed) {
+              return;
+            }
+            await Promise.all(
+              doneItems.map((item) =>
+                apiRequest(
+                  "DELETE",
+                  `/todo/${state.activeListId}/items/${item.id}`
+                )
+              )
+            );
+            showToast("Completed tasks cleared");
+            await loadListDetail(state.activeListId);
+          };
+
+          refreshLists.addEventListener("click", () => {
+            loadLists();
+          });
+
+          listForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+            setError(listError, "");
+            const title = listTitleInput.value.trim();
+            if (!title) {
+              setError(listError, "Title is required.");
+              return;
+            }
+            createList(title);
+            listTitleInput.value = "";
+          });
+
+          renameToggle.addEventListener("click", () => {
+            if (!state.activeList) {
+              return;
+            }
+            state.isRenaming = true;
+            renameView.classList.add("hidden");
+            renameForm.classList.remove("hidden");
+            renameTitle.focus();
+          });
+
+          renameCancel.addEventListener("click", () => {
+            state.isRenaming = false;
+            renameForm.classList.add("hidden");
+            renameView.classList.remove("hidden");
+            setError(renameError, "");
+          });
+
+          renameForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+            setError(renameError, "");
+            const title = renameTitle.value.trim();
+            if (!state.activeListId) {
+              setError(renameError, "Select a list first.");
+              return;
+            }
+            if (!title) {
+              setError(renameError, "Title is required.");
+              return;
+            }
+            renameList(title);
+            state.isRenaming = false;
+            renameForm.classList.add("hidden");
+            renameView.classList.remove("hidden");
+          });
+
+          deleteListButton.addEventListener("click", () => {
+            if (!state.activeListId) {
+              return;
+            }
+            const confirmed = window.confirm("Delete this list and all tasks?");
+            if (!confirmed) {
+              return;
+            }
+            deleteList(state.activeListId);
+          });
+
+          itemForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+            setError(itemError, "");
+            const description = itemInput.value.trim();
+            if (!state.activeListId) {
+              setError(itemError, "Select a list first.");
+              return;
+            }
+            if (!description) {
+              setError(itemError, "Description is required.");
+              return;
+            }
+            createItem(description);
+            itemInput.value = "";
+          });
+
+          listsWrap.addEventListener("click", (event) => {
+            const target = event.target.closest("[data-action]");
+            if (!target) {
+              return;
+            }
+            const action = target.dataset.action;
+            const listId = target.dataset.id;
+            if (!listId) {
+              return;
+            }
+            if (action === "select-list") {
+              loadListDetail(listId);
+            }
+            if (action === "delete-list") {
+              const confirmed = window.confirm("Delete this list and all tasks?");
+              if (!confirmed) {
+                return;
+              }
+              deleteList(listId);
+            }
+          });
+
+          itemsWrap.addEventListener("click", (event) => {
+            const target = event.target.closest("[data-action]");
+            if (!target) {
+              return;
+            }
+            setError(itemError, "");
+            const action = target.dataset.action;
+            const itemId = target.dataset.id;
+            if (!itemId) {
+              return;
+            }
+            if (action === "delete-item") {
+              deleteItem(itemId);
+            }
+            if (action === "edit-item") {
+              state.editingItemId = itemId;
+              renderItems();
+            }
+            if (action === "cancel-edit") {
+              state.editingItemId = null;
+              renderItems();
+            }
+            if (action === "save-item") {
+              const row = target.closest("[data-item-row]");
+              const input = row?.querySelector("[data-field='description']");
+              const value = input?.value.trim();
+              if (!value) {
+                setError(itemError, "Description is required.");
+                return;
+              }
+              updateItem(itemId, { description: value });
+              state.editingItemId = null;
+            }
+          });
+
+          itemsWrap.addEventListener("change", (event) => {
+            const target = event.target;
+            if (!(target instanceof HTMLInputElement)) {
+              return;
+            }
+            if (target.dataset.action !== "toggle-item") {
+              return;
+            }
+            setError(itemError, "");
+            const itemId = target.dataset.id;
+            updateItem(itemId, { done: target.checked });
+          });
+
+          itemsWrap.addEventListener("keydown", (event) => {
+            const target = event.target;
+            if (!(target instanceof HTMLInputElement)) {
+              return;
+            }
+            if (!target.dataset.field) {
+              return;
+            }
+            if (event.key === "Enter") {
+              event.preventDefault();
+              const itemId = target.dataset.id;
+              const value = target.value.trim();
+              if (!value) {
+                setError(itemError, "Description is required.");
+                return;
+              }
+              updateItem(itemId, { description: value });
+              state.editingItemId = null;
+            }
+          });
+
+          filtersWrap.addEventListener("click", (event) => {
+            const button = event.target.closest("[data-filter]");
+            if (!button) {
+              return;
+            }
+            state.filter = button.dataset.filter || "all";
+            updateFilters();
+            renderItems();
+          });
+
+          clearCompletedButton.addEventListener("click", () => {
+            if (!state.activeListId) {
+              return;
+            }
+            clearCompleted();
+          });
+
+          updateFilters();
+          renderActiveList();
+          renderItems();
+          renderStats();
+          loadLists();
+        })();
+      </script>
+{% endblock %}

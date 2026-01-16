@@ -1,11 +1,14 @@
 use std::sync::Arc;
 
+use askama::Template;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
+    response::Html,
     routing::{get, patch, post},
     Json, Router,
 };
+use chrono::Local;
 use sea_orm::prelude::DateTimeWithTimeZone;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -64,8 +67,15 @@ pub struct TodoListDetailResponse {
     pub items: Vec<TodoItemResponse>,
 }
 
+#[derive(Template)]
+#[template(path = "todo.html")]
+struct TodoUiTemplate {
+    now: String,
+}
+
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
+        .route("/todo/ui", get(todo_ui))
         .route("/todo", post(create_list).get(list_lists))
         .route(
             "/todo/{list_id}",
@@ -80,6 +90,14 @@ pub fn router(state: Arc<AppState>) -> Router {
             patch(update_item).delete(delete_item),
         )
         .with_state(state)
+}
+
+async fn todo_ui() -> Result<Html<String>, AppError> {
+    let now = Local::now().to_rfc3339();
+    let rendered = TodoUiTemplate { now }
+        .render()
+        .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render todo ui"))?;
+    Ok(Html(rendered))
 }
 
 async fn create_list(
