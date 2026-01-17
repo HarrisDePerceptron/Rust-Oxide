@@ -23,13 +23,15 @@ use jsonwebtoken::{Algorithm, Header, encode};
 fn app() -> axum::Router {
     let secret = b"test-secret";
     let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
-    let state = AppState::new(secret, db);
+    let mut cfg = AppConfig::from_env().expect("load app config");
+    cfg.jwt_secret = String::from_utf8_lossy(secret).into_owned();
+    let state = AppState::new(cfg, db);
     router(state)
 }
 
 async fn app_with_db() -> std::sync::Arc<AppState> {
     let cfg = AppConfig::from_env().expect("load app config");
-    let mut opt = ConnectOptions::new(cfg.database_url);
+    let mut opt = ConnectOptions::new(cfg.database_url.clone());
     opt.max_connections(cfg.db_max_connections)
         .min_connections(cfg.db_min_idle)
         .connect_timeout(Duration::from_secs(5))
@@ -41,7 +43,9 @@ async fn app_with_db() -> std::sync::Arc<AppState> {
         .await
         .expect("sync schema");
 
-    AppState::new(b"test-secret", db)
+    let mut cfg = cfg;
+    cfg.jwt_secret = "test-secret".to_string();
+    AppState::new(cfg, db)
 }
 
 #[tokio::test]
@@ -114,7 +118,9 @@ async fn me_without_token_is_rejected() {
 async fn me_with_token_succeeds() {
     let secret = b"test-secret";
     let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
-    let state = AppState::new(secret, db);
+    let mut cfg = AppConfig::from_env().expect("load app config");
+    cfg.jwt_secret = String::from_utf8_lossy(secret).into_owned();
+    let state = AppState::new(cfg, db);
     let app = router(state.clone());
 
     let token = login_token(secret, vec![Role::User]);
@@ -138,7 +144,9 @@ async fn me_with_token_succeeds() {
 async fn admin_requires_role() {
     let secret = b"test-secret";
     let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
-    let app = router(AppState::new(secret, db));
+    let mut cfg = AppConfig::from_env().expect("load app config");
+    cfg.jwt_secret = String::from_utf8_lossy(secret).into_owned();
+    let app = router(AppState::new(cfg, db));
 
     // token without Admin role
     let token = login_token(secret, vec![Role::User]);

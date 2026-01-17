@@ -26,18 +26,18 @@ async fn run() -> anyhow::Result<()> {
     init_tracing(&cfg.log_level);
 
     let db = connection::connect(&cfg).await?;
-    let state = AppState::new(cfg.jwt_secret.as_bytes(), db);
+    let state = AppState::new(cfg, db);
 
     let daos = DaoContext::new(&state.db);
     let auth_service =
         auth_service::AuthService::new(daos.user(), daos.refresh_token(), state.jwt.clone());
-    auth_service.seed_admin(&cfg).await?;
+    auth_service.seed_admin(&state.config).await?;
 
     let app = Router::new()
         .merge(router(Arc::clone(&state)))
         .layer(TraceLayer::new_for_http());
 
-    let addr: SocketAddr = format!("{}:{}", cfg.host, cfg.port)
+    let addr: SocketAddr = format!("{}:{}", state.config.host.as_str(), state.config.port)
         .parse()
         .expect("invalid host/port");
     tracing::info!("listening on http://{}", addr);

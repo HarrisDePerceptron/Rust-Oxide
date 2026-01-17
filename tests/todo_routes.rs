@@ -13,7 +13,7 @@ use sample_server::{config::AppConfig, db::dao::DaoContext, routes::router, stat
 
 async fn app_state() -> std::sync::Arc<AppState> {
     let cfg = AppConfig::from_env().expect("load app config");
-    let mut opt = ConnectOptions::new(cfg.database_url);
+    let mut opt = ConnectOptions::new(cfg.database_url.clone());
     opt.max_connections(cfg.db_max_connections)
         .min_connections(cfg.db_min_idle)
         .connect_timeout(Duration::from_secs(5))
@@ -25,7 +25,9 @@ async fn app_state() -> std::sync::Arc<AppState> {
         .await
         .expect("sync schema");
 
-    AppState::new(b"test-secret", db)
+    let mut cfg = cfg;
+    cfg.jwt_secret = "test-secret".to_string();
+    AppState::new(cfg, db)
 }
 
 async fn send(

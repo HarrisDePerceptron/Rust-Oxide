@@ -1,10 +1,12 @@
 use axum::http::StatusCode;
+use sea_orm::Set;
 use uuid::Uuid;
 
 use crate::{
-    db::dao::{DaoLayerError, TodoDao},
+    db::dao::TodoDao,
     db::entities::{todo_item, todo_list},
     error::AppError,
+    services::crud_service::CrudService,
 };
 
 #[derive(Clone)]
@@ -18,10 +20,12 @@ impl TodoService {
     }
 
     pub async fn create_list(&self, title: &str) -> Result<todo_list::Model, AppError> {
-        self.todo_dao
-            .create_list(title)
-            .await
-            .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "Create list failed"))
+        let model = todo_list::ActiveModel {
+            title: Set(title.to_string()),
+            ..Default::default()
+        };
+
+        CrudService::create(self, model).await
     }
 
     pub async fn list_lists(&self) -> Result<Vec<todo_list::Model>, AppError> {
@@ -32,16 +36,7 @@ impl TodoService {
     }
 
     pub async fn require_list(&self, list_id: &Uuid) -> Result<todo_list::Model, AppError> {
-        match self.todo_dao.find_list_by_id(list_id).await {
-            Ok(list) => Ok(list),
-            Err(DaoLayerError::NotFound { .. }) => {
-                Err(AppError::new(StatusCode::NOT_FOUND, "Todo list not found"))
-            }
-            Err(_) => Err(AppError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "List fetch failed",
-            )),
-        }
+        CrudService::find_by_id(self, *list_id).await
     }
 
     pub async fn update_list_title(
@@ -49,29 +44,15 @@ impl TodoService {
         list_id: &Uuid,
         title: &str,
     ) -> Result<todo_list::Model, AppError> {
-        match self.todo_dao.update_list_title(list_id, title).await {
-            Ok(list) => Ok(list),
-            Err(DaoLayerError::NotFound { .. }) => {
-                Err(AppError::new(StatusCode::NOT_FOUND, "Todo list not found"))
-            }
-            Err(_) => Err(AppError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Update list failed",
-            )),
-        }
+        let title = title.to_string();
+        CrudService::update(self, *list_id, move |active| {
+            active.title = Set(title);
+        })
+        .await
     }
 
     pub async fn delete_list(&self, list_id: &Uuid) -> Result<(), AppError> {
-        match self.todo_dao.delete_list(list_id).await {
-            Ok(_) => Ok(()),
-            Err(DaoLayerError::NotFound { .. }) => {
-                Err(AppError::new(StatusCode::NOT_FOUND, "Todo list not found"))
-            }
-            Err(_) => Err(AppError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Delete list failed",
-            )),
-        }
+        CrudService::delete(self, *list_id).await
     }
 
     pub async fn create_item(
@@ -116,5 +97,13 @@ impl TodoService {
             return Err(AppError::new(StatusCode::NOT_FOUND, "Todo item not found"));
         }
         Ok(())
+    }
+}
+
+impl CrudService for TodoService {
+    type Dao = TodoDao;
+
+    fn dao(&self) -> &Self::Dao {
+        &self.todo_dao
     }
 }
