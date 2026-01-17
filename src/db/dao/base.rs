@@ -1,16 +1,19 @@
+use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, DatabaseConnection, EntityTrait, FromQueryResult, IntoActiveModel,
     PaginatorTrait, PrimaryKeyTrait, Select,
 };
 use uuid::Uuid;
 
+use super::base_traits::{HasIdActiveModel, TimestampedActiveModel};
 use super::error::{DaoLayerError, DaoResult};
 
 pub trait DaoBase: Clone + Send + Sync + Sized
 where
     <Self::Entity as EntityTrait>::Model:
         FromQueryResult + IntoActiveModel<<Self::Entity as EntityTrait>::ActiveModel> + Send + Sync,
-    <Self::Entity as EntityTrait>::ActiveModel: ActiveModelTrait<Entity = Self::Entity> + Send,
+    <Self::Entity as EntityTrait>::ActiveModel:
+        ActiveModelTrait<Entity = Self::Entity> + HasIdActiveModel + TimestampedActiveModel + Send,
     <<Self::Entity as EntityTrait>::PrimaryKey as PrimaryKeyTrait>::ValueType:
         From<Uuid> + Send + Sync,
 {
@@ -29,10 +32,12 @@ where
         &self,
         data: impl IntoActiveModel<<Self::Entity as EntityTrait>::ActiveModel> + Send,
     ) -> DaoResult<<Self::Entity as EntityTrait>::Model> {
-        data.into_active_model()
-            .insert(self.db())
-            .await
-            .map_err(DaoLayerError::Db)
+        let now = Utc::now().fixed_offset();
+        let mut active = data.into_active_model();
+        active.set_id(Uuid::new_v4());
+        active.set_created_at(now);
+        active.set_updated_at(now);
+        active.insert(self.db()).await.map_err(DaoLayerError::Db)
     }
 
     async fn find_by_id(&self, id: Uuid) -> DaoResult<<Self::Entity as EntityTrait>::Model> {
@@ -84,6 +89,7 @@ where
 
         let mut active = model.into_active_model();
         apply(&mut active);
+        active.set_updated_at(Utc::now().fixed_offset());
 
         active.update(self.db()).await.map_err(DaoLayerError::Db)
     }

@@ -32,7 +32,6 @@ impl TodoDao {
         title: &str,
     ) -> DaoResult<todo_list::Model> {
         let model = todo_list::ActiveModel {
-            id: Set(Uuid::new_v4()),
             title: Set(title.to_string()),
             ..Default::default()
         };
@@ -57,10 +56,8 @@ impl TodoDao {
         title: &str,
     ) -> DaoResult<todo_list::Model> {
         let title = title.to_string();
-        let now = Utc::now().fixed_offset();
         self.update(*id, move |active| {
             active.title = Set(title);
-            active.updated_at = Set(now);
         })
         .await
     }

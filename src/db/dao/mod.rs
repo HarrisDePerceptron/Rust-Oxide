@@ -1,12 +1,14 @@
 use sea_orm::DatabaseConnection;
 
 pub mod base;
+pub mod base_traits;
 pub mod error;
 pub mod refresh_token_dao;
 pub mod todo_dao;
 pub mod user_dao;
 
 pub use base::DaoBase;
+pub use base_traits::{HasIdActiveModel, TimestampedActiveModel};
 pub use error::{DaoLayerError, DaoResult};
 pub use refresh_token_dao::RefreshTokenDao;
 pub use todo_dao::TodoDao;

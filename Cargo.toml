@@ -8,6 +8,7 @@ axum = { version="0.8.7", features=["json", "ws"] }
 anyhow = "1.0.100"
 argon2 = { version = "0.5", features = ["alloc"] }
 askama = "0.15.1"
+base_entity_derive = { path = "crates/base_entity_derive" }
 chrono = { version = "0.4", features = ["clock", "serde", "std"] }
 futures-util = "0.3"
 jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }

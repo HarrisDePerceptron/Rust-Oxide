@@ -1,4 +1,3 @@
-use chrono::Utc;
 use sea_orm::{ColumnTrait, DatabaseConnection, QueryFilter, Set};
 use uuid::Uuid;
 
@@ -40,7 +39,6 @@ impl UserDao {
         role: &str,
     ) -> DaoResult<user::Model> {
         let model = user::ActiveModel {
-            id: Set(Uuid::new_v4()),
             email: Set(email.to_string()),
             password_hash: Set(password_hash.to_string()),
             role: Set(role.to_string()),
@@ -51,12 +49,7 @@ impl UserDao {
     }
 
     pub async fn touch_updated_at(&self, id: &Uuid) -> DaoResult<()> {
-        let now = Utc::now().fixed_offset();
-        self.update(*id, move |active| {
-            active.updated_at = Set(now);
-        })
-        .await
-        .map(|_| ())
+        self.update(*id, |_| {}).await.map(|_| ())
     }
 
     pub async fn set_last_login(

@@ -33,7 +33,6 @@ impl RefreshTokenDao {
         let expires_at =
             Utc::now().fixed_offset() + Duration::days(ttl_days.unwrap_or(DEFAULT_REFRESH_TTL_DAYS));
         let model = refresh_token::ActiveModel {
-            id: Set(Uuid::new_v4()),
             token: Set(Uuid::new_v4().to_string()),
             user_id: Set(*user_id),
             expires_at: Set(expires_at),
