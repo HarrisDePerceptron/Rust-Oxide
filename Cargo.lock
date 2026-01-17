@@ -2201,6 +2201,7 @@ dependencies = [
  "anyhow",
  "argon2",
  "askama",
+ "async-trait",
  "axum",
  "base_entity_derive",
  "chrono",

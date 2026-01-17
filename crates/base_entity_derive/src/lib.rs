@@ -2,8 +2,8 @@ use proc_macro::TokenStream;
 use quote::quote;
 use std::collections::HashSet;
 use syn::{
-    parse_macro_input, parse_str, punctuated::Punctuated, spanned::Spanned, Expr, ExprLit, Fields,
-    Ident, ItemStruct, Lit, Meta, Path, Token,
+    parse_macro_input, parse_str, punctuated::Punctuated, Expr, ExprLit, Fields, Ident, ItemStruct,
+    Lit, Meta, Path, Token,
 };
 
 struct BaseEntityConfig {

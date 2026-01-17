@@ -1,6 +1,4 @@
-use sea_orm::{
-    ColumnTrait, DatabaseConnection, EntityTrait, Order, PaginatorTrait, QueryFilter, Set,
-};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter, Set};
 use uuid::Uuid;
 
 use super::{DaoBase, DaoLayerError, DaoResult};

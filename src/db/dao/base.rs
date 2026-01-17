@@ -8,6 +8,7 @@ use uuid::Uuid;
 use super::base_traits::{HasCreatedAtColumn, HasIdActiveModel, TimestampedActiveModel};
 use super::error::{DaoLayerError, DaoResult};
 
+#[derive(Debug, serde::Serialize)]
 pub struct PaginatedResponse<T> {
     pub data: Vec<T>,
     pub page: u64,
@@ -61,6 +62,7 @@ where
     }
 }
 
+#[async_trait::async_trait]
 pub trait DaoBase: Clone + Send + Sync + Sized
 where
     <Self::Entity as EntityTrait>::Model:
@@ -167,11 +169,10 @@ where
         }
     }
 
-    async fn update(
-        &self,
-        id: Uuid,
-        apply: impl FnOnce(&mut <Self::Entity as EntityTrait>::ActiveModel) + Send,
-    ) -> DaoResult<<Self::Entity as EntityTrait>::Model> {
+    async fn update<F>(&self, id: Uuid, apply: F) -> DaoResult<<Self::Entity as EntityTrait>::Model>
+    where
+        F: for<'a> FnOnce(&'a mut <Self::Entity as EntityTrait>::ActiveModel) + Send,
+    {
         let model = Self::Entity::find_by_id(id)
             .one(self.db())
             .await

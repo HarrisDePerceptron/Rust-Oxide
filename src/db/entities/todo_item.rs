@@ -3,7 +3,7 @@ use sea_orm::entity::prelude::*;
 
 #[base_entity]
 #[sea_orm::model]
-#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, DeriveEntityModel)]
 #[sea_orm(table_name = "todo_items")]
 pub struct Model {
     #[sea_orm(indexed)]

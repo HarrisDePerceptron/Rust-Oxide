@@ -42,7 +42,7 @@ pub enum CrudOp {
     Delete,
 }
 
-#[allow(async_fn_in_trait)]
+#[async_trait::async_trait]
 pub trait CrudService {
     type Dao: DaoBase;
 
@@ -107,7 +107,7 @@ pub trait CrudService {
 
     async fn update<F>(&self, id: Uuid, apply: F) -> Result<CrudModel<Self::Dao>, AppError>
     where
-        F: FnOnce(&mut CrudActiveModel<Self::Dao>) + Send,
+        F: for<'a> FnOnce(&'a mut CrudActiveModel<Self::Dao>) + Send,
     {
         self.dao()
             .update(id, apply)
