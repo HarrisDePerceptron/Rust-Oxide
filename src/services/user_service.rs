@@ -1,18 +1,27 @@
 use axum::http::StatusCode;
-use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 
 use crate::{
-    db::dao::user_dao,
+    db::dao::{DaoBase, DaoLayerError, UserDao},
     db::entities::user,
     error::AppError,
 };
 
-pub async fn find_by_id(
-    db: &DatabaseConnection,
-    id: &Uuid,
-) -> Result<Option<user::Model>, AppError> {
-    user_dao::find_by_id(db, id)
-        .await
-        .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB error"))
+#[derive(Clone)]
+pub struct UserService {
+    user_dao: UserDao,
+}
+
+impl UserService {
+    pub fn new(user_dao: UserDao) -> Self {
+        Self { user_dao }
+    }
+
+    pub async fn find_by_id(&self, id: &Uuid) -> Result<Option<user::Model>, AppError> {
+        match self.user_dao.find_by_id(*id).await {
+            Ok(model) => Ok(Some(model)),
+            Err(DaoLayerError::NotFound { .. }) => Ok(None),
+            Err(_) => Err(AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB error")),
+        }
+    }
 }

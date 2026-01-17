@@ -1,15 +1,15 @@
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::Router;
-use sea_orm::{ConnectOptions, Database};
 use tower_http::trace::TraceLayer;
 
 use sample_server::{
-    auth::{Role, password},
     config::AppConfig,
-    db::dao::user_dao,
+    db::connection,
+    db::dao::DaoContext,
     logging::init_tracing,
     routes::router,
+    services::auth_service,
     state::AppState,
 };
 
@@ -25,21 +25,13 @@ async fn run() -> anyhow::Result<()> {
     let cfg = AppConfig::from_env().expect("failed to load config");
     init_tracing(&cfg.log_level);
 
-    let mut opt = ConnectOptions::new(cfg.database_url.clone());
-    opt.max_connections(cfg.db_max_connections)
-        .min_connections(cfg.db_min_idle)
-        .connect_timeout(Duration::from_secs(5))
-        .sqlx_logging(false);
-
-    let db = Database::connect(opt).await?;
-    tracing::info!("syncing database schema from entities");
-    db.get_schema_registry("sample_server::db::entities::*")
-        .sync(&db)
-        .await?;
-
-    seed_admin(&cfg, &db).await?;
-
+    let db = connection::connect(&cfg).await?;
     let state = AppState::new(cfg.jwt_secret.as_bytes(), db);
+
+    let daos = DaoContext::new(&state.db);
+    let auth_service =
+        auth_service::AuthService::new(daos.user(), daos.refresh_token(), state.jwt.clone());
+    auth_service.seed_admin(&cfg).await?;
 
     let app = Router::new()
         .merge(router(Arc::clone(&state)))
@@ -52,18 +44,5 @@ async fn run() -> anyhow::Result<()> {
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
-    Ok(())
-}
-
-async fn seed_admin(cfg: &AppConfig, db: &sea_orm::DatabaseConnection) -> anyhow::Result<()> {
-    if let Some(existing) = user_dao::find_by_email(db, &cfg.admin_email).await? {
-        tracing::info!("admin user already present: {}", existing.email);
-        return Ok(());
-    }
-
-    let hash = password::hash_password(&cfg.admin_password)
-        .map_err(|e| anyhow::anyhow!("admin seed hash error: {}", e.message))?;
-    let user = user_dao::create_user(db, &cfg.admin_email, &hash, Role::Admin.as_str()).await?;
-    tracing::info!("seeded admin user {}", user.email);
     Ok(())
 }

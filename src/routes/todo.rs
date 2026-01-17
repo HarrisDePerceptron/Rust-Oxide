@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
+    db::dao::DaoContext,
     db::entities::{todo_item, todo_list},
     error::AppError,
     services::todo_service,
@@ -103,14 +104,16 @@ async fn create_list(
     Json(body): Json<CreateListRequest>,
 ) -> Result<(StatusCode, Json<TodoListResponse>), AppError> {
     let title = normalize_title(&body.title)?;
-    let list = todo_service::create_list(&state.db, title).await?;
+    let service = todo_service_from_state(state.as_ref());
+    let list = service.create_list(title).await?;
     Ok((StatusCode::CREATED, Json(list.into())))
 }
 
 async fn list_lists(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<TodoListResponse>>, AppError> {
-    let lists = todo_service::list_lists(&state.db).await?;
+    let service = todo_service_from_state(state.as_ref());
+    let lists = service.list_lists().await?;
     Ok(Json(lists.into_iter().map(TodoListResponse::from).collect()))
 }
 
@@ -119,7 +122,8 @@ async fn get_list(
     Path(list_id): Path<Uuid>,
 ) -> Result<Json<TodoListDetailResponse>, AppError> {
     let list = require_list(state.as_ref(), &list_id).await?;
-    let items = todo_service::list_items(&state.db, &list_id).await?;
+    let service = todo_service_from_state(state.as_ref());
+    let items = service.list_items(&list_id).await?;
     let items = items.into_iter().map(TodoItemResponse::from).collect();
     Ok(Json(TodoListDetailResponse {
         list: list.into(),
@@ -133,7 +137,8 @@ async fn update_list(
     Json(body): Json<UpdateListRequest>,
 ) -> Result<Json<TodoListResponse>, AppError> {
     let title = normalize_title(&body.title)?;
-    let list = todo_service::update_list_title(&state.db, &list_id, title).await?;
+    let service = todo_service_from_state(state.as_ref());
+    let list = service.update_list_title(&list_id, title).await?;
     Ok(Json(list.into()))
 }
 
@@ -141,7 +146,8 @@ async fn delete_list(
     State(state): State<Arc<AppState>>,
     Path(list_id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    todo_service::delete_list(&state.db, &list_id).await?;
+    let service = todo_service_from_state(state.as_ref());
+    service.delete_list(&list_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -152,7 +158,8 @@ async fn create_item(
 ) -> Result<(StatusCode, Json<TodoItemResponse>), AppError> {
     let description = normalize_description(&body.description)?;
     require_list(state.as_ref(), &list_id).await?;
-    let item = todo_service::create_item(&state.db, &list_id, description).await?;
+    let service = todo_service_from_state(state.as_ref());
+    let item = service.create_item(&list_id, description).await?;
     Ok((StatusCode::CREATED, Json(item.into())))
 }
 
@@ -161,7 +168,8 @@ async fn list_items(
     Path(list_id): Path<Uuid>,
 ) -> Result<Json<Vec<TodoItemResponse>>, AppError> {
     require_list(state.as_ref(), &list_id).await?;
-    let items = todo_service::list_items(&state.db, &list_id).await?;
+    let service = todo_service_from_state(state.as_ref());
+    let items = service.list_items(&list_id).await?;
     Ok(Json(items.into_iter().map(TodoItemResponse::from).collect()))
 }
 
@@ -181,8 +189,10 @@ async fn update_item(
             "Description or done required",
         ));
     }
-    let item =
-        todo_service::update_item(&state.db, &list_id, &item_id, description, done).await?;
+    let service = todo_service_from_state(state.as_ref());
+    let item = service
+        .update_item(&list_id, &item_id, description, done)
+        .await?;
     Ok(Json(item.into()))
 }
 
@@ -190,12 +200,14 @@ async fn delete_item(
     State(state): State<Arc<AppState>>,
     Path((list_id, item_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode, AppError> {
-    todo_service::delete_item(&state.db, &list_id, &item_id).await?;
+    let service = todo_service_from_state(state.as_ref());
+    service.delete_item(&list_id, &item_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 async fn require_list(state: &AppState, list_id: &Uuid) -> Result<todo_list::Model, AppError> {
-    todo_service::require_list(&state.db, list_id).await
+    let service = todo_service_from_state(state);
+    service.require_list(list_id).await
 }
 
 fn normalize_title(title: &str) -> Result<&str, AppError> {
@@ -236,4 +248,9 @@ impl From<todo_item::Model> for TodoItemResponse {
             updated_at: model.updated_at,
         }
     }
+}
+
+fn todo_service_from_state(state: &AppState) -> todo_service::TodoService {
+    let daos = DaoContext::new(&state.db);
+    todo_service::TodoService::new(daos.todo())
 }

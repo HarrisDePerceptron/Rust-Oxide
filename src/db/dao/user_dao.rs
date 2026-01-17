@@ -1,67 +1,74 @@
 use chrono::Utc;
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
-    sea_query::Expr,
-};
+use sea_orm::{ColumnTrait, DatabaseConnection, QueryFilter, Set};
 use uuid::Uuid;
 
+use super::{DaoBase, DaoResult};
 use crate::db::entities::{prelude::User, user};
+use crate::db::entities::user as entity;
 
-pub async fn find_by_email(
-    db: &DatabaseConnection,
-    email: &str,
-) -> Result<Option<user::Model>, sea_orm::DbErr> {
-    User::find()
-        .filter(user::Column::Email.eq(email))
-        .one(db)
-        .await
+#[derive(Clone)]
+pub struct UserDao {
+    db: DatabaseConnection,
 }
 
-pub async fn find_by_id(
-    db: &DatabaseConnection,
-    id: &Uuid,
-) -> Result<Option<user::Model>, sea_orm::DbErr> {
-    User::find_by_id(*id).one(db).await
-}
+impl DaoBase for UserDao {
+    type Entity = User;
 
-pub async fn create_user(
-    db: &DatabaseConnection,
-    email: &str,
-    password_hash: &str,
-    role: &str,
-) -> Result<user::Model, sea_orm::DbErr> {
-    let model = user::ActiveModel {
-        id: Set(Uuid::new_v4()),
-        email: Set(email.to_string()),
-        password_hash: Set(password_hash.to_string()),
-        role: Set(role.to_string()),
-        last_login_at: Set(None),
-        ..Default::default()
-    };
-    model.insert(db).await
-}
-
-pub async fn touch_updated_at(db: &DatabaseConnection, id: &Uuid) -> Result<(), sea_orm::DbErr> {
-    let now = Utc::now().fixed_offset();
-    User::update_many()
-        .col_expr(user::Column::UpdatedAt, Expr::value(now))
-        .filter(user::Column::Id.eq(*id))
-        .exec(db)
-        .await?;
-    Ok(())
-}
-
-pub async fn set_last_login(
-    db: &DatabaseConnection,
-    id: &Uuid,
-    at: &chrono::DateTime<chrono::FixedOffset>,
-) -> Result<(), sea_orm::DbErr> {
-    user::ActiveModel {
-        id: Set(*id),
-        last_login_at: Set(Some(*at)),
-        ..Default::default()
+    fn from_db(db: DatabaseConnection) -> Self {
+        Self { db }
     }
-    .update(db)
-    .await?;
-    Ok(())
+
+    fn db(&self) -> &DatabaseConnection {
+        &self.db
+    }
+}
+
+impl UserDao {
+    pub async fn find_by_email(&self, email: &str) -> DaoResult<Option<user::Model>> {
+        let email = email.to_string();
+        self.find(1, 1, move |query| {
+            query.filter(entity::Column::Email.eq(email))
+        })
+        .await
+        .map(|models| models.into_iter().next())
+    }
+
+    pub async fn create_user(
+        &self,
+        email: &str,
+        password_hash: &str,
+        role: &str,
+    ) -> DaoResult<user::Model> {
+        let model = user::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            email: Set(email.to_string()),
+            password_hash: Set(password_hash.to_string()),
+            role: Set(role.to_string()),
+            last_login_at: Set(None),
+            ..Default::default()
+        };
+        self.create(model).await
+    }
+
+    pub async fn touch_updated_at(&self, id: &Uuid) -> DaoResult<()> {
+        let now = Utc::now().fixed_offset();
+        self.update(*id, move |active| {
+            active.updated_at = Set(now);
+        })
+        .await
+        .map(|_| ())
+    }
+
+    pub async fn set_last_login(
+        &self,
+        id: &Uuid,
+        at: &chrono::DateTime<chrono::FixedOffset>,
+    ) -> DaoResult<()> {
+        let at = *at;
+        self.update(*id, move |active| {
+            active.last_login_at = Set(Some(at));
+        })
+        .await
+        .map(|_| ())
+    }
 }

@@ -4,6 +4,7 @@ use axum::{Json, Router, extract::State, middleware, routing::get};
 
 use crate::{
     auth::{Claims, jwt::jwt_auth},
+    db::dao::DaoContext,
     services::user_service,
     state::AppState,
 };
@@ -16,8 +17,9 @@ pub fn router(state: Arc<AppState>) -> Router {
 }
 
 async fn me(State(state): State<Arc<AppState>>, claims: Claims) -> Json<serde_json::Value> {
+    let service = user_service_from_state(state.as_ref());
     let user = if let Ok(id) = claims.sub.parse() {
-        user_service::find_by_id(&state.db, &id).await.ok().flatten()
+        service.find_by_id(&id).await.ok().flatten()
     } else {
         None
     };
@@ -37,4 +39,9 @@ async fn me(State(state): State<Arc<AppState>>, claims: Claims) -> Json<serde_js
         "iat": claims.iat,
         "exp": claims.exp
     }))
+}
+
+fn user_service_from_state(state: &AppState) -> user_service::UserService {
+    let daos = DaoContext::new(&state.db);
+    user_service::UserService::new(daos.user())
 }

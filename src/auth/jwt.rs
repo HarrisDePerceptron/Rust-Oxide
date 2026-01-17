@@ -12,7 +12,7 @@ use axum::{
 use jsonwebtoken::{Algorithm, Header, Validation, decode, encode};
 
 use super::{Claims, Role};
-use crate::{error::AppError, state::AppState};
+use crate::{error::AppError, state::{AppState, JwtKeys}};
 
 pub fn now_unix() -> usize {
     SystemTime::now()
@@ -21,11 +21,11 @@ pub fn now_unix() -> usize {
         .as_secs() as usize
 }
 
-pub fn encode_token(state: &AppState, claims: &Claims) -> Result<String, AppError> {
+pub fn encode_token(keys: &JwtKeys, claims: &Claims) -> Result<String, AppError> {
     let mut header = Header::new(Algorithm::HS256);
     header.typ = Some("JWT".into());
 
-    encode(&header, claims, &state.jwt.enc).map_err(|_| {
+    encode(&header, claims, &keys.enc).map_err(|_| {
         AppError::new(
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             "Token encoding failed",
