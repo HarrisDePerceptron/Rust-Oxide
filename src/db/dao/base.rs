@@ -16,6 +16,51 @@ pub struct PaginatedResponse<T> {
     pub total: Option<u64>,
 }
 
+pub struct DaoPager<D, F>
+where
+    D: DaoBase,
+    F: Fn(Select<D::Entity>) -> Select<D::Entity> + Clone + Send,
+{
+    dao: D,
+    page: u64,
+    page_size: u64,
+    order: Option<(<D::Entity as EntityTrait>::Column, Order)>,
+    apply: F,
+    done: bool,
+}
+
+impl<D, F> DaoPager<D, F>
+where
+    D: DaoBase,
+    F: Fn(Select<D::Entity>) -> Select<D::Entity> + Clone + Send,
+    <D::Entity as EntityTrait>::Column: Clone,
+{
+    pub async fn next_page(
+        &mut self,
+    ) -> DaoResult<Option<PaginatedResponse<<D::Entity as EntityTrait>::Model>>> {
+        if self.done {
+            return Ok(None);
+        }
+
+        let response = self
+            .dao
+            .find(
+                self.page,
+                self.page_size,
+                self.order.clone(),
+                self.apply.clone(),
+            )
+            .await?;
+
+        if !response.has_next {
+            self.done = true;
+        }
+        self.page = self.page.saturating_add(1);
+
+        Ok(Some(response))
+    }
+}
+
 pub trait DaoBase: Clone + Send + Sync + Sized
 where
     <Self::Entity as EntityTrait>::Model:
@@ -99,6 +144,27 @@ where
             has_next,
             total: None,
         })
+    }
+
+    fn find_iter<F>(
+        &self,
+        page_size: Option<u64>,
+        order: Option<(<Self::Entity as EntityTrait>::Column, Order)>,
+        apply: F,
+    ) -> DaoPager<Self, F>
+    where
+        Self: Clone,
+        F: Fn(Select<Self::Entity>) -> Select<Self::Entity> + Clone + Send,
+        <Self::Entity as EntityTrait>::Column: Clone,
+    {
+        DaoPager {
+            dao: self.clone(),
+            page: 1,
+            page_size: page_size.unwrap_or(Self::MAX_PAGE_SIZE),
+            order,
+            apply,
+            done: false,
+        }
     }
 
     async fn update(

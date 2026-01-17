@@ -55,17 +55,10 @@ impl TodoDao {
     }
 
     pub async fn list_lists(&self) -> DaoResult<Vec<todo_list::Model>> {
-        let mut page = 1;
-        let page_size = <Self as DaoBase>::MAX_PAGE_SIZE;
+        let mut pager = self.find_iter(None, None, |query| query);
         let mut lists = Vec::new();
-        loop {
-            let mut response = self.find(page, page_size, None, |query| query).await?;
-            let has_next = response.has_next;
+        while let Some(mut response) = pager.next_page().await? {
             lists.append(&mut response.data);
-            if !has_next {
-                break;
-            }
-            page += 1;
         }
         Ok(lists)
     }
@@ -101,22 +94,12 @@ impl TodoDao {
     }
 
     pub async fn list_items(&self, list_id: &Uuid) -> DaoResult<Vec<todo_item::Model>> {
-        let mut page = 1;
-        let page_size = <Self as DaoBase>::MAX_PAGE_SIZE;
+        let mut pager = self.item_dao().find_iter(None, None, |query| {
+            query.filter(todo_item::Column::ListId.eq(*list_id))
+        });
         let mut items = Vec::new();
-        loop {
-            let mut response = self
-                .item_dao()
-                .find(page, page_size, None, |query| {
-                    query.filter(todo_item::Column::ListId.eq(*list_id))
-                })
-                .await?;
-            let has_next = response.has_next;
+        while let Some(mut response) = pager.next_page().await? {
             items.append(&mut response.data);
-            if !has_next {
-                break;
-            }
-            page += 1;
         }
         Ok(items)
     }
