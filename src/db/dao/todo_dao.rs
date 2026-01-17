@@ -1,13 +1,11 @@
-use chrono::Utc;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder, Set,
+    ColumnTrait, DatabaseConnection, EntityTrait, Order, PaginatorTrait, QueryFilter, Set,
 };
 use uuid::Uuid;
 
 use super::{DaoBase, DaoLayerError, DaoResult};
-use crate::db::entities::{todo_item, todo_list};
 use crate::db::entities::prelude::{TodoItem, TodoList};
+use crate::db::entities::{todo_item, todo_list};
 
 #[derive(Clone)]
 pub struct TodoDao {
@@ -26,11 +24,29 @@ impl DaoBase for TodoDao {
     }
 }
 
+#[derive(Clone)]
+struct TodoItemDao {
+    db: DatabaseConnection,
+}
+
+impl DaoBase for TodoItemDao {
+    type Entity = TodoItem;
+
+    fn from_db(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+
+    fn db(&self) -> &DatabaseConnection {
+        &self.db
+    }
+}
+
 impl TodoDao {
-    pub async fn create_list(
-        &self,
-        title: &str,
-    ) -> DaoResult<todo_list::Model> {
+    fn item_dao(&self) -> TodoItemDao {
+        TodoItemDao::new(&self.db)
+    }
+
+    pub async fn create_list(&self, title: &str) -> DaoResult<todo_list::Model> {
         let model = todo_list::ActiveModel {
             title: Set(title.to_string()),
             ..Default::default()
@@ -39,22 +55,26 @@ impl TodoDao {
     }
 
     pub async fn list_lists(&self) -> DaoResult<Vec<todo_list::Model>> {
-        TodoList::find()
-            .order_by_asc(todo_list::Column::CreatedAt)
-            .all(&self.db)
-            .await
-            .map_err(DaoLayerError::Db)
+        let mut page = 1;
+        let page_size = <Self as DaoBase>::MAX_PAGE_SIZE;
+        let mut lists = Vec::new();
+        loop {
+            let mut response = self.find(page, page_size, None, |query| query).await?;
+            let has_next = response.has_next;
+            lists.append(&mut response.data);
+            if !has_next {
+                break;
+            }
+            page += 1;
+        }
+        Ok(lists)
     }
 
     pub async fn find_list_by_id(&self, id: &Uuid) -> DaoResult<todo_list::Model> {
         self.find_by_id(*id).await
     }
 
-    pub async fn update_list_title(
-        &self,
-        id: &Uuid,
-        title: &str,
-    ) -> DaoResult<todo_list::Model> {
+    pub async fn update_list_title(&self, id: &Uuid, title: &str) -> DaoResult<todo_list::Model> {
         let title = title.to_string();
         self.update(*id, move |active| {
             active.title = Set(title);
@@ -72,25 +92,33 @@ impl TodoDao {
         description: &str,
     ) -> DaoResult<todo_item::Model> {
         let model = todo_item::ActiveModel {
-            id: Set(Uuid::new_v4()),
             list_id: Set(*list_id),
             description: Set(description.to_string()),
             done: Set(false),
             ..Default::default()
         };
-        model.insert(&self.db).await.map_err(DaoLayerError::Db)
+        self.item_dao().create(model).await
     }
 
-    pub async fn list_items(
-        &self,
-        list_id: &Uuid,
-    ) -> DaoResult<Vec<todo_item::Model>> {
-        TodoItem::find()
-            .filter(todo_item::Column::ListId.eq(*list_id))
-            .order_by_asc(todo_item::Column::CreatedAt)
-            .all(&self.db)
-            .await
-            .map_err(DaoLayerError::Db)
+    pub async fn list_items(&self, list_id: &Uuid) -> DaoResult<Vec<todo_item::Model>> {
+        let mut page = 1;
+        let page_size = <Self as DaoBase>::MAX_PAGE_SIZE;
+        let mut items = Vec::new();
+        loop {
+            let mut response = self
+                .item_dao()
+                .find(page, page_size, None, |query| {
+                    query.filter(todo_item::Column::ListId.eq(*list_id))
+                })
+                .await?;
+            let has_next = response.has_next;
+            items.append(&mut response.data);
+            if !has_next {
+                break;
+            }
+            page += 1;
+        }
+        Ok(items)
     }
 
     pub async fn find_item_by_id(
@@ -98,12 +126,14 @@ impl TodoDao {
         list_id: &Uuid,
         item_id: &Uuid,
     ) -> DaoResult<Option<todo_item::Model>> {
-        TodoItem::find()
-            .filter(todo_item::Column::Id.eq(*item_id))
-            .filter(todo_item::Column::ListId.eq(*list_id))
-            .one(&self.db)
+        self.item_dao()
+            .find(1, 1, None, |query| {
+                query
+                    .filter(todo_item::Column::Id.eq(*item_id))
+                    .filter(todo_item::Column::ListId.eq(*list_id))
+            })
             .await
-            .map_err(DaoLayerError::Db)
+            .map(|response| response.data.into_iter().next())
     }
 
     pub async fn update_item(
@@ -113,39 +143,32 @@ impl TodoDao {
         description: Option<String>,
         done: Option<bool>,
     ) -> DaoResult<Option<todo_item::Model>> {
-        let Some(item) = self.find_item_by_id(list_id, item_id).await? else {
+        let Some(_) = self.find_item_by_id(list_id, item_id).await? else {
             return Ok(None);
         };
-        let mut active: todo_item::ActiveModel = item.into();
-        if let Some(description) = description {
-            active.description = Set(description);
-        }
-        if let Some(done) = done {
-            active.done = Set(done);
-        }
-        active.updated_at = Set(Utc::now().fixed_offset());
-        let model = active.update(&self.db).await.map_err(DaoLayerError::Db)?;
+        let model = self
+            .item_dao()
+            .update(*item_id, move |active| {
+                if let Some(description) = description {
+                    active.description = Set(description);
+                }
+                if let Some(done) = done {
+                    active.done = Set(done);
+                }
+            })
+            .await?;
         Ok(Some(model))
     }
 
-    pub async fn delete_item(
-        &self,
-        list_id: &Uuid,
-        item_id: &Uuid,
-    ) -> DaoResult<bool> {
-        let result = TodoItem::delete_many()
-            .filter(todo_item::Column::Id.eq(*item_id))
-            .filter(todo_item::Column::ListId.eq(*list_id))
-            .exec(&self.db)
-            .await
-            .map_err(DaoLayerError::Db)?;
-        Ok(result.rows_affected > 0)
+    pub async fn delete_item(&self, list_id: &Uuid, item_id: &Uuid) -> DaoResult<bool> {
+        let Some(_) = self.find_item_by_id(list_id, item_id).await? else {
+            return Ok(false);
+        };
+        self.item_dao().delete(*item_id).await?;
+        Ok(true)
     }
 
-    pub async fn count_items_by_list(
-        &self,
-        list_id: &Uuid,
-    ) -> DaoResult<u64> {
+    pub async fn count_items_by_list(&self, list_id: &Uuid) -> DaoResult<u64> {
         TodoItem::find()
             .filter(todo_item::Column::ListId.eq(*list_id))
             .count(&self.db)

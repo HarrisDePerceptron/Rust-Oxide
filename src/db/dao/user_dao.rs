@@ -25,11 +25,11 @@ impl DaoBase for UserDao {
 impl UserDao {
     pub async fn find_by_email(&self, email: &str) -> DaoResult<Option<user::Model>> {
         let email = email.to_string();
-        self.find(1, 1, move |query| {
+        self.find(1, 1, None, move |query| {
             query.filter(entity::Column::Email.eq(email))
         })
         .await
-        .map(|models| models.into_iter().next())
+        .map(|response| response.data.into_iter().next())
     }
 
     pub async fn create_user(

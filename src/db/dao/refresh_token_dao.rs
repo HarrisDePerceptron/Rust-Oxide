@@ -47,13 +47,13 @@ impl RefreshTokenDao {
         token: &str,
     ) -> DaoResult<Option<refresh_token::Model>> {
         let token = token.to_string();
-        self.find(1, 1, move |query| {
+        self.find(1, 1, None, move |query| {
             query
                 .filter(refresh_token::Column::Token.eq(token))
                 .filter(refresh_token::Column::Revoked.eq(false))
         })
         .await
-        .map(|models| models.into_iter().next())
+        .map(|response| response.data.into_iter().next())
     }
 
     pub async fn revoke_token(&self, token: &str) -> DaoResult<()> {

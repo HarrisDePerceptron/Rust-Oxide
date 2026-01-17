@@ -119,6 +119,12 @@ pub fn base_entity(attr: TokenStream, item: TokenStream) -> TokenStream {
                 self.#updated_at_field = sea_orm::ActiveValue::Set(ts);
             }
         }
+
+        impl #traits_path::HasCreatedAtColumn for Entity {
+            fn created_at_column() -> Column {
+                Column::CreatedAt
+            }
+        }
     };
 
     expanded.into()

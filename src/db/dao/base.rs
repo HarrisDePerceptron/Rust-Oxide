@@ -1,12 +1,20 @@
 use chrono::Utc;
 use sea_orm::{
-    ActiveModelTrait, DatabaseConnection, EntityTrait, FromQueryResult, IntoActiveModel,
-    PaginatorTrait, PrimaryKeyTrait, Select,
+    ActiveModelTrait, DatabaseConnection, EntityTrait, FromQueryResult, IntoActiveModel, Order,
+    PrimaryKeyTrait, QueryOrder, QuerySelect, Select,
 };
 use uuid::Uuid;
 
-use super::base_traits::{HasIdActiveModel, TimestampedActiveModel};
+use super::base_traits::{HasCreatedAtColumn, HasIdActiveModel, TimestampedActiveModel};
 use super::error::{DaoLayerError, DaoResult};
+
+pub struct PaginatedResponse<T> {
+    pub data: Vec<T>,
+    pub page: u64,
+    pub page_size: u64,
+    pub has_next: bool,
+    pub total: Option<u64>,
+}
 
 pub trait DaoBase: Clone + Send + Sync + Sized
 where
@@ -16,6 +24,7 @@ where
         ActiveModelTrait<Entity = Self::Entity> + HasIdActiveModel + TimestampedActiveModel + Send,
     <<Self::Entity as EntityTrait>::PrimaryKey as PrimaryKeyTrait>::ValueType:
         From<Uuid> + Send + Sync,
+    Self::Entity: HasCreatedAtColumn,
 {
     type Entity: EntityTrait + Send + Sync;
     const MAX_PAGE_SIZE: u64 = 100;
@@ -56,21 +65,40 @@ where
         &self,
         page: u64,
         page_size: u64,
+        order: Option<(<Self::Entity as EntityTrait>::Column, Order)>,
         apply: impl FnOnce(Select<Self::Entity>) -> Select<Self::Entity> + Send,
-    ) -> DaoResult<Vec<<Self::Entity as EntityTrait>::Model>> {
+    ) -> DaoResult<PaginatedResponse<<Self::Entity as EntityTrait>::Model>> {
         if page == 0 || page_size == 0 || page_size > Self::MAX_PAGE_SIZE {
             return Err(DaoLayerError::InvalidPagination { page, page_size });
         }
 
         let base = Self::Entity::find();
         let filtered = apply(base);
-        let page_index = page.saturating_sub(1);
-
-        filtered
-            .paginate(self.db(), page_size)
-            .fetch_page(page_index)
+        let ordered = match order {
+            Some((column, order)) => filtered.order_by(column, order),
+            None => filtered.order_by_desc(Self::Entity::created_at_column()),
+        };
+        let fetch_size = page_size.saturating_add(1);
+        let offset = page.saturating_sub(1).saturating_mul(page_size);
+        let mut data = ordered
+            .limit(fetch_size)
+            .offset(offset)
+            .all(self.db())
             .await
-            .map_err(DaoLayerError::Db)
+            .map_err(DaoLayerError::Db)?;
+
+        let has_next = data.len() > page_size as usize;
+        if has_next {
+            data.truncate(page_size as usize);
+        }
+
+        Ok(PaginatedResponse {
+            data,
+            page,
+            page_size,
+            has_next,
+            total: None,
+        })
     }
 
     async fn update(

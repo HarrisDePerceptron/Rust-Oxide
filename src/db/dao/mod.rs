@@ -8,7 +8,8 @@ pub mod todo_dao;
 pub mod user_dao;
 
 pub use base::DaoBase;
-pub use base_traits::{HasIdActiveModel, TimestampedActiveModel};
+pub use base::PaginatedResponse;
+pub use base_traits::{HasCreatedAtColumn, HasIdActiveModel, TimestampedActiveModel};
 pub use error::{DaoLayerError, DaoResult};
 pub use refresh_token_dao::RefreshTokenDao;
 pub use todo_dao::TodoDao;

@@ -1,3 +1,7 @@
+pub trait HasCreatedAtColumn: sea_orm::EntityTrait {
+    fn created_at_column() -> Self::Column;
+}
+
 pub trait HasIdActiveModel {
     fn set_id(&mut self, id: uuid::Uuid);
 }
