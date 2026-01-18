@@ -1,8 +1,6 @@
-use std::sync::Arc;
-
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    extract::{Path, Query},
     http::StatusCode,
     routing::{delete, get, patch, post},
 };
@@ -13,17 +11,13 @@ use sea_orm::{
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::{
-    db::dao::DaoBase, error::AppError, services::crud_service::CrudService, state::AppState,
-};
+use crate::{db::dao::DaoBase, error::AppError, services::crud_service::CrudService};
 
 type DaoOf<S> = <S as CrudService>::Dao;
 type EntityOf<S> = <DaoOf<S> as DaoBase>::Entity;
 type ModelOf<S> = <EntityOf<S> as EntityTrait>::Model;
 type ActiveModelOf<S> = <EntityOf<S> as EntityTrait>::ActiveModel;
 type ColumnOf<S> = <EntityOf<S> as EntityTrait>::Column;
-type ServiceOf<R> = <R as CrudRouter>::Service;
-type RouterModel<R> = ModelOf<ServiceOf<R>>;
 
 #[derive(Clone, serde::Deserialize)]
 pub struct ListQuery {
@@ -43,7 +37,7 @@ where
 {
     type Service: CrudService + Clone + Send + Sync + 'static;
 
-    fn service(state: &AppState) -> Self::Service;
+    fn service(&self) -> Self::Service;
     fn base_path() -> &'static str;
 
     fn list_default_page_size() -> u64 {
@@ -94,72 +88,71 @@ where
         }
     }
 
-    fn router(state: Arc<AppState>) -> Router
+    fn router_for<S>(&self) -> Router<S>
     where
-        Self: Sized + Send + Sync + 'static,
+        S: Clone + Send + Sync + 'static,
     {
-        router_for::<Self>(state)
+        let base = Self::base_path();
+        Router::<S>::new()
+            .route(
+                base,
+                post({
+                    let service = self.service();
+                    move |Json(payload)| async move {
+                        let active = Self::build_create(payload)?;
+                        let model: ModelOf<Self::Service> = service.create(active).await?;
+                        Ok::<_, AppError>((StatusCode::CREATED, Json(model)))
+                    }
+                }),
+            )
+            .route(
+                base,
+                get({
+                    let service = self.service();
+                    move |Query(query): Query<ListQuery>| async move {
+                        let page = query.page.unwrap_or(1);
+                        let page_size = query.page_size.unwrap_or_else(Self::list_default_page_size);
+                        let response = service
+                            .find(page, page_size, Self::list_order(), |select| {
+                                Self::list_apply(&query, select)
+                            })
+                            .await?;
+                        Ok::<_, AppError>(Json(response))
+                    }
+                }),
+            )
+            .route(
+                &format!("{}/{{id}}", base),
+                get({
+                    let service = self.service();
+                    move |Path(id): Path<Uuid>| async move {
+                        let model: ModelOf<Self::Service> = service.find_by_id(id).await?;
+                        Ok::<_, AppError>(Json(model))
+                    }
+                }),
+            )
+            .route(
+                &format!("{}/{{id}}", base),
+                patch({
+                    let service = self.service();
+                    move |Path(id): Path<Uuid>, Json(payload)| async move {
+                        let patch = Self::build_update(payload)?;
+                        let model: ModelOf<Self::Service> = service
+                            .update(id, move |active| Self::apply_patch(active, patch))
+                            .await?;
+                        Ok::<_, AppError>(Json(model))
+                    }
+                }),
+            )
+            .route(
+                &format!("{}/{{id}}", base),
+                delete({
+                    let service = self.service();
+                    move |Path(id): Path<Uuid>| async move {
+                        service.delete(id).await?;
+                        Ok::<_, AppError>(StatusCode::NO_CONTENT)
+                    }
+                }),
+            )
     }
-}
-
-pub fn router_for<R>(state: Arc<AppState>) -> Router
-where
-    R: CrudRouter + Send + Sync + 'static,
-{
-    let base = R::base_path();
-    Router::new()
-        .route(
-            base,
-            post(|State(state): State<Arc<AppState>>, Json(payload)| async move {
-                let service = R::service(&state);
-                let active = R::build_create(payload)?;
-                let model: RouterModel<R> = service.create(active).await?;
-                Ok::<_, AppError>((StatusCode::CREATED, Json(model)))
-            }),
-        )
-        .route(
-            base,
-            get(|State(state): State<Arc<AppState>>, Query(query): Query<ListQuery>| async move {
-                let service = R::service(&state);
-                let page = query.page.unwrap_or(1);
-                let page_size = query.page_size.unwrap_or_else(R::list_default_page_size);
-                let response = service
-                    .find(page, page_size, R::list_order(), |select| {
-                        R::list_apply(&query, select)
-                    })
-                    .await?;
-                Ok::<_, AppError>(Json(response))
-            }),
-        )
-        .route(
-            &format!("{}/{{id}}", base),
-            get(|State(state): State<Arc<AppState>>, Path(id): Path<Uuid>| async move {
-                let service = R::service(&state);
-                let model: RouterModel<R> = service.find_by_id(id).await?;
-                Ok::<_, AppError>(Json(model))
-            }),
-        )
-        .route(
-            &format!("{}/{{id}}", base),
-            patch(
-                |State(state): State<Arc<AppState>>,
-                 Path(id): Path<Uuid>,
-                 Json(payload)| async move {
-                let service = R::service(&state);
-                let patch = R::build_update(payload)?;
-                let model: RouterModel<R> = service
-                    .update(id, move |active| R::apply_patch(active, patch))
-                    .await?;
-                Ok::<_, AppError>(Json(model))
-            }),
-        )
-        .route(
-            &format!("{}/{{id}}", base),
-            delete(|State(state): State<Arc<AppState>>, Path(id): Path<Uuid>| async move {
-                let service = R::service(&state);
-                service.delete(id).await?;
-                Ok::<_, AppError>(StatusCode::NO_CONTENT)
-            }),
-        )
-        .with_state(state)
 }

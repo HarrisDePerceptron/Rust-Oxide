@@ -9,14 +9,21 @@ use crate::{
     state::AppState,
 };
 
-pub struct TodoListCrud;
+pub struct TodoListCrud {
+    service: TodoService,
+}
+
+impl TodoListCrud {
+    pub fn new(service: TodoService) -> Self {
+        Self { service }
+    }
+}
 
 impl CrudRouter for TodoListCrud {
     type Service = TodoService;
 
-    fn service(state: &AppState) -> Self::Service {
-        let daos = DaoContext::new(&state.db);
-        TodoService::new(daos.todo())
+    fn service(&self) -> Self::Service {
+        self.service.clone()
     }
 
     fn base_path() -> &'static str {
@@ -25,5 +32,7 @@ impl CrudRouter for TodoListCrud {
 }
 
 pub fn router(state: Arc<AppState>) -> Router {
-    <TodoListCrud as CrudRouter>::router(state)
+    let daos = DaoContext::new(&state.db);
+    let service = TodoService::new(daos.todo());
+    TodoListCrud::new(service).router_for().with_state(state)
 }
