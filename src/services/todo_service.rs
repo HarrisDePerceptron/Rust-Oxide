@@ -35,6 +35,13 @@ impl TodoService {
             .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "List fetch failed"))
     }
 
+    pub async fn count_lists(&self) -> Result<u64, AppError> {
+        self.todo_dao
+            .count_lists()
+            .await
+            .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "Count lists failed"))
+    }
+
     pub async fn require_list(&self, list_id: &Uuid) -> Result<todo_list::Model, AppError> {
         CrudService::find_by_id(self, *list_id).await
     }
@@ -71,6 +78,18 @@ impl TodoService {
             .list_items(list_id)
             .await
             .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "Item fetch failed"))
+    }
+
+    pub async fn count_items_by_list(&self, list_id: &Uuid) -> Result<u64, AppError> {
+        self.todo_dao
+            .count_items_by_list(list_id)
+            .await
+            .map_err(|_| {
+                AppError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Count items failed",
+                )
+            })
     }
 
     pub async fn update_item(

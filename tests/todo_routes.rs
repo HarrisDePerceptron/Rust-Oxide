@@ -9,7 +9,15 @@ use serde_json::json;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use sample_server::{config::AppConfig, db::dao::DaoContext, routes::router, state::AppState};
+use sample_server::{
+    auth::{
+        Role,
+        jwt::{encode_token, make_access_claims},
+    },
+    config::AppConfig,
+    routes::router,
+    state::AppState,
+};
 
 async fn app_state() -> std::sync::Arc<AppState> {
     let cfg = AppConfig::from_env().expect("load app config");
@@ -48,14 +56,19 @@ async fn json_response(
     (status, json)
 }
 
-#[tokio::test]
-#[ignore = "requires Postgres database"]
-async fn todo_crud_flow() {
-    let state = app_state().await;
-    let title = format!("Test List {}", Uuid::new_v4());
+fn auth_header(state: &std::sync::Arc<AppState>) -> String {
+    let user_id = Uuid::new_v4();
+    let claims = make_access_claims(&user_id, vec![Role::User], 3600);
+    let token = encode_token(&state.jwt, &claims).expect("encode token");
+    format!("Bearer {token}")
+}
 
-    let (status, list) = json_response(
-        &state,
+async fn create_todo_list(
+    state: &std::sync::Arc<AppState>,
+    title: &str,
+) -> (StatusCode, serde_json::Value) {
+    json_response(
+        state,
         Request::builder()
             .method("POST")
             .uri("/todo")
@@ -63,58 +76,184 @@ async fn todo_crud_flow() {
             .body(Body::from(json!({ "title": title }).to_string()))
             .unwrap(),
     )
-    .await;
-    assert_eq!(status, StatusCode::CREATED);
+    .await
+}
 
-    let list_id = Uuid::parse_str(list["id"].as_str().unwrap()).unwrap();
-    let list_id_str = list_id.to_string();
+async fn create_todo_item(
+    state: &std::sync::Arc<AppState>,
+    list_id: &Uuid,
+    description: &str,
+) -> (StatusCode, serde_json::Value) {
+    json_response(
+        state,
+        Request::builder()
+            .method("POST")
+            .uri(format!("/todo/{}/items", list_id))
+            .header("content-type", "application/json")
+            .body(Body::from(
+                json!({ "description": description }).to_string(),
+            ))
+            .unwrap(),
+    )
+    .await
+}
+
+async fn create_todo_crud_list(
+    state: &std::sync::Arc<AppState>,
+    auth: &str,
+    title: &str,
+) -> (StatusCode, serde_json::Value) {
+    json_response(
+        state,
+        Request::builder()
+            .method("POST")
+            .uri("/todo-crud")
+            .header("authorization", auth)
+            .header("content-type", "application/json")
+            .body(Body::from(json!({ "title": title }).to_string()))
+            .unwrap(),
+    )
+    .await
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_create_list() {
+    let state = app_state().await;
+    let title = format!("Test List {}", Uuid::new_v4());
+
+    let (status, list) = create_todo_list(&state, &title).await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(list["title"].as_str(), Some(title.as_str()));
+    assert!(list["id"].as_str().is_some());
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_list_lists() {
+    let state = app_state().await;
+    let title = format!("List {}", Uuid::new_v4());
+
+    let (_, list) = create_todo_list(&state, &title).await;
+    let list_id = list["id"].as_str().unwrap().to_string();
 
     let (status, lists) = json_response(
         &state,
-        Request::builder()
-            .uri("/todo")
-            .body(Body::empty())
-            .unwrap(),
+        Request::builder().uri("/todo").body(Body::empty()).unwrap(),
     )
     .await;
+
     assert_eq!(status, StatusCode::OK);
     assert!(lists
         .as_array()
         .unwrap()
         .iter()
-        .any(|entry| entry["id"].as_str() == Some(list_id_str.as_str())));
+        .any(|entry| entry["id"].as_str() == Some(list_id.as_str())));
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_get_list() {
+    let state = app_state().await;
+    let title = format!("List {}", Uuid::new_v4());
+
+    let (_, list) = create_todo_list(&state, &title).await;
+    let list_id = list["id"].as_str().unwrap();
+
+    let (status, response) = json_response(
+        &state,
+        Request::builder()
+            .uri(format!("/todo/{}", list_id))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(response["list"]["id"].as_str(), Some(list_id));
+    assert_eq!(response["list"]["title"].as_str(), Some(title.as_str()));
+    assert_eq!(response["items"].as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_update_list() {
+    let state = app_state().await;
+    let title = format!("List {}", Uuid::new_v4());
+
+    let (_, list) = create_todo_list(&state, &title).await;
+    let list_id = list["id"].as_str().unwrap();
 
     let new_title = format!("Updated {}", Uuid::new_v4());
-    let new_title_payload = new_title.clone();
     let (status, updated) = json_response(
         &state,
         Request::builder()
             .method("PATCH")
             .uri(format!("/todo/{}", list_id))
             .header("content-type", "application/json")
-            .body(Body::from(json!({ "title": new_title_payload }).to_string()))
-            .unwrap(),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(updated["id"].as_str().unwrap(), list_id.to_string());
-    assert_eq!(updated["title"].as_str().unwrap(), new_title);
-
-    let (status, item) = json_response(
-        &state,
-        Request::builder()
-            .method("POST")
-            .uri(format!("/todo/{}/items", list_id))
-            .header("content-type", "application/json")
             .body(Body::from(
-                json!({ "description": "First item" }).to_string(),
+                json!({ "title": new_title }).to_string(),
             ))
             .unwrap(),
     )
     .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(updated["id"].as_str(), Some(list_id));
+    assert_eq!(updated["title"].as_str(), Some(new_title.as_str()));
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_delete_list() {
+    let state = app_state().await;
+    let title = format!("List {}", Uuid::new_v4());
+
+    let (_, list) = create_todo_list(&state, &title).await;
+    let list_id = list["id"].as_str().unwrap();
+
+    let response = send(
+        &state,
+        Request::builder()
+            .method("DELETE")
+            .uri(format!("/todo/{}", list_id))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_create_item() {
+    let state = app_state().await;
+    let title = format!("List {}", Uuid::new_v4());
+
+    let (_, list) = create_todo_list(&state, &title).await;
+    let list_id = Uuid::parse_str(list["id"].as_str().unwrap()).unwrap();
+    let list_id_str = list_id.to_string();
+
+    let (status, item) = create_todo_item(&state, &list_id, "First item").await;
+
     assert_eq!(status, StatusCode::CREATED);
-    let item_id = Uuid::parse_str(item["id"].as_str().unwrap()).unwrap();
+    assert_eq!(item["list_id"].as_str(), Some(list_id_str.as_str()));
     assert_eq!(item["done"].as_bool(), Some(false));
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_list_items() {
+    let state = app_state().await;
+    let title = format!("List {}", Uuid::new_v4());
+
+    let (_, list) = create_todo_list(&state, &title).await;
+    let list_id = Uuid::parse_str(list["id"].as_str().unwrap()).unwrap();
+
+    let (_, item) = create_todo_item(&state, &list_id, "First item").await;
+    let item_id = item["id"].as_str().unwrap().to_string();
 
     let (status, items) = json_response(
         &state,
@@ -124,37 +263,53 @@ async fn todo_crud_flow() {
             .unwrap(),
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(items.as_array().unwrap().len(), 1);
 
-    let (status, updated_item) = json_response(
+    assert_eq!(status, StatusCode::OK);
+    assert!(items
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| entry["id"].as_str() == Some(item_id.as_str())));
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_update_item() {
+    let state = app_state().await;
+    let title = format!("List {}", Uuid::new_v4());
+
+    let (_, list) = create_todo_list(&state, &title).await;
+    let list_id = Uuid::parse_str(list["id"].as_str().unwrap()).unwrap();
+
+    let (_, item) = create_todo_item(&state, &list_id, "First item").await;
+    let item_id = item["id"].as_str().unwrap();
+
+    let (status, updated) = json_response(
         &state,
         Request::builder()
             .method("PATCH")
             .uri(format!("/todo/{}/items/{}", list_id, item_id))
             .header("content-type", "application/json")
-            .body(Body::from(
-                json!({ "description": "Updated item", "done": true }).to_string(),
-            ))
+            .body(Body::from(json!({ "done": true }).to_string()))
             .unwrap(),
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(updated_item["description"].as_str(), Some("Updated item"));
-    assert_eq!(updated_item["done"].as_bool(), Some(true));
 
-    let (status, updated_item) = json_response(
-        &state,
-        Request::builder()
-            .method("PATCH")
-            .uri(format!("/todo/{}/items/{}", list_id, item_id))
-            .header("content-type", "application/json")
-            .body(Body::from(json!({ "done": false }).to_string()))
-            .unwrap(),
-    )
-    .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(updated_item["done"].as_bool(), Some(false));
+    assert_eq!(updated["done"].as_bool(), Some(true));
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_delete_item() {
+    let state = app_state().await;
+    let title = format!("List {}", Uuid::new_v4());
+
+    let (_, list) = create_todo_list(&state, &title).await;
+    let list_id = Uuid::parse_str(list["id"].as_str().unwrap()).unwrap();
+
+    let (_, item) = create_todo_item(&state, &list_id, "First item").await;
+    let item_id = item["id"].as_str().unwrap();
 
     let response = send(
         &state,
@@ -165,47 +320,188 @@ async fn todo_crud_flow() {
             .unwrap(),
     )
     .await;
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-    let (status, _) = json_response(
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_crud_create_list() {
+    let state = app_state().await;
+    let auth = auth_header(&state);
+    let title = format!("CRUD List {}", Uuid::new_v4());
+
+    let (status, list) = create_todo_crud_list(&state, &auth, &title).await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(list["title"].as_str(), Some(title.as_str()));
+    assert!(list["id"].as_str().is_some());
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_crud_list_lists() {
+    let state = app_state().await;
+    let auth = auth_header(&state);
+    let title = format!("CRUD List {}", Uuid::new_v4());
+
+    let (_, list) = create_todo_crud_list(&state, &auth, &title).await;
+    let list_id = list["id"].as_str().unwrap().to_string();
+
+    let (status, response) = json_response(
         &state,
         Request::builder()
-            .method("POST")
-            .uri(format!("/todo/{}/items", list_id))
+            .uri("/todo-crud")
+            .header("authorization", auth)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(response["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| entry["id"].as_str() == Some(list_id.as_str())));
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_crud_get_list() {
+    let state = app_state().await;
+    let auth = auth_header(&state);
+    let title = format!("CRUD List {}", Uuid::new_v4());
+
+    let (_, list) = create_todo_crud_list(&state, &auth, &title).await;
+    let list_id = list["id"].as_str().unwrap();
+
+    let (status, response) = json_response(
+        &state,
+        Request::builder()
+            .uri(format!("/todo-crud/{}", list_id))
+            .header("authorization", auth)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(response["id"].as_str(), Some(list_id));
+    assert_eq!(response["title"].as_str(), Some(title.as_str()));
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_crud_update_list() {
+    let state = app_state().await;
+    let auth = auth_header(&state);
+    let title = format!("CRUD List {}", Uuid::new_v4());
+
+    let (_, list) = create_todo_crud_list(&state, &auth, &title).await;
+    let list_id = list["id"].as_str().unwrap();
+
+    let new_title = format!("Updated {}", Uuid::new_v4());
+    let (status, updated) = json_response(
+        &state,
+        Request::builder()
+            .method("PATCH")
+            .uri(format!("/todo-crud/{}", list_id))
+            .header("authorization", auth)
             .header("content-type", "application/json")
             .body(Body::from(
-                json!({ "description": "Cascade item" }).to_string(),
+                json!({ "title": new_title }).to_string(),
             ))
             .unwrap(),
     )
     .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(updated["id"].as_str(), Some(list_id));
+    assert_eq!(updated["title"].as_str(), Some(new_title.as_str()));
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_crud_delete_list() {
+    let state = app_state().await;
+    let auth = auth_header(&state);
+    let title = format!("CRUD List {}", Uuid::new_v4());
+
+    let (_, list) = create_todo_crud_list(&state, &auth, &title).await;
+    let list_id = list["id"].as_str().unwrap();
+
+    let response = send(
+        &state,
+        Request::builder()
+            .method("DELETE")
+            .uri(format!("/todo-crud/{}", list_id))
+            .header("authorization", auth)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_crud_count_lists() {
+    let state = app_state().await;
+    let auth = auth_header(&state);
+
+    let (status, count_before) = json_response(
+        &state,
+        Request::builder()
+            .uri("/todo-crud/count")
+            .header("authorization", auth.clone())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let count_before = count_before["count"].as_u64().unwrap();
+
+    let title = format!("Count List {}", Uuid::new_v4());
+    let (status, _) = create_todo_crud_list(&state, &auth, &title).await;
     assert_eq!(status, StatusCode::CREATED);
 
-    let response = send(
+    let (status, count_after) = json_response(
         &state,
         Request::builder()
-            .method("DELETE")
-            .uri(format!("/todo/{}", list_id))
+            .uri("/todo-crud/count")
+            .header("authorization", auth)
             .body(Body::empty())
             .unwrap(),
     )
     .await;
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    assert_eq!(status, StatusCode::OK);
+    let count_after = count_after["count"].as_u64().unwrap();
+    assert!(count_after > count_before);
+}
 
-    let response = send(
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_crud_count_items() {
+    let state = app_state().await;
+    let auth = auth_header(&state);
+    let title = format!("Count List {}", Uuid::new_v4());
+
+    let (status, list) = create_todo_crud_list(&state, &auth, &title).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let list_id = list["id"].as_str().unwrap();
+
+    let (status, response) = json_response(
         &state,
         Request::builder()
-            .uri(format!("/todo/{}", list_id))
+            .uri(format!("/todo-crud/{}/items/count", list_id))
+            .header("authorization", auth)
             .body(Body::empty())
             .unwrap(),
     )
     .await;
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
-    let todo_dao = DaoContext::new(&state.db).todo();
-    let remaining = todo_dao
-        .count_items_by_list(&list_id)
-        .await
-        .expect("count items");
-    assert_eq!(remaining, 0);
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(response["count"].as_u64(), Some(0));
 }

@@ -6,7 +6,8 @@ use crate::state::AppState;
 
 pub mod admin;
 pub mod auth;
-pub mod crud_router;
+pub mod base_api_router;
+pub mod base_router;
 pub mod protected;
 pub mod public;
 pub mod route_list;

@@ -61,6 +61,13 @@ impl TodoDao {
         Ok(lists)
     }
 
+    pub async fn count_lists(&self) -> DaoResult<u64> {
+        TodoList::find()
+            .count(&self.db)
+            .await
+            .map_err(DaoLayerError::Db)
+    }
+
     pub async fn find_list_by_id(&self, id: &Uuid) -> DaoResult<todo_list::Model> {
         self.find_by_id(*id).await
     }

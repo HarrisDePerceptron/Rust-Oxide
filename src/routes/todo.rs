@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use askama::Template;
 use axum::{
+    Json, Router,
     extract::{Path, State},
     http::StatusCode,
     response::Html,
     routing::{get, patch, post},
-    Json, Router,
 };
 use chrono::Local;
 use sea_orm::prelude::DateTimeWithTimeZone;
@@ -80,10 +80,7 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/todo/{list_id}",
             get(get_list).patch(update_list).delete(delete_list),
         )
-        .route(
-            "/todo/{list_id}/items",
-            post(create_item).get(list_items),
-        )
+        .route("/todo/{list_id}/items", post(create_item).get(list_items))
         .route(
             "/todo/{list_id}/items/{item_id}",
             patch(update_item).delete(delete_item),
@@ -93,9 +90,12 @@ pub fn router(state: Arc<AppState>) -> Router {
 
 async fn todo_ui() -> Result<Html<String>, AppError> {
     let now = Local::now().to_rfc3339();
-    let rendered = TodoUiTemplate { now }
-        .render()
-        .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render todo ui"))?;
+    let rendered = TodoUiTemplate { now }.render().map_err(|_| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "failed to render todo ui",
+        )
+    })?;
     Ok(Html(rendered))
 }
 
@@ -114,7 +114,9 @@ async fn list_lists(
 ) -> Result<Json<Vec<TodoListResponse>>, AppError> {
     let service = todo_service_from_state(state.as_ref());
     let lists = service.list_lists().await?;
-    Ok(Json(lists.into_iter().map(TodoListResponse::from).collect()))
+    Ok(Json(
+        lists.into_iter().map(TodoListResponse::from).collect(),
+    ))
 }
 
 async fn get_list(
@@ -170,7 +172,9 @@ async fn list_items(
     require_list(state.as_ref(), &list_id).await?;
     let service = todo_service_from_state(state.as_ref());
     let items = service.list_items(&list_id).await?;
-    Ok(Json(items.into_iter().map(TodoItemResponse::from).collect()))
+    Ok(Json(
+        items.into_iter().map(TodoItemResponse::from).collect(),
+    ))
 }
 
 async fn update_item(
@@ -221,7 +225,10 @@ fn normalize_title(title: &str) -> Result<&str, AppError> {
 fn normalize_description(description: &str) -> Result<&str, AppError> {
     let trimmed = description.trim();
     if trimmed.is_empty() {
-        return Err(AppError::new(StatusCode::BAD_REQUEST, "Description required"));
+        return Err(AppError::new(
+            StatusCode::BAD_REQUEST,
+            "Description required",
+        ));
     }
     Ok(trimmed)
 }
