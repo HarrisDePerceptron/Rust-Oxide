@@ -146,6 +146,20 @@ impl TypeDoc {
         }
         format!("{{ {} }}", parts.join(", "))
     }
+
+    fn render_with<F>(&self, expand: F) -> String
+    where
+        F: Fn(&str) -> String,
+    {
+        if self.fields.is_empty() {
+            return "{}".to_string();
+        }
+        let mut parts = Vec::new();
+        for field in &self.fields {
+            parts.push(format!("\"{}\": {}", field.name, expand(&field.ty)));
+        }
+        format!("{{ {} }}", parts.join(", "))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1463,6 +1477,84 @@ fn resolve_type_doc<'a>(
     None
 }
 
+fn render_type_doc(
+    doc: &TypeDoc,
+    registry: &TypeRegistry,
+    context: &CrudTypeContext,
+    depth: usize,
+) -> String {
+    doc.render_with(|ty| expand_type_string(ty, registry, context, depth))
+}
+
+fn expand_type_string(
+    ty: &str,
+    registry: &TypeRegistry,
+    context: &CrudTypeContext,
+    depth: usize,
+) -> String {
+    let parsed = syn::parse_str::<Type>(ty);
+    let Ok(parsed) = parsed else {
+        return ty.to_string();
+    };
+    expand_type(&parsed, registry, context, depth)
+}
+
+fn expand_type(
+    ty: &Type,
+    registry: &TypeRegistry,
+    context: &CrudTypeContext,
+    depth: usize,
+) -> String {
+    if let Some(inner) = extract_generic_inner(ty, "HasMany") {
+        if let Some(model) = expand_entity_to_model(inner, registry, context, depth) {
+            return format!("Vec<{}>", model);
+        }
+    }
+    if let Some(inner) = extract_generic_inner(ty, "HasOne") {
+        if let Some(model) = expand_entity_to_model(inner, registry, context, depth) {
+            return format!("Option<{}>", model);
+        }
+    }
+    if let Some(model) = expand_entity_to_model(ty, registry, context, depth) {
+        return model;
+    }
+    type_to_string(ty)
+}
+
+fn expand_entity_to_model(
+    ty: &Type,
+    registry: &TypeRegistry,
+    context: &CrudTypeContext,
+    depth: usize,
+) -> Option<String> {
+    if depth >= 1 {
+        return None;
+    }
+    let entity = entity_name_from_type(ty)?;
+    let model_path = resolve_model_path(&entity, context)?;
+    Some(render_model_doc(&model_path, registry, context, depth + 1))
+}
+
+fn resolve_model_path(entity: &str, context: &CrudTypeContext) -> Option<String> {
+    if let Some(model) = context.entity_to_model.get(entity) {
+        return Some(model.clone());
+    }
+    let pascal = to_pascal_case(entity);
+    context.entity_to_model.get(&pascal).cloned()
+}
+
+fn render_model_doc(
+    model_path: &str,
+    registry: &TypeRegistry,
+    context: &CrudTypeContext,
+    depth: usize,
+) -> String {
+    if let Some(doc) = registry.docs.get(model_path) {
+        return render_type_doc(doc, registry, context, depth);
+    }
+    model_path.to_string()
+}
+
 fn is_serde_json_value(ty: &Type) -> bool {
     matches!(type_path_parts(ty).0.as_deref(), Some("serde_json::Value"))
 }
@@ -1520,21 +1612,29 @@ fn extract_generic_types<'a>(ty: &'a Type, ident: &str) -> Vec<&'a Type> {
     }
 }
 
-fn describe_type(ty: &Type, module_path: &str, registry: &TypeRegistry) -> String {
+fn describe_type(
+    ty: &Type,
+    module_path: &str,
+    registry: &TypeRegistry,
+    context: &CrudTypeContext,
+) -> String {
     if is_unit_type(ty) {
         return "None".to_string();
     }
     if let Some(inner) = extract_generic_inner(ty, "Option") {
-        return format!("Option<{}>", describe_type(inner, module_path, registry));
+        return format!(
+            "Option<{}>",
+            describe_type(inner, module_path, registry, context)
+        );
     }
     if let Some(inner) = extract_generic_inner(ty, "Vec") {
-        return format!("Vec<{}>", describe_type(inner, module_path, registry));
+        return format!("Vec<{}>", describe_type(inner, module_path, registry, context));
     }
     if let Some(inner) = extract_generic_inner(ty, "Arc") {
-        return format!("Arc<{}>", describe_type(inner, module_path, registry));
+        return format!("Arc<{}>", describe_type(inner, module_path, registry, context));
     }
     if let Some(doc) = resolve_type_doc(registry, ty, module_path) {
-        return doc.render();
+        return render_type_doc(doc, registry, context, 0);
     }
     if is_serde_json_value(ty) {
         return "JSON".to_string();
@@ -1574,39 +1674,53 @@ fn format_request(parts: Vec<(ExtractorKind, String)>) -> String {
     formatted.join(" | ")
 }
 
-fn describe_response_ok(ty: &Type, module_path: &str, registry: &TypeRegistry) -> String {
+fn describe_response_ok(
+    ty: &Type,
+    module_path: &str,
+    registry: &TypeRegistry,
+    context: &CrudTypeContext,
+) -> String {
     if let Some(inner) = extract_generic_inner(ty, "Json") {
-        return describe_type(inner, module_path, registry);
+        return describe_type(inner, module_path, registry, context);
     }
     if let Some(inner) = extract_generic_inner(ty, "Html") {
-        return format!("Html<{}>", describe_type(inner, module_path, registry));
+        return format!(
+            "Html<{}>",
+            describe_type(inner, module_path, registry, context)
+        );
     }
     if is_unit_type(ty) {
         return "None".to_string();
     }
-    describe_type(ty, module_path, registry)
+    describe_type(ty, module_path, registry, context)
 }
 
-fn describe_response_type(ty: &Type, module_path: &str, registry: &TypeRegistry) -> String {
+fn describe_response_type(
+    ty: &Type,
+    module_path: &str,
+    registry: &TypeRegistry,
+    context: &CrudTypeContext,
+) -> String {
     let result_args = extract_generic_types(ty, "Result");
     if result_args.len() >= 2 {
-        let ok_desc = describe_response_ok(result_args[0], module_path, registry);
-        let err_desc = describe_type(result_args[1], module_path, registry);
+        let ok_desc = describe_response_ok(result_args[0], module_path, registry, context);
+        let err_desc = describe_type(result_args[1], module_path, registry, context);
         return format!("ok: {}, err: {}", ok_desc, err_desc);
     }
-    describe_response_ok(ty, module_path, registry)
+    describe_response_ok(ty, module_path, registry, context)
 }
 
 fn build_handler_info(
     item_fn: &ItemFn,
     module_path: &str,
     registry: &TypeRegistry,
+    context: &CrudTypeContext,
 ) -> HandlerInfo {
     let mut request_parts = Vec::new();
     for input in &item_fn.sig.inputs {
         if let FnArg::Typed(PatType { ty, .. }) = input {
             if let Some((kind, inner)) = extract_request_extractor(ty) {
-                let desc = describe_type(inner, module_path, registry);
+                let desc = describe_type(inner, module_path, registry, context);
                 request_parts.push((kind, desc));
             }
         }
@@ -1614,7 +1728,7 @@ fn build_handler_info(
     let request = format_request(request_parts);
     let response = match &item_fn.sig.output {
         ReturnType::Default => "None".to_string(),
-        ReturnType::Type(_, ty) => describe_response_type(ty, module_path, registry),
+        ReturnType::Type(_, ty) => describe_response_type(ty, module_path, registry, context),
     };
     HandlerInfo { request, response }
 }
@@ -1623,13 +1737,14 @@ fn collect_handlers(
     file: &File,
     module_path: &str,
     registry: &TypeRegistry,
+    context: &CrudTypeContext,
 ) -> HashMap<String, HandlerInfo> {
     let mut handlers = HashMap::new();
     for item in &file.items {
         if let Item::Fn(item_fn) = item {
             handlers.insert(
                 item_fn.sig.ident.to_string(),
-                build_handler_info(item_fn, module_path, registry),
+                build_handler_info(item_fn, module_path, registry, context),
             );
         }
     }
@@ -1641,10 +1756,11 @@ fn parse_routes_file(
     manifest_dir: &Path,
     src_dir: &Path,
     registry: &TypeRegistry,
+    context: &CrudTypeContext,
 ) -> Vec<RouteEntry> {
     let parsed = parse_rust_file(path);
     let module_path = module_path_for_file(path, src_dir);
-    let handlers = collect_handlers(&parsed, &module_path, registry);
+    let handlers = collect_handlers(&parsed, &module_path, registry, context);
     let source = path
         .strip_prefix(manifest_dir)
         .unwrap_or(path)
@@ -1725,17 +1841,14 @@ fn crud_route_entries(
 ) -> Vec<RouteEntry> {
     let id_path = format!("{}/{{id}}", base);
     let model_type = resolve_model_type(service, context);
-    let model_name = model_type
-        .clone()
-        .unwrap_or_else(|| "JSON".to_string());
     let model_desc = model_type
         .as_deref()
-        .map(|name| describe_type_name(name, registry))
+        .map(|name| describe_type_name(name, registry, context))
         .unwrap_or_else(|| "JSON".to_string());
-    let list_query_desc = describe_type_name("ListQuery", registry);
+    let list_query_desc = describe_type_name("ListQuery", registry, context);
     let list_response = replace_paginated_generic(
-        &describe_type_name("PaginatedResponse", registry),
-        &model_name,
+        &describe_type_name("PaginatedResponse", registry, context),
+        &model_desc,
     );
     let model_response = format!("ok: {}, err: AppError", model_desc);
     let list_response = format!("ok: {}, err: AppError", list_response);
@@ -1924,11 +2037,11 @@ fn collect_entity_model_map(entities_dir: &Path, src_dir: &Path) -> HashMap<Stri
     out
 }
 
-fn describe_type_name(name: &str, registry: &TypeRegistry) -> String {
+fn describe_type_name(name: &str, registry: &TypeRegistry, context: &CrudTypeContext) -> String {
     registry
         .docs
         .get(name)
-        .map(|doc| doc.render())
+        .map(|doc| render_type_doc(doc, registry, context, 0))
         .unwrap_or_else(|| name.to_string())
 }
 
@@ -1975,7 +2088,13 @@ fn main() {
 
     let mut routes = Vec::new();
     for file in collect_route_files(&routes_dir) {
-        routes.extend(parse_routes_file(&file, manifest_path, &src_dir, &registry));
+        routes.extend(parse_routes_file(
+            &file,
+            manifest_path,
+            &src_dir,
+            &registry,
+            &crud_context,
+        ));
         routes.extend(parse_crud_router_routes(
             &file,
             manifest_path,
