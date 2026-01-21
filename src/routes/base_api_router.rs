@@ -1,14 +1,17 @@
 use axum::{
     Json, Router,
-    extract::{Path, Query},
+    extract::{Path, Query, Request},
     http::StatusCode,
-    routing::{MethodRouter, delete, get, patch, post},
+    response::Response,
+    routing::{MethodRouter, Route, delete, get, patch, post},
 };
 use sea_orm::{
     ActiveModelTrait, ActiveValue, EntityTrait, IdenStatic, Iterable, Order, PrimaryKeyToColumn,
     Select, TryIntoModel,
 };
 use serde_json::Value;
+use std::{collections::HashMap, convert::Infallible};
+use tower::{Layer, Service, util::BoxCloneSyncServiceLayer};
 use uuid::Uuid;
 
 use super::base_router::BaseRouter;
@@ -26,7 +29,7 @@ pub struct ListQuery {
     pub page_size: Option<u64>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Method {
     Create,
     List,
@@ -35,16 +38,55 @@ pub enum Method {
     Delete,
 }
 
+const DEFAULT_ALLOWED_METHODS: [Method; 5] = [
+    Method::Create,
+    Method::List,
+    Method::Get,
+    Method::Patch,
+    Method::Delete,
+];
+
 const INVALID_PAYLOAD_MESSAGE: &str = "Invalid payload";
+
+type MethodLayer = BoxCloneSyncServiceLayer<Route<Infallible>, Request, Response, Infallible>;
 
 pub struct CrudApiRouter<S> {
     service: S,
     base_path: &'static str,
+    allowed_methods: Vec<Method>,
+    method_middlewares: HashMap<Method, Vec<MethodLayer>>,
 }
 
 impl<S> CrudApiRouter<S> {
     pub fn new(service: S, base_path: &'static str) -> Self {
-        Self { service, base_path }
+        Self {
+            service,
+            base_path,
+            allowed_methods: DEFAULT_ALLOWED_METHODS.to_vec(),
+            method_middlewares: HashMap::new(),
+        }
+    }
+
+    pub fn set_allowed_methods(mut self, methods: &[Method]) -> Self {
+        self.allowed_methods = methods.to_vec();
+        self
+    }
+
+    pub fn set_method_middleware<L>(mut self, method: Method, layer: L) -> Self
+    where
+        L: Layer<Route<Infallible>> + Clone + Send + Sync + 'static,
+        L::Service: Service<Request, Response = Response, Error = Infallible>
+            + Clone
+            + Send
+            + Sync
+            + 'static,
+        <L::Service as Service<Request>>::Future: Send + 'static,
+    {
+        self.method_middlewares
+            .entry(method)
+            .or_default()
+            .push(BoxCloneSyncServiceLayer::new(layer));
+        self
     }
 }
 
@@ -56,8 +98,11 @@ where
     ModelOf<S>: sea_orm::IntoActiveModel<ActiveModelOf<S>>,
     ColumnOf<S>: Iterable,
 {
-    pub fn router(&self) -> Router {
-        BaseApiRouter::router_for(self)
+    pub fn router<State>(self) -> Router<State>
+    where
+        State: Clone + Send + Sync + 'static,
+    {
+        BaseApiRouter::router_for(&self)
     }
 }
 
@@ -74,14 +119,8 @@ where
     fn service(&self) -> Self::Service;
     fn base_path(&self) -> &'static str;
 
-    fn allowed_methods() -> &'static [Method] {
-        &[
-            Method::Create,
-            Method::List,
-            Method::Get,
-            Method::Patch,
-            Method::Delete,
-        ]
+    fn allowed_methods(&self) -> &[Method] {
+        &DEFAULT_ALLOWED_METHODS
     }
 
     fn list_default_page_size() -> u64 {
@@ -159,7 +198,7 @@ where
     {
         let base = self.base_path();
         let id_path = format!("{}/{{id}}", base);
-        let allowed = Self::allowed_methods();
+        let allowed = self.allowed_methods();
         let mut router = Router::<S>::new();
 
         if allowed.contains(&Method::Create) {
@@ -271,5 +310,25 @@ where
 
     fn base_path(&self) -> &'static str {
         self.base_path
+    }
+
+    fn allowed_methods(&self) -> &[Method] {
+        self.allowed_methods.as_slice()
+    }
+
+    fn apply_method_middleware<State>(
+        &self,
+        method: Method,
+        route: MethodRouter<State>,
+    ) -> MethodRouter<State>
+    where
+        State: Clone + Send + Sync + 'static,
+    {
+        match self.method_middlewares.get(&method) {
+            Some(layers) => layers
+                .iter()
+                .fold(route, |route, layer| route.route_layer(layer.clone())),
+            None => route,
+        }
     }
 }

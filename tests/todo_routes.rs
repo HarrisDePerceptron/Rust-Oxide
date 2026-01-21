@@ -505,3 +505,171 @@ async fn todo_crud_count_items() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(response["count"].as_u64(), Some(0));
 }
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_create_list_requires_title() {
+    let state = app_state().await;
+
+    let (status, response) = json_response(
+        &state,
+        Request::builder()
+            .method("POST")
+            .uri("/todo")
+            .header("content-type", "application/json")
+            .body(Body::from(json!({ "title": "   " }).to_string()))
+            .unwrap(),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(response["error"].as_str(), Some("Title required"));
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_update_list_requires_title() {
+    let state = app_state().await;
+    let title = format!("List {}", Uuid::new_v4());
+
+    let (_, list) = create_todo_list(&state, &title).await;
+    let list_id = list["id"].as_str().unwrap();
+
+    let (status, response) = json_response(
+        &state,
+        Request::builder()
+            .method("PATCH")
+            .uri(format!("/todo/{}", list_id))
+            .header("content-type", "application/json")
+            .body(Body::from(json!({ "title": " " }).to_string()))
+            .unwrap(),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(response["error"].as_str(), Some("Title required"));
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_create_item_requires_description() {
+    let state = app_state().await;
+    let title = format!("List {}", Uuid::new_v4());
+
+    let (_, list) = create_todo_list(&state, &title).await;
+    let list_id = list["id"].as_str().unwrap();
+
+    let (status, response) = json_response(
+        &state,
+        Request::builder()
+            .method("POST")
+            .uri(format!("/todo/{}/items", list_id))
+            .header("content-type", "application/json")
+            .body(Body::from(
+                json!({ "description": "   " }).to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(response["error"].as_str(), Some("Description required"));
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_update_item_requires_payload() {
+    let state = app_state().await;
+    let title = format!("List {}", Uuid::new_v4());
+
+    let (_, list) = create_todo_list(&state, &title).await;
+    let list_id = Uuid::parse_str(list["id"].as_str().unwrap()).unwrap();
+
+    let (_, item) = create_todo_item(&state, &list_id, "First item").await;
+    let item_id = item["id"].as_str().unwrap();
+
+    let (status, response) = json_response(
+        &state,
+        Request::builder()
+            .method("PATCH")
+            .uri(format!("/todo/{}/items/{}", list_id, item_id))
+            .header("content-type", "application/json")
+            .body(Body::from(json!({}).to_string()))
+            .unwrap(),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        response["error"].as_str(),
+        Some("Description or done required")
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_get_list_not_found() {
+    let state = app_state().await;
+    let missing_id = Uuid::new_v4();
+
+    let (status, response) = json_response(
+        &state,
+        Request::builder()
+            .uri(format!("/todo/{}", missing_id))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(response["error"].as_str(), Some("Resource not found"));
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_update_item_not_found() {
+    let state = app_state().await;
+    let title = format!("List {}", Uuid::new_v4());
+
+    let (_, list) = create_todo_list(&state, &title).await;
+    let list_id = Uuid::parse_str(list["id"].as_str().unwrap()).unwrap();
+    let missing_item = Uuid::new_v4();
+
+    let (status, response) = json_response(
+        &state,
+        Request::builder()
+            .method("PATCH")
+            .uri(format!("/todo/{}/items/{}", list_id, missing_item))
+            .header("content-type", "application/json")
+            .body(Body::from(json!({ "done": true }).to_string()))
+            .unwrap(),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(response["error"].as_str(), Some("Todo item not found"));
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres database"]
+async fn todo_delete_item_not_found() {
+    let state = app_state().await;
+    let title = format!("List {}", Uuid::new_v4());
+
+    let (_, list) = create_todo_list(&state, &title).await;
+    let list_id = Uuid::parse_str(list["id"].as_str().unwrap()).unwrap();
+    let missing_item = Uuid::new_v4();
+
+    let (status, response) = json_response(
+        &state,
+        Request::builder()
+            .method("DELETE")
+            .uri(format!("/todo/{}/items/{}", list_id, missing_item))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(response["error"].as_str(), Some("Todo item not found"));
+}
