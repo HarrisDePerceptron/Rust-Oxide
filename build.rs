@@ -9,6 +9,7 @@ use quote::ToTokens;
 use syn::{
     Attribute,
     Expr,
+    ExprCall,
     ExprLit,
     ExprMethodCall,
     File,
@@ -228,6 +229,31 @@ impl<'a, 'ast> Visit<'ast> for RouteVisitor<'a> {
     }
 }
 
+struct CrudRouterVisitor<'a> {
+    consts: &'a HashMap<String, String>,
+    base_paths: Vec<String>,
+    unresolved: usize,
+}
+
+impl<'a, 'ast> Visit<'ast> for CrudRouterVisitor<'a> {
+    fn visit_expr_call(&mut self, node: &'ast ExprCall) {
+        if is_crud_api_router_new(&node.func) {
+            let base_arg = node.args.iter().nth(1);
+            if let Some(base_arg) = base_arg {
+                if let Some(base) = extract_string_literal_or_const(base_arg, self.consts) {
+                    self.base_paths.push(base);
+                } else {
+                    self.unresolved += 1;
+                }
+            } else {
+                self.unresolved += 1;
+            }
+        }
+
+        syn::visit::visit_expr_call(self, node);
+    }
+}
+
 fn extract_string_literal(expr: &Expr) -> Option<String> {
     match expr {
         Expr::Lit(ExprLit {
@@ -238,6 +264,55 @@ fn extract_string_literal(expr: &Expr) -> Option<String> {
         Expr::Reference(expr) => extract_string_literal(&expr.expr),
         _ => None,
     }
+}
+
+fn extract_string_literal_or_const(
+    expr: &Expr,
+    consts: &HashMap<String, String>,
+) -> Option<String> {
+    if let Some(value) = extract_string_literal(expr) {
+        return Some(value);
+    }
+
+    match expr {
+        Expr::Path(path) => path
+            .path
+            .segments
+            .last()
+            .and_then(|seg| consts.get(&seg.ident.to_string()).cloned()),
+        Expr::Paren(expr) => extract_string_literal_or_const(&expr.expr, consts),
+        Expr::Reference(expr) => extract_string_literal_or_const(&expr.expr, consts),
+        _ => None,
+    }
+}
+
+fn is_crud_api_router_new(expr: &Expr) -> bool {
+    match expr {
+        Expr::Path(path) => {
+            let segments = &path.path.segments;
+            if segments.len() < 2 {
+                return false;
+            }
+            let last = segments.last().map(|seg| seg.ident.to_string());
+            let prev = segments.iter().nth_back(1).map(|seg| seg.ident.to_string());
+            matches!((prev.as_deref(), last.as_deref()), (Some("CrudApiRouter"), Some("new")))
+        }
+        Expr::Paren(expr) => is_crud_api_router_new(&expr.expr),
+        Expr::Reference(expr) => is_crud_api_router_new(&expr.expr),
+        _ => false,
+    }
+}
+
+fn collect_const_string_literals(file: &File) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    for item in &file.items {
+        if let Item::Const(item_const) = item {
+            if let Some(value) = extract_string_literal(item_const.expr.as_ref()) {
+                out.insert(item_const.ident.to_string(), value);
+            }
+        }
+    }
+    out
 }
 
 fn extract_route_handlers(expr: &Expr) -> Vec<RouteHandler> {
@@ -1399,6 +1474,80 @@ fn parse_routes_file(
     visitor.routes
 }
 
+fn crud_route_entries(base: &str, source: &str) -> Vec<RouteEntry> {
+    let id_path = format!("{}/{{id}}", base);
+    let request = "Unknown".to_string();
+    let response = "Unknown".to_string();
+    vec![
+        RouteEntry {
+            method: "POST".to_string(),
+            path: base.to_string(),
+            source: source.to_string(),
+            request: request.clone(),
+            response: response.clone(),
+        },
+        RouteEntry {
+            method: "GET".to_string(),
+            path: base.to_string(),
+            source: source.to_string(),
+            request: request.clone(),
+            response: response.clone(),
+        },
+        RouteEntry {
+            method: "GET".to_string(),
+            path: id_path.clone(),
+            source: source.to_string(),
+            request: request.clone(),
+            response: response.clone(),
+        },
+        RouteEntry {
+            method: "PATCH".to_string(),
+            path: id_path.clone(),
+            source: source.to_string(),
+            request: request.clone(),
+            response: response.clone(),
+        },
+        RouteEntry {
+            method: "DELETE".to_string(),
+            path: id_path,
+            source: source.to_string(),
+            request,
+            response,
+        },
+    ]
+}
+
+fn parse_crud_router_routes(path: &Path, manifest_dir: &Path) -> Vec<RouteEntry> {
+    let parsed = parse_rust_file(path);
+    let source = path
+        .strip_prefix(manifest_dir)
+        .unwrap_or(path)
+        .display()
+        .to_string();
+    let consts = collect_const_string_literals(&parsed);
+    let mut visitor = CrudRouterVisitor {
+        consts: &consts,
+        base_paths: Vec::new(),
+        unresolved: 0,
+    };
+    visitor.visit_file(&parsed);
+    if visitor.unresolved > 0 {
+        println!(
+            "cargo:warning=Skipping non-literal CrudApiRouter base path in {}",
+            source
+        );
+    }
+
+    let mut seen = HashSet::new();
+    let mut routes = Vec::new();
+    for base in visitor.base_paths {
+        if seen.insert(base.clone()) {
+            routes.extend(crud_route_entries(&base, &source));
+        }
+    }
+    routes
+}
+
 fn collect_route_files(routes_dir: &Path) -> Vec<PathBuf> {
     collect_rust_files(routes_dir)
 }
@@ -1426,6 +1575,7 @@ fn main() {
     let mut routes = Vec::new();
     for file in collect_route_files(&routes_dir) {
         routes.extend(parse_routes_file(&file, manifest_path, &src_dir, &registry));
+        routes.extend(parse_crud_router_routes(&file, manifest_path));
     }
 
     routes.sort_by(|a, b| a.path.cmp(&b.path).then(a.method.cmp(&b.method)));
