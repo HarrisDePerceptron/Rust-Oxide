@@ -8,23 +8,29 @@ use std::{
 use quote::ToTokens;
 use syn::{
     Attribute,
+    Block,
     Expr,
     ExprCall,
     ExprLit,
     ExprMethodCall,
+    ExprStruct,
     File,
     FnArg,
     GenericArgument,
+    ImplItem,
     Item,
     ItemEnum,
     ItemFn,
+    ItemImpl,
     ItemStruct,
     Lit,
     LitStr,
+    Pat,
     PatType,
     Path as SynPath,
     PathArguments,
     ReturnType,
+    Stmt,
     Type,
     visit::Visit,
     Fields,
@@ -229,9 +235,16 @@ impl<'a, 'ast> Visit<'ast> for RouteVisitor<'a> {
     }
 }
 
+#[derive(Debug)]
+struct CrudRouterCall {
+    base_path: String,
+    service: Option<String>,
+}
+
 struct CrudRouterVisitor<'a> {
     consts: &'a HashMap<String, String>,
-    base_paths: Vec<String>,
+    locals: &'a HashMap<String, String>,
+    calls: Vec<CrudRouterCall>,
     unresolved: usize,
 }
 
@@ -241,7 +254,14 @@ impl<'a, 'ast> Visit<'ast> for CrudRouterVisitor<'a> {
             let base_arg = node.args.iter().nth(1);
             if let Some(base_arg) = base_arg {
                 if let Some(base) = extract_string_literal_or_const(base_arg, self.consts) {
-                    self.base_paths.push(base);
+                    let service = node
+                        .args
+                        .first()
+                        .and_then(|expr| resolve_service_type(expr, self.locals));
+                    self.calls.push(CrudRouterCall {
+                        base_path: base,
+                        service,
+                    });
                 } else {
                     self.unresolved += 1;
                 }
@@ -286,6 +306,91 @@ fn extract_string_literal_or_const(
     }
 }
 
+fn resolve_service_type(expr: &Expr, locals: &HashMap<String, String>) -> Option<String> {
+    if let Some(ty) = infer_type_from_expr(expr, locals) {
+        return Some(ty);
+    }
+
+    match expr {
+        Expr::Path(path) => path
+            .path
+            .segments
+            .last()
+            .and_then(|seg| locals.get(&seg.ident.to_string()).cloned()),
+        Expr::Paren(expr) => resolve_service_type(&expr.expr, locals),
+        Expr::Reference(expr) => resolve_service_type(&expr.expr, locals),
+        _ => None,
+    }
+}
+
+fn infer_type_from_expr(expr: &Expr, locals: &HashMap<String, String>) -> Option<String> {
+    match expr {
+        Expr::Call(call) => type_from_constructor(&call.func),
+        Expr::MethodCall(method_call) => {
+            if method_call.method == "clone" {
+                return infer_type_from_expr(&method_call.receiver, locals)
+                    .or_else(|| resolve_ident_type(&method_call.receiver, locals));
+            }
+            None
+        }
+        Expr::Struct(ExprStruct { path, .. }) => type_from_path(path),
+        Expr::Path(path) => path
+            .path
+            .segments
+            .last()
+            .and_then(|seg| locals.get(&seg.ident.to_string()).cloned()),
+        Expr::Paren(expr) => infer_type_from_expr(&expr.expr, locals),
+        Expr::Reference(expr) => infer_type_from_expr(&expr.expr, locals),
+        _ => None,
+    }
+}
+
+fn resolve_ident_type(expr: &Expr, locals: &HashMap<String, String>) -> Option<String> {
+    if let Expr::Path(path) = expr {
+        return path
+            .path
+            .segments
+            .last()
+            .and_then(|seg| locals.get(&seg.ident.to_string()).cloned());
+    }
+    None
+}
+
+fn type_from_constructor(expr: &Expr) -> Option<String> {
+    let path = match expr {
+        Expr::Path(path) => Some(&path.path),
+        Expr::Paren(expr) => match &*expr.expr {
+            Expr::Path(path) => Some(&path.path),
+            _ => None,
+        },
+        Expr::Reference(expr) => match &*expr.expr {
+            Expr::Path(path) => Some(&path.path),
+            _ => None,
+        },
+        _ => None,
+    }?;
+
+    let mut segments = path.segments.iter().map(|seg| seg.ident.to_string());
+    let parts: Vec<String> = segments.by_ref().collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    let last = parts.last().map(String::as_str);
+    let prev = parts.get(parts.len().saturating_sub(2)).map(String::as_str);
+    match (prev, last) {
+        (Some(type_name), Some(method))
+            if matches!(method, "new" | "from" | "default") =>
+        {
+            Some(type_name.to_string())
+        }
+        _ => None,
+    }
+}
+
+fn type_from_path(path: &SynPath) -> Option<String> {
+    path.segments.last().map(|seg| seg.ident.to_string())
+}
+
 fn is_crud_api_router_new(expr: &Expr) -> bool {
     match expr {
         Expr::Path(path) => {
@@ -313,6 +418,57 @@ fn collect_const_string_literals(file: &File) -> HashMap<String, String> {
         }
     }
     out
+}
+
+fn collect_local_types(block: &Block) -> HashMap<String, String> {
+    let mut locals = HashMap::new();
+    for stmt in &block.stmts {
+        if let Stmt::Local(local) = stmt {
+            if let Some((name, ty)) = local_binding_type(local, &locals) {
+                locals.insert(name, ty);
+            }
+        }
+    }
+    locals
+}
+
+fn local_binding_type(local: &syn::Local, locals: &HashMap<String, String>) -> Option<(String, String)> {
+    let (name, explicit_type) = match &local.pat {
+        Pat::Ident(ident) => (ident.ident.to_string(), None),
+        Pat::Type(PatType { pat, ty, .. }) => {
+            let ident = match pat.as_ref() {
+                Pat::Ident(ident) => ident.ident.to_string(),
+                _ => return None,
+            };
+            let ty = type_from_type(ty);
+            (ident, ty)
+        }
+        _ => return None,
+    };
+
+    if let Some(ty) = explicit_type {
+        return Some((name, ty));
+    }
+
+    let init = local
+        .init
+        .as_ref()
+        .map(|init| init.expr.as_ref());
+    if let Some(expr) = init {
+        if let Some(ty) = infer_type_from_expr(expr, locals) {
+            return Some((name, ty));
+        }
+    }
+    None
+}
+
+fn type_from_type(ty: &Type) -> Option<String> {
+    match ty {
+        Type::Path(path) => path.path.segments.last().map(|seg| seg.ident.to_string()),
+        Type::Reference(reference) => type_from_type(&reference.elem),
+        Type::Paren(paren) => type_from_type(&paren.elem),
+        _ => None,
+    }
 }
 
 fn extract_route_handlers(expr: &Expr) -> Vec<RouteHandler> {
@@ -1474,50 +1630,75 @@ fn parse_routes_file(
     visitor.routes
 }
 
-fn crud_route_entries(base: &str, source: &str) -> Vec<RouteEntry> {
+fn crud_route_entries(
+    base: &str,
+    source: &str,
+    service: Option<&str>,
+    registry: &TypeRegistry,
+    context: &CrudTypeContext,
+) -> Vec<RouteEntry> {
     let id_path = format!("{}/{{id}}", base);
-    let request = "Unknown".to_string();
-    let response = "Unknown".to_string();
+    let model_type = resolve_model_type(service, context);
+    let model_name = model_type
+        .clone()
+        .unwrap_or_else(|| "JSON".to_string());
+    let model_desc = model_type
+        .as_deref()
+        .map(|name| describe_type_name(name, registry))
+        .unwrap_or_else(|| "JSON".to_string());
+    let list_query_desc = describe_type_name("ListQuery", registry);
+    let list_response = replace_paginated_generic(
+        &describe_type_name("PaginatedResponse", registry),
+        &model_name,
+    );
+    let model_response = format!("ok: {}, err: AppError", model_desc);
+    let list_response = format!("ok: {}, err: AppError", list_response);
+    let delete_response = "ok: StatusCode, err: AppError".to_string();
     vec![
         RouteEntry {
             method: "POST".to_string(),
             path: base.to_string(),
             source: source.to_string(),
-            request: request.clone(),
-            response: response.clone(),
+            request: model_desc.clone(),
+            response: model_response.clone(),
         },
         RouteEntry {
             method: "GET".to_string(),
             path: base.to_string(),
             source: source.to_string(),
-            request: request.clone(),
-            response: response.clone(),
+            request: format!("query: {}", list_query_desc),
+            response: list_response,
         },
         RouteEntry {
             method: "GET".to_string(),
             path: id_path.clone(),
             source: source.to_string(),
-            request: request.clone(),
-            response: response.clone(),
+            request: "path: Uuid".to_string(),
+            response: model_response.clone(),
         },
         RouteEntry {
             method: "PATCH".to_string(),
             path: id_path.clone(),
             source: source.to_string(),
-            request: request.clone(),
-            response: response.clone(),
+            request: model_desc.clone(),
+            response: model_response.clone(),
         },
         RouteEntry {
             method: "DELETE".to_string(),
             path: id_path,
             source: source.to_string(),
-            request,
-            response,
+            request: "path: Uuid".to_string(),
+            response: delete_response,
         },
     ]
 }
 
-fn parse_crud_router_routes(path: &Path, manifest_dir: &Path) -> Vec<RouteEntry> {
+fn parse_crud_router_routes(
+    path: &Path,
+    manifest_dir: &Path,
+    registry: &TypeRegistry,
+    context: &CrudTypeContext,
+) -> Vec<RouteEntry> {
     let parsed = parse_rust_file(path);
     let source = path
         .strip_prefix(manifest_dir)
@@ -1525,13 +1706,26 @@ fn parse_crud_router_routes(path: &Path, manifest_dir: &Path) -> Vec<RouteEntry>
         .display()
         .to_string();
     let consts = collect_const_string_literals(&parsed);
-    let mut visitor = CrudRouterVisitor {
-        consts: &consts,
-        base_paths: Vec::new(),
-        unresolved: 0,
-    };
-    visitor.visit_file(&parsed);
-    if visitor.unresolved > 0 {
+    let mut unresolved = 0;
+    let mut calls = Vec::new();
+
+    for item in &parsed.items {
+        let Item::Fn(item_fn) = item else {
+            continue;
+        };
+        let locals = collect_local_types(&item_fn.block);
+        let mut visitor = CrudRouterVisitor {
+            consts: &consts,
+            locals: &locals,
+            calls: Vec::new(),
+            unresolved: 0,
+        };
+        visitor.visit_block(&item_fn.block);
+        unresolved += visitor.unresolved;
+        calls.extend(visitor.calls);
+    }
+
+    if unresolved > 0 {
         println!(
             "cargo:warning=Skipping non-literal CrudApiRouter base path in {}",
             source
@@ -1540,9 +1734,15 @@ fn parse_crud_router_routes(path: &Path, manifest_dir: &Path) -> Vec<RouteEntry>
 
     let mut seen = HashSet::new();
     let mut routes = Vec::new();
-    for base in visitor.base_paths {
-        if seen.insert(base.clone()) {
-            routes.extend(crud_route_entries(&base, &source));
+    for call in calls {
+        if seen.insert(call.base_path.clone()) {
+            routes.extend(crud_route_entries(
+                &call.base_path,
+                &source,
+                call.service.as_deref(),
+                registry,
+                context,
+            ));
         }
     }
     routes
@@ -1550,6 +1750,117 @@ fn parse_crud_router_routes(path: &Path, manifest_dir: &Path) -> Vec<RouteEntry>
 
 fn collect_route_files(routes_dir: &Path) -> Vec<PathBuf> {
     collect_rust_files(routes_dir)
+}
+
+#[derive(Default)]
+struct CrudTypeContext {
+    service_to_dao: HashMap<String, String>,
+    dao_to_entity: HashMap<String, String>,
+    entity_to_model: HashMap<String, String>,
+}
+
+fn collect_crud_service_impls(file: &File, out: &mut HashMap<String, String>) {
+    for item in &file.items {
+        let Item::Impl(item_impl) = item else {
+            continue;
+        };
+        if !impl_uses_trait(item_impl, "CrudService") {
+            continue;
+        }
+        let service = match type_from_type(&item_impl.self_ty) {
+            Some(ty) => ty,
+            None => continue,
+        };
+        if let Some(dao) = impl_associated_type(item_impl, "Dao") {
+            out.insert(service, dao);
+        }
+    }
+}
+
+fn collect_dao_base_impls(file: &File, out: &mut HashMap<String, String>) {
+    for item in &file.items {
+        let Item::Impl(item_impl) = item else {
+            continue;
+        };
+        if !impl_uses_trait(item_impl, "DaoBase") {
+            continue;
+        }
+        let dao = match type_from_type(&item_impl.self_ty) {
+            Some(ty) => ty,
+            None => continue,
+        };
+        if let Some(entity) = impl_associated_type(item_impl, "Entity") {
+            out.insert(dao, entity);
+        }
+    }
+}
+
+fn impl_uses_trait(item_impl: &ItemImpl, trait_name: &str) -> bool {
+    let Some((_, path, _)) = &item_impl.trait_ else {
+        return false;
+    };
+    path.segments
+        .last()
+        .map(|seg| seg.ident == trait_name)
+        .unwrap_or(false)
+}
+
+fn impl_associated_type(item_impl: &ItemImpl, name: &str) -> Option<String> {
+    for item in &item_impl.items {
+        let ImplItem::Type(item_type) = item else {
+            continue;
+        };
+        if item_type.ident != name {
+            continue;
+        }
+        if let Some(ty) = type_from_type(&item_type.ty) {
+            return Some(ty);
+        }
+    }
+    None
+}
+
+fn collect_entity_model_map(entities_dir: &Path, src_dir: &Path) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    for file in collect_rust_files(entities_dir) {
+        let stem = file
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("");
+        if stem.is_empty() || stem == "mod" {
+            continue;
+        }
+        let alias = to_pascal_case(stem);
+        let module_path = module_path_for_file(&file, src_dir);
+        let model_path = format!("{}::Model", module_path);
+        out.insert(alias, model_path);
+    }
+    out
+}
+
+fn describe_type_name(name: &str, registry: &TypeRegistry) -> String {
+    registry
+        .docs
+        .get(name)
+        .map(|doc| doc.render())
+        .unwrap_or_else(|| name.to_string())
+}
+
+fn resolve_model_type(
+    service: Option<&str>,
+    context: &CrudTypeContext,
+) -> Option<String> {
+    let service = service?;
+    let dao = context.service_to_dao.get(service)?;
+    let entity = context.dao_to_entity.get(dao)?;
+    context.entity_to_model.get(entity).cloned()
+}
+
+fn replace_paginated_generic(doc: &str, model_name: &str) -> String {
+    let vec_replacement = format!("Vec<{}>", model_name);
+    let option_replacement = format!("Option<{}>", model_name);
+    doc.replace("Vec<T>", &vec_replacement)
+        .replace("Option<T>", &option_replacement)
 }
 
 fn main() {
@@ -1566,16 +1877,25 @@ fn main() {
     }
 
     let mut registry = TypeRegistry::default();
+    let mut crud_context = CrudTypeContext::default();
     for file in &src_files {
         let parsed = parse_rust_file(file);
         let module_path = module_path_for_file(file, &src_dir);
         collect_type_docs(&parsed, &module_path, &mut registry);
+        collect_crud_service_impls(&parsed, &mut crud_context.service_to_dao);
+        collect_dao_base_impls(&parsed, &mut crud_context.dao_to_entity);
     }
+    crud_context.entity_to_model = collect_entity_model_map(&src_dir.join("db/entities"), &src_dir);
 
     let mut routes = Vec::new();
     for file in collect_route_files(&routes_dir) {
         routes.extend(parse_routes_file(&file, manifest_path, &src_dir, &registry));
-        routes.extend(parse_crud_router_routes(&file, manifest_path));
+        routes.extend(parse_crud_router_routes(
+            &file,
+            manifest_path,
+            &registry,
+            &crud_context,
+        ));
     }
 
     routes.sort_by(|a, b| a.path.cmp(&b.path).then(a.method.cmp(&b.method)));
