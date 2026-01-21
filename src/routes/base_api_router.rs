@@ -37,6 +37,30 @@ pub enum Method {
 
 const INVALID_PAYLOAD_MESSAGE: &str = "Invalid payload";
 
+pub struct CrudApiRouter<S> {
+    service: S,
+    base_path: &'static str,
+}
+
+impl<S> CrudApiRouter<S> {
+    pub fn new(service: S, base_path: &'static str) -> Self {
+        Self { service, base_path }
+    }
+}
+
+impl<S> CrudApiRouter<S>
+where
+    S: CrudService + Clone + Send + Sync + 'static,
+    ActiveModelOf<S>: ActiveModelTrait + TryIntoModel<ModelOf<S>>,
+    ModelOf<S>: for<'de> serde::Deserialize<'de> + serde::Serialize,
+    ModelOf<S>: sea_orm::IntoActiveModel<ActiveModelOf<S>>,
+    ColumnOf<S>: Iterable,
+{
+    pub fn router(&self) -> Router {
+        BaseApiRouter::router_for(self)
+    }
+}
+
 #[allow(async_fn_in_trait)]
 pub trait BaseApiRouter: BaseRouter
 where
@@ -48,7 +72,7 @@ where
     type Service: CrudService + Clone + Send + Sync + 'static;
 
     fn service(&self) -> Self::Service;
-    fn base_path() -> &'static str;
+    fn base_path(&self) -> &'static str;
 
     fn allowed_methods() -> &'static [Method] {
         &[
@@ -133,7 +157,7 @@ where
     where
         S: Clone + Send + Sync + 'static,
     {
-        let base = <Self as BaseApiRouter>::base_path();
+        let base = self.base_path();
         let id_path = format!("{}/{{id}}", base);
         let allowed = Self::allowed_methods();
         let mut router = Router::<S>::new();
@@ -216,10 +240,6 @@ impl<T> BaseRouter for T
 where
     T: BaseApiRouter,
 {
-    fn base_path() -> &'static str {
-        <T as BaseApiRouter>::base_path()
-    }
-
     fn apply_router_middleware<S>(&self, router: Router<S>) -> Router<S>
     where
         S: Clone + Send + Sync + 'static,
@@ -232,5 +252,24 @@ where
         S: Clone + Send + Sync + 'static,
     {
         <T as BaseApiRouter>::router_for(self)
+    }
+}
+
+impl<S> BaseApiRouter for CrudApiRouter<S>
+where
+    S: CrudService + Clone + Send + Sync + 'static,
+    ActiveModelOf<S>: ActiveModelTrait + TryIntoModel<ModelOf<S>>,
+    ModelOf<S>: for<'de> serde::Deserialize<'de> + serde::Serialize,
+    ModelOf<S>: sea_orm::IntoActiveModel<ActiveModelOf<S>>,
+    ColumnOf<S>: Iterable,
+{
+    type Service = S;
+
+    fn service(&self) -> Self::Service {
+        self.service.clone()
+    }
+
+    fn base_path(&self) -> &'static str {
+        self.base_path
     }
 }

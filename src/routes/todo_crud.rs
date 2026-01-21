@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{
     Json, Router,
-    extract::Path,
+    extract::{Path, State},
     middleware,
     routing::get,
 };
@@ -10,82 +10,49 @@ use axum::{
 use uuid::Uuid;
 
 use crate::{
-    auth::jwt::jwt_auth,
-    db::dao::DaoContext,
-    error::AppError,
-    routes::base_api_router::BaseApiRouter,
-    services::todo_service::TodoService,
-    state::AppState,
+    auth::jwt::jwt_auth, db::dao::DaoContext, error::AppError,
+    routes::base_api_router::CrudApiRouter, routes::base_router::BaseRouter,
+    services::todo_service::TodoService, state::AppState,
 };
 
-pub struct TodoListCrud {
-    service: TodoService,
-    state: Arc<AppState>,
-}
-
-impl TodoListCrud {
-    pub fn new(service: TodoService, state: Arc<AppState>) -> Self {
-        Self { service, state }
-    }
-}
-
-impl BaseApiRouter for TodoListCrud {
-    type Service = TodoService;
-
-    fn service(&self) -> Self::Service {
-        self.service.clone()
-    }
-
-    fn base_path() -> &'static str {
-        "/todo-crud"
-    }
-
-    fn apply_router_middleware<S>(&self, router: Router<S>) -> Router<S>
-    where
-        S: Clone + Send + Sync + 'static,
-    {
-        router.layer(middleware::from_fn_with_state(self.state.clone(), jwt_auth))
-    }
-
-    fn register_routes<S>(&self, router: Router<S>) -> Router<S>
-    where
-        S: Clone + Send + Sync + 'static,
-    {
-        let base = <Self as BaseApiRouter>::base_path();
-        let list_count_path = format!("{}/count", base);
-        let item_count_path = format!("{}/{{id}}/items/count", base);
-
-        let list_count_route = get({
-            let service = self.service();
-            move || async move {
-                let count = service.count_lists().await?;
-                Ok::<_, AppError>(Json(CountResponse { count }))
-            }
-        });
-
-        let item_count_route = get({
-            let service = self.service();
-            move |Path(id): Path<Uuid>| async move {
-                let count = service.count_items_by_list(&id).await?;
-                Ok::<_, AppError>(Json(CountResponse { count }))
-            }
-        });
-
-        router
-            .route(&list_count_path, list_count_route)
-            .route(&item_count_path, item_count_route)
-    }
-}
+const BASE_PATH: &str = "/todo-crud";
 
 pub fn router(state: Arc<AppState>) -> Router {
     let daos = DaoContext::new(&state.db);
     let service = TodoService::new(daos.todo());
-    TodoListCrud::new(service, state.clone())
+    let crud_router = CrudApiRouter::new(service.clone(), BASE_PATH);
+
+    let list_count_route = get(list_count_handler);
+    let item_count_route = get(item_count_handler);
+
+    crud_router
         .router_for()
+        .route("/todo-crud/count", list_count_route)
+        .route("/todo-crud/{id}/items/count", item_count_route)
+        .layer(middleware::from_fn_with_state(state.clone(), jwt_auth))
         .with_state(state)
 }
 
 #[derive(Debug, serde::Serialize)]
 struct CountResponse {
     count: u64,
+}
+
+async fn list_count_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<CountResponse>, AppError> {
+    let daos = DaoContext::new(&state.db);
+    let service = TodoService::new(daos.todo());
+    let count = service.count_lists().await?;
+    Ok(Json(CountResponse { count }))
+}
+
+async fn item_count_handler(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<CountResponse>, AppError> {
+    let daos = DaoContext::new(&state.db);
+    let service = TodoService::new(daos.todo());
+    let count = service.count_items_by_list(&id).await?;
+    Ok(Json(CountResponse { count }))
 }
