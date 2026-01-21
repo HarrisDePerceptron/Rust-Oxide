@@ -157,6 +157,7 @@ struct RouteHandler {
 struct RouteVisitor<'a> {
     source: String,
     handlers: &'a HashMap<String, HandlerInfo>,
+    route_bindings: Option<&'a HashMap<String, Vec<RouteHandler>>>,
     routes: Vec<RouteEntry>,
 }
 
@@ -172,6 +173,18 @@ impl<'a, 'ast> Visit<'ast> for RouteVisitor<'a> {
                     .nth(1)
                     .map(extract_route_handlers)
                     .unwrap_or_default();
+                if handlers.is_empty() {
+                    if let Some(bindings) = self.route_bindings {
+                        if let Some(bound) = node
+                            .args
+                            .iter()
+                            .nth(1)
+                            .and_then(|expr| resolve_route_binding(expr, bindings))
+                        {
+                            handlers = bound;
+                        }
+                    }
+                }
                 if handlers.is_empty() {
                     let methods = node
                         .args
@@ -232,6 +245,22 @@ impl<'a, 'ast> Visit<'ast> for RouteVisitor<'a> {
         }
 
         syn::visit::visit_expr_method_call(self, node);
+    }
+}
+
+fn resolve_route_binding(
+    expr: &Expr,
+    bindings: &HashMap<String, Vec<RouteHandler>>,
+) -> Option<Vec<RouteHandler>> {
+    match expr {
+        Expr::Path(path) => path
+            .path
+            .segments
+            .last()
+            .and_then(|seg| bindings.get(&seg.ident.to_string()).cloned()),
+        Expr::Paren(expr) => resolve_route_binding(&expr.expr, bindings),
+        Expr::Reference(expr) => resolve_route_binding(&expr.expr, bindings),
+        _ => None,
     }
 }
 
@@ -1621,15 +1650,72 @@ fn parse_routes_file(
         .unwrap_or(path)
         .display()
         .to_string();
-    let mut visitor = RouteVisitor {
-        source,
-        handlers: &handlers,
-        routes: Vec::new(),
-    };
-    visitor.visit_file(&parsed);
-    visitor.routes
+    let mut routes = Vec::new();
+    for item in &parsed.items {
+        match item {
+            Item::Fn(item_fn) => {
+                let route_bindings = collect_route_bindings(&item_fn.block);
+                let mut visitor = RouteVisitor {
+                    source: source.clone(),
+                    handlers: &handlers,
+                    route_bindings: Some(&route_bindings),
+                    routes: Vec::new(),
+                };
+                visitor.visit_block(&item_fn.block);
+                routes.extend(visitor.routes);
+            }
+            Item::Impl(item_impl) => {
+                for item in &item_impl.items {
+                    let ImplItem::Fn(item_fn) = item else {
+                        continue;
+                    };
+                    let route_bindings = collect_route_bindings(&item_fn.block);
+                    let mut visitor = RouteVisitor {
+                        source: source.clone(),
+                        handlers: &handlers,
+                        route_bindings: Some(&route_bindings),
+                        routes: Vec::new(),
+                    };
+                    visitor.visit_block(&item_fn.block);
+                    routes.extend(visitor.routes);
+                }
+            }
+            _ => {}
+        }
+    }
+    routes
 }
 
+fn collect_route_bindings(block: &Block) -> HashMap<String, Vec<RouteHandler>> {
+    let mut out = HashMap::new();
+    for stmt in &block.stmts {
+        let Stmt::Local(local) = stmt else {
+            continue;
+        };
+        let name = match &local.pat {
+            Pat::Ident(ident) => ident.ident.to_string(),
+            _ => continue,
+        };
+        let Some(init) = local.init.as_ref().map(|init| init.expr.as_ref()) else {
+            continue;
+        };
+        let mut handlers = extract_route_handlers(init);
+        if handlers.is_empty() {
+            let methods = extract_methods(init);
+            handlers = methods
+                .into_iter()
+                .map(|method| RouteHandler {
+                    method,
+                    handler: None,
+                })
+                .collect();
+        }
+        if !handlers.is_empty() {
+            out.insert(name, handlers);
+        }
+    }
+    out
+}
 fn crud_route_entries(
     base: &str,
     source: &str,
