@@ -27,6 +27,8 @@ type ColumnOf<S> = <EntityOf<S> as EntityTrait>::Column;
 pub struct ListQuery {
     pub page: Option<u64>,
     pub page_size: Option<u64>,
+    #[serde(flatten, default)]
+    pub filters: HashMap<String, String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -220,9 +222,13 @@ where
                     let page = query.page.unwrap_or(1);
                     let page_size = query.page_size.unwrap_or_else(Self::list_default_page_size);
                     let response = service
-                        .find(page, page_size, Self::list_order(), |select| {
-                            Self::list_apply(&query, select)
-                        })
+                        .find_with_filters(
+                            page,
+                            page_size,
+                            Self::list_order(),
+                            query.filters.clone(),
+                            |select| Self::list_apply(&query, select),
+                        )
                         .await?;
                     Ok::<_, AppError>(Json(response))
                 }

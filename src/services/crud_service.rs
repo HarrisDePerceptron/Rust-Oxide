@@ -1,8 +1,14 @@
 use axum::http::StatusCode;
-use sea_orm::{EntityTrait, IntoActiveModel, Order, Select};
+use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime};
+use sea_orm::{
+    ColumnTrait, EntityTrait, IdenStatic, IntoActiveModel, Iterable, Order, Select,
+};
+use sea_orm::sea_query::{ColumnType, Value as QueryValue};
+use serde_json::Value as JsonValue;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
-use crate::db::dao::{DaoBase, DaoLayerError, PaginatedResponse};
+use crate::db::dao::{ColumnFilter, DaoBase, DaoLayerError, PaginatedResponse};
 use crate::error::AppError;
 
 type CrudEntity<D> = <D as DaoBase>::Entity;
@@ -42,11 +48,42 @@ pub enum CrudOp {
     Delete,
 }
 
+const INVALID_FILTER_MESSAGE: &str = "Invalid filter";
+const INVALID_FILTER_VALUE_MESSAGE: &str = "Invalid filter value";
+
+pub struct FilterSpec<C> {
+    pub key: &'static str,
+    pub column: C,
+    pub parse: fn(&str) -> Result<QueryValue, AppError>,
+}
+
+#[derive(Clone, Copy)]
+pub enum FilterParseStrategy {
+    ByColumnType,
+    StringsOnly,
+    BestEffortString,
+}
+
+pub enum FilterMode<C: 'static> {
+    Allowlist(&'static [FilterSpec<C>]),
+    AllColumns {
+        deny: &'static [&'static str],
+        parse: FilterParseStrategy,
+    },
+}
+
 #[async_trait::async_trait]
 pub trait CrudService {
     type Dao: DaoBase;
 
     fn dao(&self) -> &Self::Dao;
+    fn list_filter_mode(&self) -> FilterMode<CrudColumn<Self::Dao>> {
+        FilterMode::AllColumns {
+            deny: &[],
+            parse: FilterParseStrategy::ByColumnType,
+        }
+    }
+
     fn errors(&self) -> CrudErrors {
         CrudErrors::default()
     }
@@ -105,6 +142,25 @@ pub trait CrudService {
             .map_err(|err| self.map_error(CrudOp::List, err))
     }
 
+    async fn find_with_filters<F>(
+        &self,
+        page: u64,
+        page_size: u64,
+        order: Option<(CrudColumn<Self::Dao>, Order)>,
+        filters: HashMap<String, String>,
+        apply: F,
+    ) -> Result<PaginatedResponse<CrudModel<Self::Dao>>, AppError>
+    where
+        F: FnOnce(Select<CrudEntity<Self::Dao>>) -> Select<CrudEntity<Self::Dao>> + Send,
+        CrudColumn<Self::Dao>: ColumnTrait + Clone,
+    {
+        let column_filters = self.build_column_filters(filters)?;
+        self.dao()
+            .find_with_filters(page, page_size, order, &column_filters, apply)
+            .await
+            .map_err(|err| self.map_error(CrudOp::List, err))
+    }
+
     async fn update<F>(&self, id: Uuid, apply: F) -> Result<CrudModel<Self::Dao>, AppError>
     where
         F: for<'a> FnOnce(&'a mut CrudActiveModel<Self::Dao>) + Send,
@@ -121,5 +177,215 @@ pub trait CrudService {
             .await
             .map(|_| ())
             .map_err(|err| self.map_error(CrudOp::Delete, err))
+    }
+
+    fn build_column_filters(
+        &self,
+        filters: HashMap<String, String>,
+    ) -> Result<Vec<ColumnFilter<CrudColumn<Self::Dao>>>, AppError>
+    where
+        CrudColumn<Self::Dao>: ColumnTrait + Clone,
+    {
+        if filters.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        match self.list_filter_mode() {
+            FilterMode::Allowlist(specs) => {
+                let spec_map: HashMap<&'static str, &FilterSpec<CrudColumn<Self::Dao>>> =
+                    specs.iter().map(|spec| (spec.key, spec)).collect();
+                let mut parsed = Vec::with_capacity(filters.len());
+                for (key, value) in filters {
+                    let spec = spec_map
+                        .get(key.as_str())
+                        .ok_or_else(invalid_filter)?;
+                    let parsed_value = (spec.parse)(&value)?;
+                    parsed.push(ColumnFilter {
+                        column: spec.column.clone(),
+                        value: parsed_value,
+                    });
+                }
+                Ok(parsed)
+            }
+            FilterMode::AllColumns { deny, parse } => {
+                let deny_set: HashSet<&'static str> = deny.iter().copied().collect();
+                let column_map: HashMap<&'static str, CrudColumn<Self::Dao>> =
+                    CrudColumn::<Self::Dao>::iter()
+                        .map(|column| (column.as_str(), column))
+                        .collect();
+
+                let mut parsed = Vec::with_capacity(filters.len());
+                for (key, value) in filters {
+                    if deny_set.contains(key.as_str()) {
+                        return Err(invalid_filter());
+                    }
+                    let column = column_map
+                        .get(key.as_str())
+                        .ok_or_else(invalid_filter)?;
+                    let parsed_value = match parse {
+                        FilterParseStrategy::BestEffortString => {
+                            QueryValue::String(Some(value))
+                        }
+                        FilterParseStrategy::StringsOnly => {
+                            if !is_string_column_type(column.def().get_column_type()) {
+                                return Err(invalid_filter());
+                            }
+                            QueryValue::String(Some(value))
+                        }
+                        FilterParseStrategy::ByColumnType => {
+                            parse_value_by_column_type(&value, column.def().get_column_type())?
+                        }
+                    };
+                    parsed.push(ColumnFilter {
+                        column: column.clone(),
+                        value: parsed_value,
+                    });
+                }
+                Ok(parsed)
+            }
+        }
+    }
+}
+
+fn invalid_filter() -> AppError {
+    AppError::new(StatusCode::BAD_REQUEST, INVALID_FILTER_MESSAGE)
+}
+
+fn invalid_filter_value() -> AppError {
+    AppError::new(StatusCode::BAD_REQUEST, INVALID_FILTER_VALUE_MESSAGE)
+}
+
+fn parse_bool(raw: &str) -> Result<bool, AppError> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "true" | "t" | "1" | "yes" | "y" => Ok(true),
+        "false" | "f" | "0" | "no" | "n" => Ok(false),
+        _ => Err(invalid_filter_value()),
+    }
+}
+
+fn parse_int<T>(raw: &str) -> Result<T, AppError>
+where
+    T: std::str::FromStr,
+{
+    raw.trim().parse::<T>().map_err(|_| invalid_filter_value())
+}
+
+fn parse_float(raw: &str) -> Result<f64, AppError> {
+    raw.trim().parse::<f64>().map_err(|_| invalid_filter_value())
+}
+
+fn parse_date(raw: &str) -> Result<NaiveDate, AppError> {
+    NaiveDate::parse_from_str(raw.trim(), "%Y-%m-%d").map_err(|_| invalid_filter_value())
+}
+
+fn parse_time(raw: &str) -> Result<NaiveTime, AppError> {
+    let raw = raw.trim();
+    for format in ["%H:%M:%S%.f", "%H:%M:%S"] {
+        if let Ok(time) = NaiveTime::parse_from_str(raw, format) {
+            return Ok(time);
+        }
+    }
+    Err(invalid_filter_value())
+}
+
+fn parse_naive_datetime(raw: &str) -> Result<NaiveDateTime, AppError> {
+    let raw = raw.trim();
+    if let Ok(dt) = DateTime::parse_from_rfc3339(raw) {
+        return Ok(dt.naive_utc());
+    }
+    for format in [
+        "%Y-%m-%dT%H:%M:%S%.f",
+        "%Y-%m-%d %H:%M:%S%.f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+    ] {
+        if let Ok(dt) = NaiveDateTime::parse_from_str(raw, format) {
+            return Ok(dt);
+        }
+    }
+    Err(invalid_filter_value())
+}
+
+fn parse_datetime_with_tz(raw: &str) -> Result<DateTime<FixedOffset>, AppError> {
+    DateTime::parse_from_rfc3339(raw.trim()).map_err(|_| invalid_filter_value())
+}
+
+fn parse_json(raw: &str) -> Result<JsonValue, AppError> {
+    serde_json::from_str(raw.trim()).map_err(|_| invalid_filter_value())
+}
+
+fn is_string_column_type(column_type: &ColumnType) -> bool {
+    matches!(
+        column_type,
+        ColumnType::Char(_) | ColumnType::String(_) | ColumnType::Text | ColumnType::Enum { .. }
+    )
+}
+
+fn parse_value_by_column_type(raw: &str, column_type: &ColumnType) -> Result<QueryValue, AppError> {
+    if raw.trim().eq_ignore_ascii_case("null") {
+        return Err(invalid_filter_value());
+    }
+
+    match column_type {
+        ColumnType::Char(_) => {
+            let mut chars = raw.chars();
+            match (chars.next(), chars.next()) {
+                (Some(ch), None) => Ok(QueryValue::Char(Some(ch))),
+                _ => Err(invalid_filter_value()),
+            }
+        }
+        ColumnType::String(_) | ColumnType::Text => Ok(QueryValue::String(Some(raw.to_string()))),
+        ColumnType::TinyInteger => Ok(QueryValue::TinyInt(Some(parse_int::<i8>(raw)?))),
+        ColumnType::SmallInteger => Ok(QueryValue::SmallInt(Some(parse_int::<i16>(raw)?))),
+        ColumnType::Integer => Ok(QueryValue::Int(Some(parse_int::<i32>(raw)?))),
+        ColumnType::BigInteger => Ok(QueryValue::BigInt(Some(parse_int::<i64>(raw)?))),
+        ColumnType::TinyUnsigned => Ok(QueryValue::TinyUnsigned(Some(parse_int::<u8>(raw)?))),
+        ColumnType::SmallUnsigned => Ok(QueryValue::SmallUnsigned(Some(parse_int::<u16>(raw)?))),
+        ColumnType::Unsigned => Ok(QueryValue::Unsigned(Some(parse_int::<u32>(raw)?))),
+        ColumnType::BigUnsigned => Ok(QueryValue::BigUnsigned(Some(parse_int::<u64>(raw)?))),
+        ColumnType::Float => Ok(QueryValue::Float(Some(parse_float(raw)? as f32))),
+        ColumnType::Double => Ok(QueryValue::Double(Some(parse_float(raw)?))),
+        ColumnType::Decimal(_) | ColumnType::Money(_) => {
+            Ok(QueryValue::Double(Some(parse_float(raw)?)))
+        }
+        ColumnType::DateTime | ColumnType::Timestamp => {
+            Ok(QueryValue::ChronoDateTime(Some(parse_naive_datetime(raw)?)))
+        }
+        ColumnType::TimestampWithTimeZone => Ok(QueryValue::ChronoDateTimeWithTimeZone(Some(
+            parse_datetime_with_tz(raw)?,
+        ))),
+        ColumnType::Time => Ok(QueryValue::ChronoTime(Some(parse_time(raw)?))),
+        ColumnType::Date => Ok(QueryValue::ChronoDate(Some(parse_date(raw)?))),
+        ColumnType::Boolean => Ok(QueryValue::Bool(Some(parse_bool(raw)?))),
+        ColumnType::Json | ColumnType::JsonBinary => {
+            Ok(QueryValue::Json(Some(Box::new(parse_json(raw)?))))
+        }
+        ColumnType::Uuid => {
+            let uuid = Uuid::parse_str(raw.trim()).map_err(|_| invalid_filter_value())?;
+            Ok(QueryValue::Uuid(Some(uuid)))
+        }
+        ColumnType::Enum { variants, .. } => {
+            let raw = raw.trim();
+            if variants.iter().any(|variant| variant.to_string() == raw) {
+                Ok(QueryValue::String(Some(raw.to_string())))
+            } else {
+                Err(invalid_filter_value())
+            }
+        }
+        ColumnType::Year => Ok(QueryValue::Int(Some(parse_int::<i32>(raw)?))),
+        ColumnType::Binary(_)
+        | ColumnType::VarBinary(_)
+        | ColumnType::Blob
+        | ColumnType::Bit(_)
+        | ColumnType::VarBit(_)
+        | ColumnType::Interval(_, _)
+        | ColumnType::Array(_)
+        | ColumnType::Vector(_)
+        | ColumnType::Cidr
+        | ColumnType::Inet
+        | ColumnType::MacAddr
+        | ColumnType::LTree
+        | ColumnType::Custom(_) => Err(invalid_filter()),
+        _ => Err(invalid_filter()),
     }
 }

@@ -1,7 +1,7 @@
 use chrono::Utc;
 use sea_orm::{
-    ActiveModelTrait, DatabaseConnection, EntityTrait, FromQueryResult, IntoActiveModel, Order,
-    PrimaryKeyTrait, QueryOrder, QuerySelect, Select,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, FromQueryResult,
+    IntoActiveModel, Order, PrimaryKeyTrait, QueryFilter, QueryOrder, QuerySelect, Select,
 };
 use uuid::Uuid;
 
@@ -15,6 +15,12 @@ pub struct PaginatedResponse<T> {
     pub page_size: u64,
     pub has_next: bool,
     pub total: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ColumnFilter<C> {
+    pub column: C,
+    pub value: sea_orm::sea_query::Value,
 }
 
 pub struct DaoPager<D, F>
@@ -121,6 +127,53 @@ where
 
         let base = Self::Entity::find();
         let filtered = apply(base);
+        let ordered = match order {
+            Some((column, order)) => filtered.order_by(column, order),
+            None => filtered.order_by_desc(Self::Entity::created_at_column()),
+        };
+        let fetch_size = page_size.saturating_add(1);
+        let offset = page.saturating_sub(1).saturating_mul(page_size);
+        let mut data = ordered
+            .limit(fetch_size)
+            .offset(offset)
+            .all(self.db())
+            .await
+            .map_err(DaoLayerError::Db)?;
+
+        let has_next = data.len() > page_size as usize;
+        if has_next {
+            data.truncate(page_size as usize);
+        }
+
+        Ok(PaginatedResponse {
+            data,
+            page,
+            page_size,
+            has_next,
+            total: None,
+        })
+    }
+
+    async fn find_with_filters(
+        &self,
+        page: u64,
+        page_size: u64,
+        order: Option<(<Self::Entity as EntityTrait>::Column, Order)>,
+        filters: &[ColumnFilter<<Self::Entity as EntityTrait>::Column>],
+        apply: impl FnOnce(Select<Self::Entity>) -> Select<Self::Entity> + Send,
+    ) -> DaoResult<PaginatedResponse<<Self::Entity as EntityTrait>::Model>>
+    where
+        <Self::Entity as EntityTrait>::Column: Clone,
+    {
+        if page == 0 || page_size == 0 || page_size > Self::MAX_PAGE_SIZE {
+            return Err(DaoLayerError::InvalidPagination { page, page_size });
+        }
+
+        let base = Self::Entity::find();
+        let filtered = apply(base);
+        let filtered = filters.iter().fold(filtered, |select, filter| {
+            select.filter(filter.column.clone().eq(filter.value.clone()))
+        });
         let ordered = match order {
             Some((column, order)) => filtered.order_by(column, order),
             None => filtered.order_by_desc(Self::Entity::created_at_column()),
