@@ -46,12 +46,19 @@ struct EntitiesTemplate {
     erd_mermaid: &'static str,
 }
 
+#[derive(Template)]
+#[template(path = "docs.html")]
+struct DocsTemplate {
+    now: String,
+}
+
 pub fn router() -> Router {
     Router::new()
         .route_service("/{*file}", ServeDir::new("public"))
         .route("/", get(index))
         .route("/public", get(handler))
         .route("/entities", get(entities_view))
+        .route("/docs", get(docs_view))
         .route("/routes", get(routes_view))
         .route("/routes.json", get(list_routes_json))
 }
@@ -93,6 +100,14 @@ async fn entities_view() -> Result<Html<String>, AppError> {
     }
         .render()
         .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render entities"))?;
+    Ok(Html(rendered))
+}
+
+async fn docs_view() -> Result<Html<String>, AppError> {
+    let now = Local::now().to_rfc3339();
+    let rendered = DocsTemplate { now }
+        .render()
+        .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render docs"))?;
     Ok(Html(rendered))
 }
 
