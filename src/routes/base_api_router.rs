@@ -1,6 +1,7 @@
 use axum::{
     Json, Router,
     extract::{Path, Query, Request},
+    extract::rejection::QueryRejection,
     http::StatusCode,
     response::Response,
     routing::{MethodRouter, Route, delete, get, patch, post},
@@ -49,6 +50,7 @@ const DEFAULT_ALLOWED_METHODS: [Method; 5] = [
 ];
 
 const INVALID_PAYLOAD_MESSAGE: &str = "Invalid payload";
+const INVALID_QUERY_MESSAGE: &str = "Invalid query";
 
 type MethodLayer = BoxCloneSyncServiceLayer<Route<Infallible>, Request, Response, Infallible>;
 
@@ -218,7 +220,9 @@ where
         if allowed.contains(&Method::List) {
             let route = get({
                 let service = self.service();
-                move |Query(query): Query<ListQuery>| async move {
+                move |query: Result<Query<ListQuery>, QueryRejection>| async move {
+                    let Query(query) = query
+                        .map_err(|_| AppError::new(StatusCode::BAD_REQUEST, INVALID_QUERY_MESSAGE))?;
                     let page = query.page.unwrap_or(1);
                     let page_size = query.page_size.unwrap_or_else(Self::list_default_page_size);
                     let response = service
