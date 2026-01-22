@@ -8,7 +8,7 @@ use serde_json::Value as JsonValue;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
-use crate::db::dao::{ColumnFilter, DaoBase, DaoLayerError, FilterOp, PaginatedResponse};
+use crate::db::dao::{ColumnFilter, CompareOp, DaoBase, DaoLayerError, FilterOp, PaginatedResponse};
 use crate::error::AppError;
 
 type CrudEntity<D> = <D as DaoBase>::Entity;
@@ -229,8 +229,7 @@ pub trait CrudService {
                             if is_string_column_type(column_type) {
                                 parse_string_filter(&value)?
                             } else {
-                                ensure_no_wildcard(&value)?;
-                                FilterOp::Eq(QueryValue::String(Some(value)))
+                                parse_non_string_filter(&value, column_type)?
                             }
                         }
                         FilterParseStrategy::StringsOnly => {
@@ -243,8 +242,7 @@ pub trait CrudService {
                             if is_string_column_type(column_type) {
                                 parse_string_filter(&value)?
                             } else {
-                                ensure_no_wildcard(&value)?;
-                                FilterOp::Eq(parse_value_by_column_type(&value, column_type)?)
+                                parse_non_string_filter(&value, column_type)?
                             }
                         }
                     };
@@ -377,6 +375,92 @@ fn parse_string_filter(raw: &str) -> Result<FilterOp, AppError> {
         pattern,
         escape: '\\',
     })
+}
+
+fn parse_comparison(raw: &str) -> Option<(CompareOp, &str)> {
+    let raw = raw.trim_start();
+    if let Some(rest) = raw.strip_prefix(">=") {
+        return Some((CompareOp::Gte, rest.trim_start()));
+    }
+    if let Some(rest) = raw.strip_prefix("<=") {
+        return Some((CompareOp::Lte, rest.trim_start()));
+    }
+    if let Some(rest) = raw.strip_prefix('>') {
+        return Some((CompareOp::Gt, rest.trim_start()));
+    }
+    if let Some(rest) = raw.strip_prefix('<') {
+        return Some((CompareOp::Lt, rest.trim_start()));
+    }
+    None
+}
+
+fn parse_range(raw: &str) -> Result<Option<(&str, &str)>, AppError> {
+    let raw = raw.trim();
+    let Some(idx) = raw.find("..") else {
+        return Ok(None);
+    };
+    let (start, rest) = raw.split_at(idx);
+    let end = &rest[2..];
+    if end.contains("..") {
+        return Err(invalid_filter_value());
+    }
+    let start = start.trim();
+    let end = end.trim();
+    if start.is_empty() || end.is_empty() {
+        return Err(invalid_filter_value());
+    }
+    Ok(Some((start, end)))
+}
+
+fn is_orderable_column_type(column_type: &ColumnType) -> bool {
+    matches!(
+        column_type,
+        ColumnType::TinyInteger
+            | ColumnType::SmallInteger
+            | ColumnType::Integer
+            | ColumnType::BigInteger
+            | ColumnType::TinyUnsigned
+            | ColumnType::SmallUnsigned
+            | ColumnType::Unsigned
+            | ColumnType::BigUnsigned
+            | ColumnType::Float
+            | ColumnType::Double
+            | ColumnType::Decimal(_)
+            | ColumnType::Money(_)
+            | ColumnType::DateTime
+            | ColumnType::Timestamp
+            | ColumnType::TimestampWithTimeZone
+            | ColumnType::Time
+            | ColumnType::Date
+            | ColumnType::Year
+    )
+}
+
+fn parse_non_string_filter(raw: &str, column_type: &ColumnType) -> Result<FilterOp, AppError> {
+    ensure_no_wildcard(raw)?;
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return Err(invalid_filter_value());
+    }
+
+    if let Some((op, rest)) = parse_comparison(raw) {
+        if rest.is_empty() || !is_orderable_column_type(column_type) {
+            return Err(invalid_filter());
+        }
+        let value = parse_value_by_column_type(rest, column_type)?;
+        return Ok(FilterOp::Compare { op, value });
+    }
+
+    if let Some((start, end)) = parse_range(raw)? {
+        if !is_orderable_column_type(column_type) {
+            return Err(invalid_filter());
+        }
+        let min = parse_value_by_column_type(start, column_type)?;
+        let max = parse_value_by_column_type(end, column_type)?;
+        return Ok(FilterOp::Between { min, max });
+    }
+
+    Ok(FilterOp::Eq(parse_value_by_column_type(raw, column_type)?))
 }
 
 fn is_string_column_type(column_type: &ColumnType) -> bool {

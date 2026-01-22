@@ -7,6 +7,8 @@ use sea_orm::entity::prelude::*;
 #[sea_orm(table_name = "todo_lists")]
 pub struct Model {
     pub title: String,
+    #[sea_orm(default_value = 0)]
+    pub score: i32,
     #[sea_orm(has_many)]
     pub items: HasMany<super::todo_item::Entity>,
 }
