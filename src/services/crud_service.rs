@@ -8,7 +8,7 @@ use serde_json::Value as JsonValue;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
-use crate::db::dao::{ColumnFilter, DaoBase, DaoLayerError, PaginatedResponse};
+use crate::db::dao::{ColumnFilter, DaoBase, DaoLayerError, FilterOp, PaginatedResponse};
 use crate::error::AppError;
 
 type CrudEntity<D> = <D as DaoBase>::Entity;
@@ -54,7 +54,7 @@ const INVALID_FILTER_VALUE_MESSAGE: &str = "Invalid filter value";
 pub struct FilterSpec<C> {
     pub key: &'static str,
     pub column: C,
-    pub parse: fn(&str) -> Result<QueryValue, AppError>,
+    pub parse: fn(&str) -> Result<FilterOp, AppError>,
 }
 
 #[derive(Clone, Copy)]
@@ -199,10 +199,10 @@ pub trait CrudService {
                     let spec = spec_map
                         .get(key.as_str())
                         .ok_or_else(invalid_filter)?;
-                    let parsed_value = (spec.parse)(&value)?;
+                    let parsed_op = (spec.parse)(&value)?;
                     parsed.push(ColumnFilter {
                         column: spec.column.clone(),
-                        value: parsed_value,
+                        op: parsed_op,
                     });
                 }
                 Ok(parsed)
@@ -222,23 +222,35 @@ pub trait CrudService {
                     let column = column_map
                         .get(key.as_str())
                         .ok_or_else(invalid_filter)?;
-                    let parsed_value = match parse {
+                    let column_def = column.def();
+                    let column_type = column_def.get_column_type();
+                    let parsed_op = match parse {
                         FilterParseStrategy::BestEffortString => {
-                            QueryValue::String(Some(value))
+                            if is_string_column_type(column_type) {
+                                parse_string_filter(&value)?
+                            } else {
+                                ensure_no_wildcard(&value)?;
+                                FilterOp::Eq(QueryValue::String(Some(value)))
+                            }
                         }
                         FilterParseStrategy::StringsOnly => {
-                            if !is_string_column_type(column.def().get_column_type()) {
+                            if !is_string_column_type(column_type) {
                                 return Err(invalid_filter());
                             }
-                            QueryValue::String(Some(value))
+                            parse_string_filter(&value)?
                         }
                         FilterParseStrategy::ByColumnType => {
-                            parse_value_by_column_type(&value, column.def().get_column_type())?
+                            if is_string_column_type(column_type) {
+                                parse_string_filter(&value)?
+                            } else {
+                                ensure_no_wildcard(&value)?;
+                                FilterOp::Eq(parse_value_by_column_type(&value, column_type)?)
+                            }
                         }
                     };
                     parsed.push(ColumnFilter {
                         column: column.clone(),
-                        value: parsed_value,
+                        op: parsed_op,
                     });
                 }
                 Ok(parsed)
@@ -312,6 +324,59 @@ fn parse_datetime_with_tz(raw: &str) -> Result<DateTime<FixedOffset>, AppError> 
 
 fn parse_json(raw: &str) -> Result<JsonValue, AppError> {
     serde_json::from_str(raw.trim()).map_err(|_| invalid_filter_value())
+}
+
+fn ensure_no_wildcard(raw: &str) -> Result<(), AppError> {
+    if raw.contains('*') {
+        return Err(invalid_filter_value());
+    }
+    Ok(())
+}
+
+fn escape_like(raw: &str) -> String {
+    let mut escaped = String::with_capacity(raw.len());
+    for ch in raw.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '%' => escaped.push_str("\\%"),
+            '_' => escaped.push_str("\\_"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
+}
+
+fn parse_string_filter(raw: &str) -> Result<FilterOp, AppError> {
+    let raw = raw.trim();
+    if raw.is_empty() || raw == "*" {
+        return Err(invalid_filter_value());
+    }
+
+    let leading = raw.starts_with('*');
+    let trailing = raw.ends_with('*');
+    let inner = raw.trim_matches('*');
+    if inner.is_empty() {
+        return Err(invalid_filter_value());
+    }
+    if inner.contains('*') {
+        return Err(invalid_filter_value());
+    }
+
+    if !leading && !trailing {
+        return Ok(FilterOp::Eq(QueryValue::String(Some(inner.to_string()))));
+    }
+
+    let escaped = escape_like(inner);
+    let pattern = match (leading, trailing) {
+        (true, true) => format!("%{escaped}%"),
+        (true, false) => format!("%{escaped}"),
+        (false, true) => format!("{escaped}%"),
+        (false, false) => escaped,
+    };
+    Ok(FilterOp::Like {
+        pattern,
+        escape: '\\',
+    })
 }
 
 fn is_string_column_type(column_type: &ColumnType) -> bool {

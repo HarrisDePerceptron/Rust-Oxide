@@ -3,6 +3,7 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, FromQueryResult,
     IntoActiveModel, Order, PrimaryKeyTrait, QueryFilter, QueryOrder, QuerySelect, Select,
 };
+use sea_orm::sea_query::{Expr, ExprTrait, LikeExpr};
 use uuid::Uuid;
 
 use super::base_traits::{HasCreatedAtColumn, HasIdActiveModel, TimestampedActiveModel};
@@ -18,9 +19,15 @@ pub struct PaginatedResponse<T> {
 }
 
 #[derive(Debug, Clone)]
+pub enum FilterOp {
+    Eq(sea_orm::sea_query::Value),
+    Like { pattern: String, escape: char },
+}
+
+#[derive(Debug, Clone)]
 pub struct ColumnFilter<C> {
     pub column: C,
-    pub value: sea_orm::sea_query::Value,
+    pub op: FilterOp,
 }
 
 pub struct DaoPager<D, F>
@@ -171,8 +178,12 @@ where
 
         let base = Self::Entity::find();
         let filtered = apply(base);
-        let filtered = filters.iter().fold(filtered, |select, filter| {
-            select.filter(filter.column.clone().eq(filter.value.clone()))
+        let filtered = filters.iter().fold(filtered, |select, filter| match &filter.op {
+            FilterOp::Eq(value) => select.filter(filter.column.clone().eq(value.clone())),
+            FilterOp::Like { pattern, escape } => select.filter(
+                Expr::col(filter.column.clone())
+                    .like(LikeExpr::new(pattern).escape(*escape)),
+            ),
         });
         let ordered = match order {
             Some((column, order)) => filtered.order_by(column, order),

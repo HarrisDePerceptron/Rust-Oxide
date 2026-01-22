@@ -7,7 +7,7 @@ pub mod refresh_token_dao;
 pub mod todo_dao;
 pub mod user_dao;
 
-pub use base::{ColumnFilter, DaoBase, DaoPager, PaginatedResponse};
+pub use base::{ColumnFilter, DaoBase, DaoPager, FilterOp, PaginatedResponse};
 pub use base_traits::{HasCreatedAtColumn, HasIdActiveModel, TimestampedActiveModel};
 pub use error::{DaoLayerError, DaoResult};
 pub use refresh_token_dao::RefreshTokenDao;
