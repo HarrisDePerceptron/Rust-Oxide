@@ -128,6 +128,8 @@ struct UiState {
     error: Option<String>,
     db_index: usize,
     auth_index: usize,
+    cursor: usize,
+    aborted: bool,
 }
 
 impl UiState {
@@ -142,6 +144,11 @@ impl UiState {
 }
 
 struct TuiCleanup;
+
+enum TuiOutcome {
+    Completed(InitArgs),
+    Aborted,
+}
 
 impl Drop for TuiCleanup {
     fn drop(&mut self) {
@@ -161,7 +168,13 @@ fn main() -> Result<()> {
 fn run_init(mut args: InitArgs) -> Result<()> {
     let interactive = !args.non_interactive && io::stdout().is_terminal();
     if interactive {
-        args = run_tui(args)?;
+        match run_tui(args)? {
+            TuiOutcome::Completed(updated) => args = updated,
+            TuiOutcome::Aborted => {
+                println!("Did not create project.");
+                return Ok(());
+            }
+        }
     }
 
     let name = match args.name.take() {
@@ -242,7 +255,7 @@ fn run_init(mut args: InitArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_tui(args: InitArgs) -> Result<InitArgs> {
+fn run_tui(args: InitArgs) -> Result<TuiOutcome> {
     let mut stdout = io::stdout();
     enable_raw_mode().context("failed to enable raw mode")?;
     execute!(stdout, EnterAlternateScreen, cursor::Hide).context("failed to init tui")?;
@@ -262,9 +275,12 @@ fn run_tui(args: InitArgs) -> Result<InitArgs> {
             .unwrap_or_default(),
         input: String::new(),
         error: None,
-        db_index: 0,
-        auth_index: 0,
+        db_index: first_enabled_index(DB_OPTIONS),
+        auth_index: first_enabled_index(AUTH_OPTIONS),
+        cursor: 0,
+        aborted: false,
     };
+    sync_input(&mut state);
 
     loop {
         terminal.draw(|frame| draw_ui(frame, &state))?;
@@ -278,7 +294,11 @@ fn run_tui(args: InitArgs) -> Result<InitArgs> {
         }
     }
 
-    Ok(InitArgs {
+    if state.aborted {
+        return Ok(TuiOutcome::Aborted);
+    }
+
+    Ok(TuiOutcome::Completed(InitArgs {
         name: Some(state.name),
         out: Some(PathBuf::from(state.out_dir)),
         db: DEFAULT_DB.to_string(),
@@ -286,12 +306,15 @@ fn run_tui(args: InitArgs) -> Result<InitArgs> {
         repo: args.repo,
         force: args.force,
         non_interactive: args.non_interactive,
-    })
+    }))
 }
 
 fn handle_key(state: &mut UiState, key: KeyEvent) -> Result<bool> {
     match key.code {
-        KeyCode::Esc => bail!("init cancelled"),
+        KeyCode::Esc => {
+            state.aborted = true;
+            return Ok(true);
+        }
         KeyCode::Char('b') | KeyCode::Char('B') if state.step != Step::ProjectName => {
             state.step = state.step.prev();
             sync_input(state);
@@ -312,25 +335,43 @@ fn handle_key(state: &mut UiState, key: KeyEvent) -> Result<bool> {
 fn handle_choice_delta(state: &mut UiState, delta: isize) {
     match state.step {
         Step::Database => {
-            state.db_index = adjust_index(state.db_index, DB_OPTIONS.len(), delta);
+            state.db_index = adjust_choice_index(state.db_index, DB_OPTIONS, delta);
         }
         Step::Auth => {
-            state.auth_index = adjust_index(state.auth_index, AUTH_OPTIONS.len(), delta);
+            state.auth_index = adjust_choice_index(state.auth_index, AUTH_OPTIONS, delta);
         }
         _ => {}
     }
 }
 
-fn adjust_index(current: usize, max: usize, delta: isize) -> usize {
-    if max == 0 {
+fn adjust_choice_index(current: usize, options: &[ChoiceOption], delta: isize) -> usize {
+    if options.is_empty() {
         return current;
     }
+    let mut idx = current;
+    for _ in 0..options.len() {
+        idx = shift_index(idx, options.len(), delta);
+        if options[idx].enabled {
+            return idx;
+        }
+    }
+    current
+}
+
+fn shift_index(current: usize, max: usize, delta: isize) -> usize {
     let next = current as isize + delta;
     if next < 0 {
         (max - 1) as usize
     } else {
         (next as usize) % max
     }
+}
+
+fn first_enabled_index(options: &[ChoiceOption]) -> usize {
+    options
+        .iter()
+        .position(|opt| opt.enabled)
+        .unwrap_or(0)
 }
 
 fn apply_step(state: &mut UiState) -> Result<bool> {
@@ -375,12 +416,28 @@ fn handle_text_input(state: &mut UiState, key: KeyEvent) {
         Step::ProjectName | Step::OutputDir => match key.code {
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 state.input.clear();
+                state.cursor = 0;
             }
             KeyCode::Char(ch) => {
-                state.input.push(ch);
+                insert_char(&mut state.input, &mut state.cursor, ch);
             }
             KeyCode::Backspace => {
-                state.input.pop();
+                remove_before_cursor(&mut state.input, &mut state.cursor);
+            }
+            KeyCode::Delete => {
+                remove_at_cursor(&mut state.input, &mut state.cursor);
+            }
+            KeyCode::Left => {
+                move_cursor_left(&state.input, &mut state.cursor);
+            }
+            KeyCode::Right => {
+                move_cursor_right(&state.input, &mut state.cursor);
+            }
+            KeyCode::Home => {
+                state.cursor = 0;
+            }
+            KeyCode::End => {
+                state.cursor = char_count(&state.input);
             }
             _ => {}
         },
@@ -394,6 +451,7 @@ fn sync_input(state: &mut UiState) {
         Step::OutputDir => state.out_dir.clone(),
         _ => String::new(),
     };
+    state.cursor = char_count(&state.input);
 }
 
 fn draw_ui(frame: &mut Frame<'_>, state: &UiState) {
@@ -434,7 +492,7 @@ fn draw_ui(frame: &mut Frame<'_>, state: &UiState) {
             "Project name",
             &state.input,
             state.error.as_deref(),
-            true,
+            state.cursor,
         ),
         Step::Database => choice_lines("Database (use arrows)", DB_OPTIONS, state.db_index),
         Step::Auth => choice_lines("Auth", AUTH_OPTIONS, state.auth_index),
@@ -443,15 +501,15 @@ fn draw_ui(frame: &mut Frame<'_>, state: &UiState) {
                 "Output directory",
                 &state.input,
                 state.error.as_deref(),
-                true,
+                state.cursor,
             )
         }
         Step::Summary => Paragraph::new(vec![
             Line::from("Review"),
             Line::from(format!("Project name: {}", state.name)),
             Line::from(format!("Output dir:   {}", state.out_dir)),
-            Line::from(format!("Database:     {}", DB_OPTIONS[state.db_index])),
-            Line::from(format!("Auth:         {}", AUTH_OPTIONS[state.auth_index])),
+            Line::from(format!("Database:     {}", DB_OPTIONS[state.db_index].label)),
+            Line::from(format!("Auth:         {}", AUTH_OPTIONS[state.auth_index].label)),
             Line::from(""),
             Line::from("Press Enter to generate."),
         ]),
@@ -468,10 +526,10 @@ fn text_input_lines<'a>(
     title: &'a str,
     input: &'a str,
     error: Option<&'a str>,
-    show_cursor: bool,
+    cursor: usize,
 ) -> Paragraph<'a> {
-    let cursor = if show_cursor { "_" } else { "" };
-    let mut lines = vec![Line::from(title), Line::from(format!("> {input}{cursor}"))];
+    let display = render_input_with_cursor(input, cursor);
+    let mut lines = vec![Line::from(title), Line::from(format!("> {display}"))];
     if let Some(err) = error {
         lines.push(Line::from(vec![Span::styled(
             err,
@@ -481,22 +539,110 @@ fn text_input_lines<'a>(
     Paragraph::new(lines).wrap(Wrap { trim: true })
 }
 
-fn choice_lines<'a>(title: &'a str, options: &'a [&'a str], selected: usize) -> Paragraph<'a> {
+fn choice_lines<'a>(
+    title: &'a str,
+    options: &'a [ChoiceOption],
+    selected: usize,
+) -> Paragraph<'a> {
     let mut lines = vec![Line::from(title)];
     for (idx, option) in options.iter().enumerate() {
         let marker = if idx == selected { "(*)" } else { "( )" };
+        let label = if option.enabled {
+            option.label.to_string()
+        } else {
+            format!("{} (coming soon)", option.label)
+        };
         let line = if idx == selected {
             Line::from(vec![
                 Span::styled(marker, Style::default().fg(Color::Green)),
                 Span::raw(" "),
-                Span::styled(*option, Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled(label, Style::default().add_modifier(Modifier::BOLD)),
             ])
+        } else if option.enabled {
+            Line::from(format!("{marker} {label}"))
         } else {
-            Line::from(format!("{marker} {option}"))
+            Line::from(vec![
+                Span::styled(marker, Style::default().fg(Color::DarkGray)),
+                Span::raw(" "),
+                Span::styled(label, Style::default().fg(Color::DarkGray)),
+            ])
         };
         lines.push(line);
     }
     Paragraph::new(lines).wrap(Wrap { trim: true })
+}
+
+fn render_input_with_cursor(input: &str, cursor: usize) -> String {
+    let idx = cursor_to_byte(input, cursor);
+    let mut rendered = String::with_capacity(input.len() + 1);
+    rendered.push_str(&input[..idx]);
+    rendered.push('_');
+    rendered.push_str(&input[idx..]);
+    rendered
+}
+
+fn insert_char(input: &mut String, cursor: &mut usize, ch: char) {
+    let idx = cursor_to_byte(input, *cursor);
+    let mut updated = String::with_capacity(input.len() + ch.len_utf8());
+    updated.push_str(&input[..idx]);
+    updated.push(ch);
+    updated.push_str(&input[idx..]);
+    *input = updated;
+    *cursor += 1;
+}
+
+fn remove_before_cursor(input: &mut String, cursor: &mut usize) {
+    if *cursor == 0 {
+        return;
+    }
+    let end = cursor_to_byte(input, *cursor);
+    let start = cursor_to_byte(input, *cursor - 1);
+    let mut updated = String::with_capacity(input.len().saturating_sub(end - start));
+    updated.push_str(&input[..start]);
+    updated.push_str(&input[end..]);
+    *input = updated;
+    *cursor -= 1;
+}
+
+fn remove_at_cursor(input: &mut String, cursor: &mut usize) {
+    let count = char_count(input);
+    if *cursor >= count {
+        return;
+    }
+    let start = cursor_to_byte(input, *cursor);
+    let end = cursor_to_byte(input, *cursor + 1);
+    let mut updated = String::with_capacity(input.len().saturating_sub(end - start));
+    updated.push_str(&input[..start]);
+    updated.push_str(&input[end..]);
+    *input = updated;
+}
+
+fn move_cursor_left(_input: &str, cursor: &mut usize) {
+    if *cursor > 0 {
+        *cursor -= 1;
+    }
+}
+
+fn move_cursor_right(input: &str, cursor: &mut usize) {
+    let count = char_count(input);
+    if *cursor < count {
+        *cursor += 1;
+    }
+}
+
+fn char_count(input: &str) -> usize {
+    input.chars().count()
+}
+
+fn cursor_to_byte(input: &str, cursor: usize) -> usize {
+    if cursor == 0 {
+        return 0;
+    }
+    input
+        .char_indices()
+        .nth(cursor)
+        .map(|(idx, _)| idx)
+        .unwrap_or_else(|| input.len())
 }
 
 
@@ -638,5 +784,27 @@ fn derive_crate_name(input: &str) -> String {
     out
 }
 
-const DB_OPTIONS: &[&str] = &["postgres"];
-const AUTH_OPTIONS: &[&str] = &["enabled"];
+struct ChoiceOption {
+    label: &'static str,
+    enabled: bool,
+}
+
+const DB_OPTIONS: &[ChoiceOption] = &[
+    ChoiceOption {
+        label: "postgres",
+        enabled: true,
+    },
+    ChoiceOption {
+        label: "mysql",
+        enabled: false,
+    },
+    ChoiceOption {
+        label: "sqlite",
+        enabled: false,
+    },
+];
+
+const AUTH_OPTIONS: &[ChoiceOption] = &[ChoiceOption {
+    label: "enabled",
+    enabled: true,
+}];
