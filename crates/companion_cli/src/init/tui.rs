@@ -1,6 +1,9 @@
 use std::io;
-use std::path::PathBuf;
-use std::time::Duration;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use crossterm::{
@@ -13,10 +16,13 @@ use ratatui::{
     prelude::*,
     widgets::{Paragraph, Wrap},
 };
+use tempfile::TempDir;
 
 use crate::cli::{InitArgs, DEFAULT_PORT};
 
 use super::default_db_url_for;
+
+const SPINNER_FRAMES: &[&str] = &["-", "\\", "|", "/"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Step {
@@ -27,6 +33,7 @@ enum Step {
     Auth,
     OutputDir,
     Summary,
+    Cloning,
 }
 
 impl Step {
@@ -39,11 +46,12 @@ impl Step {
             Step::Auth => 5,
             Step::OutputDir => 6,
             Step::Summary => 7,
+            Step::Cloning => 8,
         }
     }
 
     fn total() -> usize {
-        7
+        8
     }
 
     fn title(self) -> &'static str {
@@ -55,6 +63,7 @@ impl Step {
             Step::Auth => "Auth",
             Step::OutputDir => "Output directory",
             Step::Summary => "Summary",
+            Step::Cloning => "Cloning",
         }
     }
 
@@ -66,7 +75,8 @@ impl Step {
             Step::DatabaseUrl => Step::Auth,
             Step::Auth => Step::OutputDir,
             Step::OutputDir => Step::Summary,
-            Step::Summary => Step::Summary,
+            Step::Summary => Step::Cloning,
+            Step::Cloning => Step::Cloning,
         }
     }
 
@@ -79,6 +89,7 @@ impl Step {
             Step::Auth => Step::DatabaseUrl,
             Step::OutputDir => Step::Auth,
             Step::Summary => Step::OutputDir,
+            Step::Cloning => Step::Summary,
         }
     }
 }
@@ -93,9 +104,17 @@ struct UiState {
     db_index: usize,
     auth_index: usize,
     cursor: usize,
-    aborted: bool,
     db_url: String,
     db_url_source: DbUrlSource,
+    repo: String,
+    temp_dir: Option<TempDir>,
+    repo_dir: Option<PathBuf>,
+    clone_started_at: Option<Instant>,
+    clone_error: Option<String>,
+    spinner_index: usize,
+    clone_cancel_tx: Option<Sender<()>>,
+    clone_result_rx: Option<Receiver<Result<(), String>>>,
+    clone_cancel_requested: bool,
 }
 
 impl UiState {
@@ -119,7 +138,11 @@ enum DbUrlSource {
 struct TuiCleanup;
 
 pub(super) enum TuiOutcome {
-    Completed(InitArgs),
+    Completed {
+        args: InitArgs,
+        temp_dir: TempDir,
+        repo_dir: PathBuf,
+    },
     Aborted,
 }
 
@@ -131,7 +154,7 @@ impl Drop for TuiCleanup {
     }
 }
 
-pub(super) fn run_tui(args: InitArgs) -> Result<TuiOutcome> {
+pub(super) fn run_tui(args: InitArgs, repo: String) -> Result<TuiOutcome> {
     let mut stdout = io::stdout();
     enable_raw_mode().context("failed to enable raw mode")?;
     execute!(stdout, EnterAlternateScreen, cursor::Hide).context("failed to init tui")?;
@@ -143,7 +166,7 @@ pub(super) fn run_tui(args: InitArgs) -> Result<TuiOutcome> {
 
     let mut state = UiState {
         step: Step::ProjectName,
-        name: args.name.unwrap_or_default(),
+        name: args.name.clone().unwrap_or_default(),
         out_dir: args
             .out
             .as_ref()
@@ -155,17 +178,52 @@ pub(super) fn run_tui(args: InitArgs) -> Result<TuiOutcome> {
         db_index: first_enabled_index(DB_OPTIONS),
         auth_index: first_enabled_index(AUTH_OPTIONS),
         cursor: 0,
-        aborted: false,
         db_url: args.database_url.clone().unwrap_or_default(),
         db_url_source: if args.database_url.is_some() {
             DbUrlSource::User
         } else {
             DbUrlSource::Default
         },
+        repo,
+        temp_dir: None,
+        repo_dir: None,
+        clone_started_at: None,
+        clone_error: None,
+        spinner_index: 0,
+        clone_cancel_tx: None,
+        clone_result_rx: None,
+        clone_cancel_requested: false,
     };
     sync_input(&mut state);
 
     loop {
+        if state.step == Step::Cloning {
+            tick_clone(&mut state)?;
+            if let Some(result) = poll_clone_result(&mut state)? {
+                match result {
+                    Ok(()) => {
+                        let init_args = build_args(&state, &args);
+                        let temp_dir = state
+                            .temp_dir
+                            .take()
+                            .context("missing temp dir after clone")?;
+                        let repo_dir = state
+                            .repo_dir
+                            .clone()
+                            .context("missing repo dir after clone")?;
+                        return Ok(TuiOutcome::Completed {
+                            args: init_args,
+                            temp_dir,
+                            repo_dir,
+                        });
+                    }
+                    Err(err) => {
+                        state.clone_error = Some(err);
+                    }
+                }
+            }
+        }
+
         terminal.draw(|frame| draw_ui(frame, &state))?;
 
         if event::poll(Duration::from_millis(120))? {
@@ -177,31 +235,46 @@ pub(super) fn run_tui(args: InitArgs) -> Result<TuiOutcome> {
         }
     }
 
-    if state.aborted {
-        return Ok(TuiOutcome::Aborted);
-    }
+    Ok(TuiOutcome::Aborted)
+}
 
-    Ok(TuiOutcome::Completed(InitArgs {
-        name: Some(state.name),
-        out: Some(PathBuf::from(state.out_dir)),
+fn build_args(state: &UiState, args: &InitArgs) -> InitArgs {
+    InitArgs {
+        name: Some(state.name.clone()),
+        out: Some(PathBuf::from(state.out_dir.clone())),
         db: DB_OPTIONS[state.db_index].label.to_string(),
         auth: AUTH_OPTIONS[state.auth_index].enabled,
         database_url: if state.db_url.is_empty() {
             None
         } else {
-            Some(state.db_url)
+            Some(state.db_url.clone())
         },
         port: Some(parse_port(&state.port).unwrap_or(DEFAULT_PORT)),
-        repo: args.repo,
+        repo: args.repo.clone(),
         force: args.force,
         non_interactive: args.non_interactive,
-    }))
+    }
 }
 
 fn handle_key(state: &mut UiState, key: KeyEvent) -> Result<bool> {
+    if state.step == Step::Cloning {
+        if state.clone_error.is_some() {
+            match key.code {
+                KeyCode::Enter | KeyCode::Esc => {
+                    return Ok(true);
+                }
+                _ => return Ok(false),
+            }
+        }
+
+        if let KeyCode::Esc = key.code {
+            request_cancel(state);
+        }
+        return Ok(false);
+    }
+
     match key.code {
         KeyCode::Esc => {
-            state.aborted = true;
             return Ok(true);
         }
         KeyCode::Char('b') | KeyCode::Char('B') if state.step != Step::ProjectName => {
@@ -326,7 +399,11 @@ fn apply_step(state: &mut UiState) -> Result<bool> {
                 sync_input(state);
             }
         }
-        Step::Summary => return Ok(true),
+        Step::Summary => {
+            state.step = state.step.next();
+            start_clone(state)?;
+        }
+        Step::Cloning => {}
     }
     Ok(false)
 }
@@ -472,14 +549,51 @@ fn draw_ui(frame: &mut Frame<'_>, state: &UiState) {
             Line::from(""),
             Line::from("Press Enter to generate."),
         ]),
+        Step::Cloning => clone_lines(state),
     };
 
     frame.render_widget(body, chunks[2]);
 
-    let footer =
-        Paragraph::new("Enter next  |  B back  |  Esc cancel  |  Up/Down choose  |  Left/Right move")
-            .style(Style::default().fg(Color::DarkGray));
+    let footer_text = match state.step {
+        Step::Cloning => {
+            if state.clone_error.is_some() {
+                "Enter exit  |  Esc exit"
+            } else {
+                "Esc cancel"
+            }
+        }
+        _ => "Enter next  |  B back  |  Esc cancel  |  Up/Down choose  |  Left/Right move",
+    };
+
+    let footer = Paragraph::new(footer_text).style(Style::default().fg(Color::DarkGray));
     frame.render_widget(footer, chunks[3]);
+}
+
+fn clone_lines(state: &UiState) -> Paragraph<'_> {
+    let spinner = SPINNER_FRAMES[state.spinner_index % SPINNER_FRAMES.len()];
+    let elapsed = state
+        .clone_started_at
+        .map(|instant| instant.elapsed().as_secs())
+        .unwrap_or(0);
+    let mut lines = vec![
+        Line::from(format!("{spinner} Cloning template...")),
+        Line::from(format!("Elapsed: {elapsed}s")),
+    ];
+
+    if state.clone_cancel_requested && state.clone_error.is_none() {
+        lines.push(Line::from("Cancelling..."));
+    }
+
+    if let Some(err) = state.clone_error.as_deref() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![Span::styled(
+            err,
+            Style::default().fg(Color::Red),
+        )]));
+        lines.push(Line::from("Press Enter to exit."));
+    }
+
+    Paragraph::new(lines).wrap(Wrap { trim: true })
 }
 
 fn text_input_lines<'a>(
@@ -618,6 +732,124 @@ fn cursor_to_byte(input: &str, cursor: usize) -> usize {
         .nth(cursor)
         .map(|(idx, _)| idx)
         .unwrap_or_else(|| input.len())
+}
+
+fn start_clone(state: &mut UiState) -> Result<()> {
+    let temp_dir = TempDir::new().context("failed to create temp directory")?;
+    let repo_dir = temp_dir.path().join("repo");
+
+    let (cancel_tx, cancel_rx) = mpsc::channel();
+    let (result_tx, result_rx) = mpsc::channel();
+
+    let repo = state.repo.clone();
+    let repo_dir_clone = repo_dir.clone();
+
+    thread::spawn(move || {
+        let result = clone_repo_with_cancel(&repo, &repo_dir_clone, cancel_rx);
+        let _ = result_tx.send(result);
+    });
+
+    state.temp_dir = Some(temp_dir);
+    state.repo_dir = Some(repo_dir);
+    state.clone_started_at = Some(Instant::now());
+    state.clone_error = None;
+    state.spinner_index = 0;
+    state.clone_cancel_tx = Some(cancel_tx);
+    state.clone_result_rx = Some(result_rx);
+    state.clone_cancel_requested = false;
+
+    Ok(())
+}
+
+fn tick_clone(state: &mut UiState) -> Result<()> {
+    if state.clone_error.is_none() {
+        state.spinner_index = state.spinner_index.wrapping_add(1);
+    }
+    Ok(())
+}
+
+fn poll_clone_result(state: &mut UiState) -> Result<Option<Result<(), String>>> {
+    let rx = match state.clone_result_rx.as_ref() {
+        Some(rx) => rx,
+        None => return Ok(None),
+    };
+
+    match rx.try_recv() {
+        Ok(result) => {
+            state.clone_result_rx = None;
+            Ok(Some(result))
+        }
+        Err(TryRecvError::Empty) => Ok(None),
+        Err(TryRecvError::Disconnected) => {
+            state.clone_result_rx = None;
+            Ok(Some(Err("git clone failed: channel closed".to_string())))
+        }
+    }
+}
+
+fn request_cancel(state: &mut UiState) {
+    if state.clone_cancel_requested {
+        return;
+    }
+    if let Some(tx) = state.clone_cancel_tx.as_ref() {
+        let _ = tx.send(());
+        state.clone_cancel_requested = true;
+    }
+}
+
+fn clone_repo_with_cancel(
+    repo: &str,
+    dest: &Path,
+    cancel_rx: Receiver<()>,
+) -> Result<(), String> {
+    let mut child = Command::new("git")
+        .args([
+            "clone",
+            "--depth",
+            "1",
+            "--branch",
+            "master",
+            repo,
+            dest.to_string_lossy().as_ref(),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| format!("failed to execute git clone: {err}"))?;
+
+    loop {
+        if cancel_rx.try_recv().is_ok() {
+            let _ = child.kill();
+            let output = child
+                .wait_with_output()
+                .map_err(|err| format!("failed to wait for git clone: {err}"))?;
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if stderr.trim().is_empty() {
+                return Err("git clone cancelled".to_string());
+            }
+            return Err(format!("git clone cancelled: {stderr}"));
+        }
+
+        match child
+            .try_wait()
+            .map_err(|err| format!("failed to wait for git clone: {err}"))?
+        {
+            Some(status) => {
+                let output = child
+                    .wait_with_output()
+                    .map_err(|err| format!("failed to read git clone output: {err}"))?;
+                if status.success() {
+                    return Ok(());
+                }
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if stderr.trim().is_empty() {
+                    return Err("git clone failed".to_string());
+                }
+                return Err(format!("git clone failed: {stderr}"));
+            }
+            None => thread::sleep(Duration::from_millis(80)),
+        }
+    }
 }
 
 struct ChoiceOption {

@@ -23,9 +23,21 @@ const BASE_ENTITY_SUBDIR: &str = "crates/base_entity_derive";
 
 pub fn run(mut args: InitArgs) -> Result<()> {
     let interactive = !args.non_interactive && io::stdout().is_terminal();
+    let mut temp_dir: Option<TempDir> = None;
+    let mut repo_dir: Option<PathBuf> = None;
+    let repo = resolve_repo(args.repo.clone())?;
+
     if interactive {
-        match run_tui(args)? {
-            TuiOutcome::Completed(updated) => args = updated,
+        match run_tui(args, repo.clone())? {
+            TuiOutcome::Completed {
+                args: updated,
+                temp_dir: cloned_temp_dir,
+                repo_dir: cloned_repo_dir,
+            } => {
+                args = updated;
+                temp_dir = Some(cloned_temp_dir);
+                repo_dir = Some(cloned_repo_dir);
+            }
             TuiOutcome::Aborted => {
                 println!("Did not create project.");
                 return Ok(());
@@ -77,7 +89,6 @@ pub fn run(mut args: InitArgs) -> Result<()> {
         eprintln!("note: auth toggling is not implemented yet; auth remains enabled");
     }
 
-    let repo = resolve_repo(args.repo)?;
     let crate_name = derive_crate_name(&name);
     if crate_name != name {
         eprintln!("using crate name '{crate_name}' derived from '{name}'");
@@ -99,9 +110,16 @@ pub fn run(mut args: InitArgs) -> Result<()> {
         }
     }
 
-    let temp = TempDir::new().context("failed to create temp directory")?;
-    let repo_dir = temp.path().join("repo");
-    clone_repo(&repo, &repo_dir)?;
+    let repo_dir = match repo_dir {
+        Some(repo_dir) => repo_dir,
+        None => {
+            let temp = TempDir::new().context("failed to create temp directory")?;
+            let repo_dir = temp.path().join("repo");
+            clone_repo(&repo, &repo_dir)?;
+            temp_dir = Some(temp);
+            repo_dir
+        }
+    };
 
     let template_dir = repo_dir.join(TEMPLATE_SUBDIR);
     if !template_dir.exists() {
@@ -155,6 +173,7 @@ pub fn run(mut args: InitArgs) -> Result<()> {
     println!("  cd {}", out_dir.display());
     println!("  cargo run");
 
+    let _temp_guard = temp_dir;
     Ok(())
 }
 
