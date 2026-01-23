@@ -15,8 +15,9 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn from_env() -> Result<Self> {
-        // Load .env if present
-        let _ = dotenvy::dotenv();
+        // Load .env from crate root (falls back to current dir if missing)
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let _ = dotenvy::from_filename(manifest_dir.join(".env")).or_else(|_| dotenvy::dotenv());
 
         let host = std::env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
         let port = std::env::var("PORT")

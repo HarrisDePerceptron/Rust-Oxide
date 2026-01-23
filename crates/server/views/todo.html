@@ -84,7 +84,19 @@
               </button>
             </div>
 
-            <form id="list-form" class="mt-5 space-y-3">
+            <div class="mt-5 space-y-2">
+              <label class="text-xs font-semibold uppercase tracking-[0.25em] text-black/40">
+                Search lists
+              </label>
+              <input
+                id="list-search-input"
+                class="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black/70 shadow-sm outline-none transition focus:border-[color:var(--pine)]"
+                placeholder="Search by title"
+                type="text"
+              />
+            </div>
+
+            <form id="list-form" class="mt-4 space-y-3">
               <label class="text-xs font-semibold uppercase tracking-[0.25em] text-black/40">
                 New list
               </label>
@@ -327,10 +339,12 @@
             filter: "all",
             editingItemId: null,
             isRenaming: false,
+            listSearch: "",
           };
 
           const listForm = byId("list-form");
           const listTitleInput = byId("list-title-input");
+          const listSearchInput = byId("list-search-input");
           const listError = byId("list-error");
           const listsWrap = byId("lists");
           const listsEmpty = byId("lists-empty");
@@ -428,6 +442,29 @@
             }
           };
 
+          const normalizeSearchTerm = (value) =>
+            value.replace(/\*/g, "").trim().replace(/\s+/g, " ");
+
+          const listSearchPath = (term) => {
+            const cleaned = normalizeSearchTerm(term);
+            if (!cleaned) {
+              return "/todo";
+            }
+            const params = new URLSearchParams({
+              page: "1",
+              page_size: "100",
+              title: `*${cleaned}*`,
+            });
+            return `/todo-crud?${params.toString()}`;
+          };
+
+          const updateListsEmptyMessage = () => {
+            const hasSearch = normalizeSearchTerm(state.listSearch);
+            listsEmpty.textContent = hasSearch
+              ? "No lists match your search."
+              : "No lists yet. Create one to begin.";
+          };
+
           const updateFilters = () => {
             const buttons = filtersWrap.querySelectorAll(".filter-btn");
             buttons.forEach((button) => {
@@ -439,6 +476,7 @@
           };
 
           const renderLists = () => {
+            updateListsEmptyMessage();
             listCount.textContent = state.lists.length.toString();
             if (state.lists.length === 0) {
               listsWrap.innerHTML = "";
@@ -674,17 +712,27 @@
             recentCompleted.innerHTML = recent || "<p class=\"text-black/40\">No completed tasks yet.</p>";
           };
 
-          const loadLists = async () => {
-            const result = await apiRequest("GET", "/todo");
-            if (result.ok && Array.isArray(result.data)) {
-              state.lists = result.data;
-              if (state.activeListId && !state.lists.some((list) => list.id === state.activeListId)) {
-                state.activeListId = null;
-                state.activeList = null;
-                state.items = [];
-              }
-              renderLists();
+          const loadLists = async (searchTerm = state.listSearch) => {
+            const path = listSearchPath(searchTerm);
+            const result = await apiRequest("GET", path);
+            if (!result.ok) {
+              setError(listError, "Unable to load lists.");
+              return;
             }
+            let lists = [];
+            if (Array.isArray(result.data)) {
+              lists = result.data;
+            } else if (result.data && Array.isArray(result.data.data)) {
+              lists = result.data.data;
+            }
+            state.lists = lists;
+            if (state.activeListId && !state.lists.some((list) => list.id === state.activeListId)) {
+              state.activeListId = null;
+              state.activeList = null;
+              state.items = [];
+            }
+            setError(listError, "");
+            renderLists();
           };
 
           const loadListDetail = async (listId) => {
@@ -814,8 +862,23 @@
             await loadListDetail(state.activeListId);
           };
 
+          let listSearchTimer = null;
+
+          const scheduleListSearch = () => {
+            state.listSearch = listSearchInput.value;
+            updateListsEmptyMessage();
+            if (listSearchTimer) {
+              clearTimeout(listSearchTimer);
+            }
+            listSearchTimer = setTimeout(() => {
+              loadLists(state.listSearch);
+            }, 250);
+          };
+
+          listSearchInput.addEventListener("input", scheduleListSearch);
+
           refreshLists.addEventListener("click", () => {
-            loadLists();
+            loadLists(state.listSearch);
           });
 
           listForm.addEventListener("submit", (event) => {

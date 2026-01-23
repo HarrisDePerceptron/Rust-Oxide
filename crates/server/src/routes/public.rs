@@ -53,8 +53,9 @@ struct DocsTemplate {
 }
 
 pub fn router() -> Router {
+    let public_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("public");
     Router::new()
-        .route_service("/{*file}", ServeDir::new("public"))
+        .route_service("/{*file}", ServeDir::new(public_dir))
         .route("/", get(index))
         .route("/public", get(handler))
         .route("/entities", get(entities_view))
