@@ -1,10 +1,28 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
+use sha2::{Digest, Sha256};
 
 use crate::cli::AddApiArgs;
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+struct Registry {
+    version: u32,
+    apis: Vec<ApiEntry>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+struct ApiEntry {
+    name: String,
+    entity: String,
+    plural: String,
+    base_path: String,
+    files: HashMap<String, String>,
+    mod_edits: HashMap<String, Vec<String>>,
+    dao_context_method: String,
+}
 
 const ENTITY_TEMPLATE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -60,7 +78,12 @@ pub fn run(args: AddApiArgs) -> Result<()> {
     }
     validate_ident(&table, "table name")?;
 
-    let default_base = format!("/{entity}-crud").replace('_', "-");
+    let default_base_name = if args.plural.is_some() {
+        plural.clone()
+    } else {
+        entity.clone()
+    };
+    let default_base = format!("/{default_base_name}").replace('_', "-");
     let base_path = normalize_base_path(args.base_path.as_deref().unwrap_or(&default_base));
     if base_path.is_empty() {
         bail!("base path cannot be empty");
@@ -181,6 +204,110 @@ pub fn run(args: AddApiArgs) -> Result<()> {
         write_file(&routes_mod_path, &routes_mod_updated)?;
     }
 
+    let registry_path = registry_path(&server_root);
+    let mut registry = load_registry(&registry_path)?;
+    if let Some(idx) = registry
+        .apis
+        .iter()
+        .position(|entry| entry.name == name || entry.entity == entity)
+    {
+        if !args.force {
+            bail!("API '{name}' is already registered (use --force to overwrite)");
+        }
+        registry.apis.remove(idx);
+    }
+
+    let files = HashMap::from([
+        (
+            registry_relative_path(&root, &entity_path),
+            hash_str(&entity_contents),
+        ),
+        (
+            registry_relative_path(&root, &dao_path),
+            hash_str(&dao_contents),
+        ),
+        (
+            registry_relative_path(&root, &service_path),
+            hash_str(&service_contents),
+        ),
+        (
+            registry_relative_path(&root, &route_path),
+            hash_str(&route_contents),
+        ),
+    ]);
+
+    let mut mod_edits = HashMap::new();
+    let mut entities_edits = Vec::new();
+    let entities_pre = format!("    pub use super::{entity}::Entity as {entity_pascal};");
+    if !line_exists(&entities_mod, &entities_pre) {
+        entities_edits.push(entities_pre);
+    }
+    let entities_mod_line = format!("pub mod {entity};");
+    if !line_exists(&entities_mod, &entities_mod_line) {
+        entities_edits.push(entities_mod_line);
+    }
+    if !entities_edits.is_empty() {
+        mod_edits.insert(registry_relative_path(&root, &entities_mod_path), entities_edits);
+    }
+
+    let mut dao_edits = Vec::new();
+    let dao_mod_line = format!("pub mod {entity}_dao;");
+    if !line_exists(&dao_mod, &dao_mod_line) {
+        dao_edits.push(dao_mod_line);
+    }
+    let dao_use_line = format!("pub use {entity}_dao::{dao};");
+    if !line_exists(&dao_mod, &dao_use_line) {
+        dao_edits.push(dao_use_line);
+    }
+    if !dao_edits.is_empty() {
+        mod_edits.insert(registry_relative_path(&root, &dao_mod_path), dao_edits);
+    }
+
+    let mut services_edits = Vec::new();
+    let services_line = format!("pub mod {service_module};");
+    if !line_exists(&services_mod, &services_line) {
+        services_edits.push(services_line);
+    }
+    if !services_edits.is_empty() {
+        mod_edits.insert(
+            registry_relative_path(&root, &services_mod_path),
+            services_edits,
+        );
+    }
+
+    let mut routes_edits = Vec::new();
+    let routes_mod_line = format!("pub mod {route_module};");
+    if !line_exists(&routes_mod, &routes_mod_line) {
+        routes_edits.push(routes_mod_line);
+    }
+    let routes_merge_line = format!("        .merge({route_module}::router(state.clone()))");
+    if !line_exists(&routes_mod, &routes_merge_line) {
+        routes_edits.push(routes_merge_line);
+    }
+    if !routes_edits.is_empty() {
+        mod_edits.insert(
+            registry_relative_path(&root, &routes_mod_path),
+            routes_edits,
+        );
+    }
+
+    let dao_context_method = format!("    pub fn {entity}(&self) -> {dao} {{");
+    let dao_context_method = if line_exists(&dao_mod, &dao_context_method) {
+        String::new()
+    } else {
+        dao_context_method
+    };
+    registry.apis.push(ApiEntry {
+        name: name.to_string(),
+        entity: entity.clone(),
+        plural: plural.clone(),
+        base_path: base_path.clone(),
+        files,
+        mod_edits,
+        dao_context_method,
+    });
+    save_registry(&registry_path, &registry)?;
+
     println!(
         "Added CRUD API for {entity_pascal} at {}",
         route_path.display()
@@ -194,6 +321,41 @@ fn write_file(path: &Path, contents: &str) -> Result<()> {
             .with_context(|| format!("failed to create {}", parent.display()))?;
     }
     fs::write(path, contents).with_context(|| format!("failed to write {}", path.display()))
+}
+
+fn registry_path(server_root: &Path) -> PathBuf {
+    server_root.join(".scaffold/apis.json")
+}
+
+fn load_registry(path: &Path) -> Result<Registry> {
+    if !path.exists() {
+        return Ok(Registry {
+            version: 1,
+            apis: Vec::new(),
+        });
+    }
+    let contents =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let registry: Registry = serde_json::from_str(&contents)
+        .with_context(|| format!("failed to parse {}", path.display()))?;
+    Ok(registry)
+}
+
+fn save_registry(path: &Path, registry: &Registry) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
+    let contents = serde_json::to_string_pretty(registry)
+        .context("failed to serialize registry")?;
+    fs::write(path, contents).with_context(|| format!("failed to write {}", path.display()))
+}
+
+fn registry_relative_path(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .to_string()
 }
 
 fn render_template(template: &str, vars: &HashMap<String, String>) -> Result<String> {
@@ -438,6 +600,27 @@ fn validate_ident(input: &str, label: &str) -> Result<()> {
 
 fn escape_rust_string(input: &str) -> String {
     input.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn line_exists(contents: &str, line: &str) -> bool {
+    contents
+        .lines()
+        .any(|existing| existing.trim() == line.trim())
+}
+
+fn hash_str(input: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(input.as_bytes());
+    let digest = hasher.finalize();
+    bytes_to_hex(&digest)
+}
+
+fn bytes_to_hex(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push_str(&format!("{:02x}", b));
+    }
+    out
 }
 
 fn update_entities_mod(

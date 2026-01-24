@@ -17,6 +17,8 @@ pub enum Commands {
     Init(InitArgs),
     New(InitArgs),
     AddApi(AddApiArgs),
+    #[command(name = "api-remove")]
+    ApiRemove(RemoveApiArgs),
 }
 
 #[derive(Parser, Clone)]
@@ -59,7 +61,7 @@ pub struct AddApiArgs {
     /// Override database table name (defaults to plural snake_case)
     #[arg(long)]
     pub table: Option<String>,
-    /// Base path for CRUD routes (defaults to /<name>-crud)
+    /// Base path for CRUD routes (defaults to /<name> or /<plural>)
     #[arg(long)]
     pub base_path: Option<String>,
     /// Comma-separated field list (e.g. title:string,done:bool)
@@ -72,6 +74,21 @@ pub struct AddApiArgs {
     #[arg(long)]
     pub dry_run: bool,
     /// Overwrite existing files
+    #[arg(long)]
+    pub force: bool,
+}
+
+#[derive(Parser, Clone)]
+pub struct RemoveApiArgs {
+    /// Resource/entity name (singular)
+    pub name: String,
+    /// Print planned changes without writing files
+    #[arg(long)]
+    pub dry_run: bool,
+    /// Remove registry entry even if some files/edits are missing
+    #[arg(long)]
+    pub prune: bool,
+    /// Remove even if files were modified or missing
     #[arg(long)]
     pub force: bool,
 }
