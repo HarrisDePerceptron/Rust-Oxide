@@ -16,6 +16,7 @@ pub struct Cli {
 pub enum Commands {
     Init(InitArgs),
     New(InitArgs),
+    AddApi(AddApiArgs),
 }
 
 #[derive(Parser, Clone)]
@@ -46,4 +47,31 @@ pub struct InitArgs {
     /// Disable interactive prompts
     #[arg(long)]
     pub non_interactive: bool,
+}
+
+#[derive(Parser, Clone)]
+pub struct AddApiArgs {
+    /// Resource/entity name (singular)
+    pub name: String,
+    /// Override plural form (defaults to simple pluralization)
+    #[arg(long)]
+    pub plural: Option<String>,
+    /// Override database table name (defaults to plural snake_case)
+    #[arg(long)]
+    pub table: Option<String>,
+    /// Base path for CRUD routes (defaults to /<name>-crud)
+    #[arg(long)]
+    pub base_path: Option<String>,
+    /// Comma-separated field list (e.g. title:string,done:bool)
+    #[arg(long)]
+    pub fields: Option<String>,
+    /// Disable auth middleware on the CRUD routes
+    #[arg(long)]
+    pub no_auth: bool,
+    /// Print planned changes without writing files
+    #[arg(long)]
+    pub dry_run: bool,
+    /// Overwrite existing files
+    #[arg(long)]
+    pub force: bool,
 }

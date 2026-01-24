@@ -1,0 +1,12 @@
+use base_entity_derive::base_entity;
+use sea_orm::entity::prelude::*;
+
+#[base_entity]
+#[sea_orm::model]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, DeriveEntityModel)]
+#[sea_orm(table_name = "{{table}}")]
+pub struct Model {
+{{fields}}
+}
+
+impl ActiveModelBehavior for ActiveModel {}

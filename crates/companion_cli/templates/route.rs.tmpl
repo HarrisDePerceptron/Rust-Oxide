@@ -1,0 +1,23 @@
+use std::sync::Arc;
+
+use axum::Router;
+{{auth_imports}}
+
+use crate::{
+    db::dao::DaoContext,
+    routes::base_api_router::CrudApiRouter,
+    services::{{service_module}}::{{Service}},
+    state::AppState,
+};
+
+const BASE_PATH: &str = "{{base_path}}";
+
+pub fn router(state: Arc<AppState>) -> Router {
+    let daos = DaoContext::new(&state.db);
+    let service = {{Service}}::new(daos.{{entity}}());
+    let crud_router = CrudApiRouter::new(service, BASE_PATH);
+    let router = crud_router.router();
+
+{{auth_layer}}
+    router.with_state(state)
+}

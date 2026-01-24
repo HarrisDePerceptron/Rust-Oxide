@@ -1,0 +1,25 @@
+use sea_orm::DatabaseConnection;
+
+use super::DaoBase;
+use crate::db::entities::prelude::{{Entity}};
+
+#[derive(Clone)]
+pub struct {{Dao}} {
+    db: DatabaseConnection,
+}
+
+impl DaoBase for {{Dao}} {
+    type Entity = {{Entity}};
+
+    fn from_db(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+
+    fn db(&self) -> &DatabaseConnection {
+        &self.db
+    }
+}
+
+impl {{Dao}} {
+    // Add custom queries here if needed.
+}

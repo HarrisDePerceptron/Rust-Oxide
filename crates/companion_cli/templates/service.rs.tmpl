@@ -1,0 +1,21 @@
+use crate::db::dao::{{Dao}};
+use crate::services::crud_service::CrudService;
+
+#[derive(Clone)]
+pub struct {{Service}} {
+    dao: {{Dao}},
+}
+
+impl {{Service}} {
+    pub fn new(dao: {{Dao}}) -> Self {
+        Self { dao }
+    }
+}
+
+impl CrudService for {{Service}} {
+    type Dao = {{Dao}};
+
+    fn dao(&self) -> &Self::Dao {
+        &self.dao
+    }
+}
