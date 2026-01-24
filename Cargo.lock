@@ -1889,22 +1889,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oxide"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "crossterm",
- "dotenvy",
- "ratatui",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "walkdir",
-]
-
-[[package]]
 name = "parking"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2388,6 +2372,22 @@ dependencies = [
  "spki",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "rust-oxide-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "crossterm",
+ "dotenvy",
+ "ratatui",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "walkdir",
 ]
 
 [[package]]

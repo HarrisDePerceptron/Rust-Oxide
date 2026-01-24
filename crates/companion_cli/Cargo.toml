@@ -1,5 +1,5 @@
 [package]
-name = "oxide"
+name = "rust-oxide-cli"
 version = "0.1.0"
 edition = "2024"
 description = "Companion CLI for the Rust Oxide server template"
@@ -12,6 +12,10 @@ include = [
     "README.md",
     "LICENSE-*",
 ]
+
+[[bin]]
+name = "oxide"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.100"

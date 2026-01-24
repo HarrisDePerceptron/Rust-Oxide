@@ -551,7 +551,7 @@ fn list_filter_mode() -> FilterMode {
                 </button>
               </div>
               <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-cli-init"># from this repo
-cargo run -p oxide -- init my_app
+cargo run -p rust-oxide-cli -- init my_app
 
 # or if the CLI is installed
 oxide init my_app</code></pre>
@@ -582,13 +582,13 @@ oxide init my_app</code></pre>
                 </button>
               </div>
               <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-cli-api"># add a CRUD API
-cargo run -p oxide -- api add todo_item --fields "title:string,done:bool"
+cargo run -p rust-oxide-cli -- api add todo_item --fields "title:string,done:bool"
 
 # remove a CRUD API
-cargo run -p oxide -- api remove todo_item
+cargo run -p rust-oxide-cli -- api remove todo_item
 
 # preview changes
-cargo run -p oxide -- api add todo_item --dry-run</code></pre>
+cargo run -p rust-oxide-cli -- api add todo_item --dry-run</code></pre>
             </div>
             <p class="mt-2 text-xs text-black/50">
               Use <span class="font-semibold">--no-auth</span> to skip auth middleware and

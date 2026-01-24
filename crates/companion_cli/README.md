@@ -8,13 +8,15 @@ project and scaffold or remove CRUD APIs.
 With Rust installed:
 
 ```sh
-cargo install oxide
+cargo install rust-oxide-cli
 ```
+
+This installs the `oxide` binary.
 
 From this repo:
 
 ```sh
-cargo run -p oxide -- init my_app
+cargo run -p rust-oxide-cli -- init my_app
 ```
 
 ## Usage
