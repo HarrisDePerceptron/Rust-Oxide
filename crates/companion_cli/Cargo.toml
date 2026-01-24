@@ -2,6 +2,16 @@
 name = "oxide"
 version = "0.1.0"
 edition = "2024"
+description = "Companion CLI for the Rust Oxide server template"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+include = [
+    "src/**",
+    "templates/**",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE-*",
+]
 
 [dependencies]
 anyhow = "1.0.100"
