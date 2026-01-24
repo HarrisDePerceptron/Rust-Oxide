@@ -29,6 +29,7 @@ struct RouteGroup {
 struct IndexTemplate {
     now: String,
     route_groups: Vec<RouteGroup>,
+    project_name: String,
 }
 
 #[derive(Template)]
@@ -36,6 +37,7 @@ struct IndexTemplate {
 struct RoutesTemplate {
     now: String,
     route_groups: Vec<RouteGroup>,
+    project_name: String,
 }
 
 #[derive(Template)]
@@ -44,12 +46,14 @@ struct EntitiesTemplate {
     now: String,
     entities: &'static [EntityInfo],
     erd_mermaid: &'static str,
+    project_name: String,
 }
 
 #[derive(Template)]
 #[template(path = "docs.html")]
 struct DocsTemplate {
     now: String,
+    project_name: String,
 }
 
 pub fn router() -> Router {
@@ -75,7 +79,12 @@ async fn list_routes_json() -> Json<&'static [RouteInfo]> {
 async fn index() -> Result<Html<String>, AppError> {
     let now = Local::now().to_rfc3339();
     let route_groups = build_route_groups();
-    let rendered = IndexTemplate { now, route_groups }
+    let project_name = project_name();
+    let rendered = IndexTemplate {
+        now,
+        route_groups,
+        project_name,
+    }
         .render()
         .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render index"))?;
     Ok(Html(rendered))
@@ -84,7 +93,12 @@ async fn index() -> Result<Html<String>, AppError> {
 async fn routes_view() -> Result<Html<String>, AppError> {
     let now = Local::now().to_rfc3339();
     let route_groups = build_route_groups();
-    let rendered = RoutesTemplate { now, route_groups }
+    let project_name = project_name();
+    let rendered = RoutesTemplate {
+        now,
+        route_groups,
+        project_name,
+    }
         .render()
         .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render routes"))?;
     Ok(Html(rendered))
@@ -94,10 +108,12 @@ async fn entities_view() -> Result<Html<String>, AppError> {
     let now = Local::now().to_rfc3339();
     let entities = entity_catalog::entities();
     let erd_mermaid = entity_catalog::erd_mermaid();
+    let project_name = project_name();
     let rendered = EntitiesTemplate {
         now,
         entities,
         erd_mermaid,
+        project_name,
     }
         .render()
         .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render entities"))?;
@@ -106,7 +122,8 @@ async fn entities_view() -> Result<Html<String>, AppError> {
 
 async fn docs_view() -> Result<Html<String>, AppError> {
     let now = Local::now().to_rfc3339();
-    let rendered = DocsTemplate { now }
+    let project_name = project_name();
+    let rendered = DocsTemplate { now, project_name }
         .render()
         .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render docs"))?;
     Ok(Html(rendered))
@@ -140,4 +157,42 @@ fn build_route_groups() -> Vec<RouteGroup> {
         .collect();
     route_groups.sort_by(|a, b| a.source.cmp(&b.source));
     route_groups
+}
+
+pub(crate) fn project_name() -> String {
+    let raw = env!("CARGO_PKG_NAME");
+    let mut words = Vec::new();
+    let mut current = String::new();
+    for ch in raw.chars() {
+        if ch == '_' || ch == '-' {
+            if !current.is_empty() {
+                words.push(current.clone());
+                current.clear();
+            }
+        } else {
+            current.push(ch);
+        }
+    }
+    if !current.is_empty() {
+        words.push(current);
+    }
+
+    let mut out = String::new();
+    for (idx, word) in words.into_iter().enumerate() {
+        if idx > 0 {
+            out.push(' ');
+        }
+        let mut chars = word.chars();
+        if let Some(first) = chars.next() {
+            out.push(first.to_ascii_uppercase());
+            for ch in chars {
+                out.push(ch.to_ascii_lowercase());
+            }
+        }
+    }
+    if out.is_empty() {
+        "Project".to_string()
+    } else {
+        out
+    }
 }

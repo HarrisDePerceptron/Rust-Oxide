@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="{% block description %}{% endblock %}" />
-    <title>{% block title %}Sample Server{% endblock %}</title>
+    <title>{% block title %}{{ project_name }}{% endblock %}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -105,7 +105,7 @@
               <p
                 class="text-xs uppercase tracking-[0.35em] text-[color:var(--pine)]"
               >
-                Sample Server
+                {{ project_name }}
               </p>
               <p class="text-xs text-black/50">Axum and Askama template</p>
             </div>
@@ -130,13 +130,6 @@
               class="rounded-full border border-black/10 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] shadow-lg shadow-black/5 transition hover:-translate-y-0.5"
               href="/todo/ui"
               >Todo UI</a
-            >
-            <a class="text-black/60 hover:text-black" href="/#features"
-              >Features</a
-            >
-            <a class="text-black/60 hover:text-black" href="/#stack">Stack</a>
-            <a class="text-black/60 hover:text-black" href="/#get-started"
-              >Get Started</a
             >
           </nav>
         </div>

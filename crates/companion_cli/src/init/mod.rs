@@ -15,7 +15,7 @@ use walkdir::WalkDir;
 use crate::cli::{InitArgs, DEFAULT_DB, DEFAULT_PORT};
 use self::tui::{run_tui, TuiOutcome};
 
-const DEFAULT_REPLACE_FROM: &str = "sample_server";
+const DEFAULT_REPLACE_FROM: &str = "rust_oxide";
 const DEFAULT_TEMPLATE_REPO: &str = "https://github.com/HarrisDePerceptron/Rust-Oxide.git";
 const ENV_TEMPLATE_REPO: &str = "SAMPLE_SERVER_TEMPLATE_REPO";
 const TEMPLATE_SUBDIR: &str = "crates/server";

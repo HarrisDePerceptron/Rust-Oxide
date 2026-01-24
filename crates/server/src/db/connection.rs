@@ -15,7 +15,7 @@ pub async fn connect(cfg: &AppConfig) -> anyhow::Result<DatabaseConnection> {
 
     let db = Database::connect(options).await?;
     info!("syncing database schema from entities");
-    db.get_schema_registry("sample_server::db::entities::*")
+    db.get_schema_registry("rust_oxide::db::entities::*")
         .sync(&db)
         .await?;
     Ok(db)

@@ -25,14 +25,8 @@ struct ApiEntry {
 }
 
 pub fn run(args: RemoveApiArgs) -> Result<()> {
-    let root = std::env::current_dir().context("failed to resolve current directory")?;
-    let server_root = root.join("crates/server");
-    if !server_root.exists() {
-        bail!(
-            "unable to locate server crate at {}",
-            server_root.display()
-        );
-    }
+    let cwd = std::env::current_dir().context("failed to resolve current directory")?;
+    let (project_root, server_root) = resolve_roots(&cwd)?;
 
     let registry_path = registry_path(&server_root);
     let registry_contents = fs::read_to_string(&registry_path)
@@ -57,7 +51,7 @@ pub fn run(args: RemoveApiArgs) -> Result<()> {
     let mut missing_files = Vec::new();
     let mut modified_files = Vec::new();
     for (path_str, expected_hash) in &entry.files {
-        let path = resolve_registry_path(&root, path_str);
+        let path = resolve_registry_path(&project_root, path_str);
         if !path.exists() {
             missing_files.push(path_str.clone());
             continue;
@@ -74,7 +68,7 @@ pub fn run(args: RemoveApiArgs) -> Result<()> {
         if lines.is_empty() {
             continue;
         }
-        let path = resolve_registry_path(&root, path_str);
+        let path = resolve_registry_path(&project_root, path_str);
         if !path.exists() {
             missing_mod_lines.push(path_str.clone());
             continue;
@@ -123,7 +117,7 @@ pub fn run(args: RemoveApiArgs) -> Result<()> {
     }
 
     for (path_str, _) in &entry.files {
-        let path = resolve_registry_path(&root, path_str);
+        let path = resolve_registry_path(&project_root, path_str);
         if path.exists() {
             fs::remove_file(&path)
                 .with_context(|| format!("failed to remove {}", path.display()))?;
@@ -131,7 +125,7 @@ pub fn run(args: RemoveApiArgs) -> Result<()> {
     }
 
     for (path_str, lines) in &entry.mod_edits {
-        let path = resolve_registry_path(&root, path_str);
+        let path = resolve_registry_path(&project_root, path_str);
         if !path.exists() {
             continue;
         }
@@ -145,7 +139,7 @@ pub fn run(args: RemoveApiArgs) -> Result<()> {
     }
 
     if !entry.dao_context_method.trim().is_empty() {
-        let dao_mod_path = resolve_registry_path(&root, "crates/server/src/db/dao/mod.rs");
+        let dao_mod_path = server_root.join("src/db/dao/mod.rs");
         if dao_mod_path.exists() {
             let contents = fs::read_to_string(&dao_mod_path)
                 .with_context(|| format!("failed to read {}", dao_mod_path.display()))?;
@@ -190,6 +184,24 @@ fn resolve_registry_path(root: &Path, stored: &str) -> PathBuf {
     } else {
         root.join(stored)
     }
+}
+
+fn resolve_roots(cwd: &Path) -> Result<(PathBuf, PathBuf)> {
+    for ancestor in cwd.ancestors() {
+        let workspace_server = ancestor.join("crates/server/src");
+        if workspace_server.exists() {
+            return Ok((ancestor.to_path_buf(), ancestor.join("crates/server")));
+        }
+        let server_src = ancestor.join("src");
+        let server_manifest = ancestor.join("Cargo.toml");
+        if server_src.exists() && server_manifest.exists() {
+            return Ok((ancestor.to_path_buf(), ancestor.to_path_buf()));
+        }
+    }
+    bail!(
+        "unable to locate server root from {}",
+        cwd.display()
+    )
 }
 
 fn hash_bytes(bytes: &[u8]) -> String {

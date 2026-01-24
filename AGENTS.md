@@ -15,11 +15,11 @@
 - `target/`: build artifacts (ignore in diffs).
 
 ## Build, Test, and Development Commands
-- `cargo run -p sample_server` — start the server on `0.0.0.0:3000` with trace logging; uses SeaORM's entity-first schema sync automatically.
-- `cargo test -p sample_server` — run unit/integration tests (add tests under `crates/server/tests/` or alongside modules; DB-backed tests currently `#[ignore]` until a real Postgres is wired).
+- `cargo run -p rust_oxide` — start the server on `0.0.0.0:3000` with trace logging; uses SeaORM's entity-first schema sync automatically.
+- `cargo test -p rust_oxide` — run unit/integration tests (add tests under `crates/server/tests/` or alongside modules; DB-backed tests currently `#[ignore]` until a real Postgres is wired).
 - `cargo fmt` — format with Rust 2024 defaults; run before opening a PR.
 - `cargo clippy --all-targets --all-features` — lint for correctness and style.
-- `cargo run -p sample_server --example client` — exercise the API; override `BASE_URL`, `USERNAME`, `PASSWORD` env vars as needed.
+- `cargo run -p rust_oxide --example client` — exercise the API; override `BASE_URL`, `USERNAME`, `PASSWORD` env vars as needed.
 
 ## Coding Style & Naming Conventions
 - Rust 2024 edition; keep `rustfmt` defaults and fix clippy warnings.

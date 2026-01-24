@@ -30,7 +30,7 @@ impl AppConfig {
         let database_url = match std::env::var("DATABASE_URL") {
             Ok(val) => val,
             Err(_) if cfg!(debug_assertions) => {
-                "postgres://postgres:postgres@localhost:5432/sample_server".to_string()
+                "postgres://postgres:postgres@localhost:5432/rust_oxide".to_string()
             }
             Err(err) => {
                 Err(anyhow::anyhow!(err)).context("DATABASE_URL is required in release builds")?

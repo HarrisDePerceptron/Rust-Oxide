@@ -75,6 +75,7 @@ pub struct TodoListDetailResponse {
 #[template(path = "todo.html")]
 struct TodoUiTemplate {
     now: String,
+    project_name: String,
 }
 
 pub fn router(state: Arc<AppState>) -> Router {
@@ -133,7 +134,8 @@ async fn item_count_handler(
 
 async fn todo_ui() -> Result<Html<String>, AppError> {
     let now = Local::now().to_rfc3339();
-    let rendered = TodoUiTemplate { now }.render().map_err(|_| {
+    let project_name = crate::routes::public::project_name();
+    let rendered = TodoUiTemplate { now, project_name }.render().map_err(|_| {
         AppError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             "failed to render todo ui",

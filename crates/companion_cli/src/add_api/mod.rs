@@ -36,8 +36,8 @@ const ROUTE_TEMPLATE: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/route.rs.tmpl"));
 
 pub fn run(args: AddApiArgs) -> Result<()> {
-    let root = std::env::current_dir().context("failed to resolve current directory")?;
-    let server_root = root.join("crates/server");
+    let cwd = std::env::current_dir().context("failed to resolve current directory")?;
+    let (project_root, server_root) = resolve_roots(&cwd)?;
     let src_root = server_root.join("src");
     if !src_root.exists() {
         bail!(
@@ -95,7 +95,7 @@ pub fn run(args: AddApiArgs) -> Result<()> {
     let dao = format!("{entity_pascal}Dao");
     let service = format!("{entity_pascal}Service");
     let service_module = format!("{entity}_service");
-    let route_module = format!("{entity}_crud");
+    let route_module = entity.clone();
 
     let auth_enabled = !args.no_auth;
     let auth_imports = if auth_enabled {
@@ -131,7 +131,7 @@ pub fn run(args: AddApiArgs) -> Result<()> {
     let entity_path = src_root.join("db/entities").join(format!("{entity}.rs"));
     let dao_path = src_root.join("db/dao").join(format!("{entity}_dao.rs"));
     let service_path = src_root.join("services").join(format!("{entity}_service.rs"));
-    let route_path = src_root.join("routes").join(format!("{entity}_crud.rs"));
+    let route_path = src_root.join("routes").join(format!("{entity}.rs"));
 
     let new_files = [entity_path.clone(), dao_path.clone(), service_path.clone(), route_path.clone()];
     for path in &new_files {
@@ -219,19 +219,19 @@ pub fn run(args: AddApiArgs) -> Result<()> {
 
     let files = HashMap::from([
         (
-            registry_relative_path(&root, &entity_path),
+            registry_relative_path(&project_root, &entity_path),
             hash_str(&entity_contents),
         ),
         (
-            registry_relative_path(&root, &dao_path),
+            registry_relative_path(&project_root, &dao_path),
             hash_str(&dao_contents),
         ),
         (
-            registry_relative_path(&root, &service_path),
+            registry_relative_path(&project_root, &service_path),
             hash_str(&service_contents),
         ),
         (
-            registry_relative_path(&root, &route_path),
+            registry_relative_path(&project_root, &route_path),
             hash_str(&route_contents),
         ),
     ]);
@@ -247,7 +247,10 @@ pub fn run(args: AddApiArgs) -> Result<()> {
         entities_edits.push(entities_mod_line);
     }
     if !entities_edits.is_empty() {
-        mod_edits.insert(registry_relative_path(&root, &entities_mod_path), entities_edits);
+        mod_edits.insert(
+            registry_relative_path(&project_root, &entities_mod_path),
+            entities_edits,
+        );
     }
 
     let mut dao_edits = Vec::new();
@@ -260,7 +263,10 @@ pub fn run(args: AddApiArgs) -> Result<()> {
         dao_edits.push(dao_use_line);
     }
     if !dao_edits.is_empty() {
-        mod_edits.insert(registry_relative_path(&root, &dao_mod_path), dao_edits);
+        mod_edits.insert(
+            registry_relative_path(&project_root, &dao_mod_path),
+            dao_edits,
+        );
     }
 
     let mut services_edits = Vec::new();
@@ -270,7 +276,7 @@ pub fn run(args: AddApiArgs) -> Result<()> {
     }
     if !services_edits.is_empty() {
         mod_edits.insert(
-            registry_relative_path(&root, &services_mod_path),
+            registry_relative_path(&project_root, &services_mod_path),
             services_edits,
         );
     }
@@ -286,7 +292,7 @@ pub fn run(args: AddApiArgs) -> Result<()> {
     }
     if !routes_edits.is_empty() {
         mod_edits.insert(
-            registry_relative_path(&root, &routes_mod_path),
+            registry_relative_path(&project_root, &routes_mod_path),
             routes_edits,
         );
     }
@@ -321,6 +327,24 @@ fn write_file(path: &Path, contents: &str) -> Result<()> {
             .with_context(|| format!("failed to create {}", parent.display()))?;
     }
     fs::write(path, contents).with_context(|| format!("failed to write {}", path.display()))
+}
+
+fn resolve_roots(cwd: &Path) -> Result<(PathBuf, PathBuf)> {
+    for ancestor in cwd.ancestors() {
+        let workspace_server = ancestor.join("crates/server/src");
+        if workspace_server.exists() {
+            return Ok((ancestor.to_path_buf(), ancestor.join("crates/server")));
+        }
+        let server_src = ancestor.join("src");
+        let server_manifest = ancestor.join("Cargo.toml");
+        if server_src.exists() && server_manifest.exists() {
+            return Ok((ancestor.to_path_buf(), ancestor.to_path_buf()));
+        }
+    }
+    bail!(
+        "unable to locate server root from {}",
+        cwd.display()
+    )
 }
 
 fn registry_path(server_root: &Path) -> PathBuf {

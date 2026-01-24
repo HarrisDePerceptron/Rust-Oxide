@@ -1,5 +1,5 @@
 [package]
-name = "sample_server_cli"
+name = "oxide"
 version = "0.1.0"
 edition = "2024"
 

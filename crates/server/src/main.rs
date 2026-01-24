@@ -3,7 +3,7 @@ use std::{net::SocketAddr, sync::Arc};
 use axum::Router;
 use tower_http::trace::TraceLayer;
 
-use sample_server::{
+use rust_oxide::{
     config::AppConfig,
     db::connection,
     db::dao::DaoContext,

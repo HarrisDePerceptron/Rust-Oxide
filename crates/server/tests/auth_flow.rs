@@ -9,7 +9,7 @@ use serde_json::json;
 use tower::ServiceExt; // for `oneshot`
 use uuid::Uuid;
 
-use sample_server::{
+use rust_oxide::{
     auth::{Claims, Role, jwt::now_unix, password},
     config::AppConfig,
     db::dao::DaoContext,
@@ -38,7 +38,7 @@ async fn app_with_db() -> std::sync::Arc<AppState> {
         .sqlx_logging(false);
 
     let db = Database::connect(opt).await.expect("connect to database");
-    db.get_schema_registry("sample_server::db::entities::*")
+    db.get_schema_registry("rust_oxide::db::entities::*")
         .sync(&db)
         .await
         .expect("sync schema");

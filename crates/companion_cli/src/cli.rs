@@ -16,9 +16,7 @@ pub struct Cli {
 pub enum Commands {
     Init(InitArgs),
     New(InitArgs),
-    AddApi(AddApiArgs),
-    #[command(name = "api-remove")]
-    ApiRemove(RemoveApiArgs),
+    Api(ApiArgs),
 }
 
 #[derive(Parser, Clone)]
@@ -91,4 +89,16 @@ pub struct RemoveApiArgs {
     /// Remove even if files were modified or missing
     #[arg(long)]
     pub force: bool,
+}
+
+#[derive(Parser, Clone)]
+pub struct ApiArgs {
+    #[command(subcommand)]
+    pub command: ApiCommands,
+}
+
+#[derive(Subcommand, Clone)]
+pub enum ApiCommands {
+    Add(AddApiArgs),
+    Remove(RemoveApiArgs),
 }
