@@ -25,15 +25,6 @@ crates/base_entity_derive/# derive helpers for SeaORM entities
 cargo run -p rust_oxide
 ```
 
-Server defaults to `0.0.0.0:3000`. Configure via environment variables:
-
-- `HOST` (default: 127.0.0.1)
-- `PORT` (default: 3000)
-- `DATABASE_URL`
-- `JWT_SECRET`
-- `RUST_LOG`
-- `DB_MAX_CONNS`, `DB_MIN_IDLE`
-
 ## CLI (oxide)
 
 ### Install from crates.io
