@@ -1,30 +1,17 @@
 name: release
 
 on:
-  push:
-    tags:
-      - "v*"
-  workflow_dispatch:
+  release:
+    types: [published]
 
 permissions:
   contents: write
 
 jobs:
-  create_release:
-    name: create-release
-    runs-on: ubuntu-latest
-    if: ${{ !contains(github.ref_name, '-') }}
-    steps:
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          generate_release_notes: true
-
   release:
     name: build-${{ matrix.target }}
     runs-on: ${{ matrix.os }}
-    needs: create_release
-    if: ${{ !contains(github.ref_name, '-') }}
+    if: ${{ !github.event.release.prerelease }}
     strategy:
       fail-fast: false
       matrix:
@@ -37,6 +24,8 @@ jobs:
             target: aarch64-apple-darwin
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -45,16 +34,18 @@ jobs:
           bin: oxide
           target: ${{ matrix.target }}
           manifest-path: crates/companion_cli/Cargo.toml
-          archive: oxide-${{ github.ref_name }}-${{ matrix.target }}
+          archive: oxide-${{ github.event.release.tag_name }}-${{ matrix.target }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
   publish:
     name: publish-crates-io
     runs-on: ubuntu-latest
     needs: release
-    if: ${{ !contains(github.ref_name, '-') }}
+    if: ${{ !github.event.release.prerelease }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo publish --locked -p rust-oxide-cli
         env:
