@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/HarrisDePerceptron/Rust-Oxide/compare/v0.3.1...v0.3.2) (2026-01-25)
+
+
+### Bug Fixes
+
+* updated readme ([d549e84](https://github.com/HarrisDePerceptron/Rust-Oxide/commit/d549e8473ed240bec0f4c167b998788d9d3ffbcc))
+
 ## [0.3.1](https://github.com/HarrisDePerceptron/Rust-Oxide/compare/v0.3.0...v0.3.1) (2026-01-25)
 
 
