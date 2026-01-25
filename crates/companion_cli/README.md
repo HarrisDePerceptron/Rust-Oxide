@@ -13,7 +13,6 @@ cargo install rust-oxide-cli
 
 This installs the `oxide` binary.
 
-From this repo:
 
 ```sh
 cargo run -p rust-oxide-cli -- init my_app
