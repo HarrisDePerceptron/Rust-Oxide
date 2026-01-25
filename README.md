@@ -68,6 +68,9 @@ Conventional Commits determine SemVer:
 Merging a release-please PR creates a `vX.Y.Z` tag, which triggers the release
 workflow to build binaries and publish `rust-oxide-cli` to crates.io.
 
+Note: The release workflow uses `cargo publish --locked`, so ensure `Cargo.lock`
+is up to date (run `cargo generate-lockfile`) before merging a release PR.
+
 ## License
 
 See `crates/companion_cli/LICENSE-MIT` and `crates/companion_cli/LICENSE-APACHE`.
