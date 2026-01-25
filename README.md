@@ -1,4 +1,4 @@
-# Rust Oxide
+# Rust Oxide - Opinionated Backend
 
 A Rust 2024 starter for building JSON APIs with Axum and SeaORM, plus a companion
 CLI to scaffold new projects and CRUD APIs.
