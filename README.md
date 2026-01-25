@@ -59,6 +59,18 @@ Install a specific version:
 curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/main/scripts/install.sh | sh -s -- --version 0.3.4
 ```
 
+Diagnostics (target detection, versions, support check):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/main/scripts/install.sh | sh -s -- --debug
+```
+
+Dry run:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/main/scripts/install.sh | sh -s -- --dry-run
+```
+
 ### Run from this repo
 
 ```sh

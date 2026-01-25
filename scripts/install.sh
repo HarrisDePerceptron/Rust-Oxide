@@ -12,6 +12,8 @@ PREFIX=""
 FORCE=0
 NO_PATH=0
 QUIET=0
+DEBUG=0
+DRY_RUN=0
 STRICT_CHECKSUM=${OXIDE_INSTALL_STRICT:-0}
 
 print_usage() {
@@ -27,6 +29,8 @@ Options:
   --version VERSION   Install a specific version (e.g. 0.3.4 or v0.3.4)
   --prefix DIR        Install to DIR instead of the default
   --force             Overwrite existing binary
+  --debug             Print diagnostic information and exit
+  --dry-run           Print planned actions without changing anything
   --no-path           Do not attempt to modify PATH or print PATH hints
   --quiet             Reduce output
   --help              Show this help
@@ -77,6 +81,17 @@ fetch_optional() {
   fi
 }
 
+url_exists() {
+  url=$1
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsI "$url" >/dev/null 2>&1
+  elif command -v wget >/dev/null 2>&1; then
+    wget --spider -q "$url" >/dev/null 2>&1
+  else
+    return 1
+  fi
+}
+
 download() {
   url=$1
   dest=$2
@@ -94,6 +109,16 @@ normalize_version() {
     v*) printf '%s\n' "$1" ;;
     *) printf 'v%s\n' "$1" ;;
   esac
+}
+
+latest_tag() {
+  fetch "${API_BASE}/releases/latest" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1
+}
+
+latest_tag_optional() {
+  if response=$(fetch_optional "${API_BASE}/releases/latest"); then
+    printf '%s' "$response" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1
+  fi
 }
 
 current_version() {
@@ -127,6 +152,25 @@ os_arch_target() {
     x86_64|amd64) arch="x86_64" ;;
     arm64|aarch64) arch="aarch64" ;;
     *) fail "unsupported architecture: $arch" ;;
+  esac
+
+  printf '%s-%s\n' "$arch" "$os"
+}
+
+os_arch_target_optional() {
+  os=$(uname -s 2>/dev/null || printf '')
+  arch=$(uname -m 2>/dev/null || printf '')
+
+  case "$os" in
+    Darwin) os="apple-darwin" ;;
+    Linux) os="unknown-linux-gnu" ;;
+    *) printf '%s' ""; return 0 ;;
+  esac
+
+  case "$arch" in
+    x86_64|amd64) arch="x86_64" ;;
+    arm64|aarch64) arch="aarch64" ;;
+    *) printf '%s' ""; return 0 ;;
   esac
 
   printf '%s-%s\n' "$arch" "$os"
@@ -219,6 +263,76 @@ ensure_path_hint() {
   warn "${INSTALL_DIR} is not on your PATH. Add it to your shell config to use '$BINARY'."
 }
 
+diagnostics() {
+  detected_target=""
+  detected_target=$(os_arch_target_optional 2>/dev/null || true)
+  detected_target=${detected_target:-unknown}
+
+  installed_path=""
+  if command -v "$BINARY" >/dev/null 2>&1; then
+    installed_path=$(command -v "$BINARY")
+  fi
+
+  current=""
+  current=$(current_version || true)
+  current=${current:-not installed}
+
+  latest=""
+  latest=$(latest_tag_optional 2>/dev/null || true)
+  latest=${latest:-unknown}
+
+  tag_to_check="$latest"
+  if [ -n "$REQUESTED_VERSION" ]; then
+    tag_to_check=$(normalize_version "$REQUESTED_VERSION")
+  fi
+
+  supported="unknown"
+  asset_url="unknown"
+  if [ "$detected_target" != "unknown" ] && [ -n "$tag_to_check" ] && [ "$tag_to_check" != "unknown" ]; then
+    asset_url="${RELEASES_BASE}/${tag_to_check}/${BINARY}-${tag_to_check}-${detected_target}.tar.gz"
+    if url_exists "$asset_url"; then
+      supported="yes"
+    else
+      supported="no"
+    fi
+  fi
+
+  log "Repository: ${REPO}"
+  log "Detected target: ${detected_target}"
+  log "Installed binary: ${installed_path:-not found}"
+  log "Current version: ${current}"
+  log "Latest version: ${latest}"
+  log "Asset URL: ${asset_url}"
+  log "Target supported: ${supported}"
+}
+
+dry_run_plan() {
+  TARGET=$(os_arch_target)
+  if [ -n "$REQUESTED_VERSION" ]; then
+    TAG=$(normalize_version "$REQUESTED_VERSION")
+  else
+    TAG=$(latest_tag)
+    [ -n "$TAG" ] || fail "could not determine latest version"
+  fi
+
+  ARCHIVE="${BINARY}-${TAG}-${TARGET}.tar.gz"
+  URL="${RELEASES_BASE}/${TAG}/${ARCHIVE}"
+  INSTALL_DIR=$(choose_install_dir)
+  NEEDS_SUDO="no"
+  if needs_sudo "$INSTALL_DIR"; then
+    NEEDS_SUDO="yes"
+  fi
+
+  log "Action: ${ACTION}"
+  log "Target: ${TARGET}"
+  log "Version tag: ${TAG}"
+  log "Archive: ${ARCHIVE}"
+  log "Download URL: ${URL}"
+  log "Install dir: ${INSTALL_DIR}"
+  log "Needs sudo: ${NEEDS_SUDO}"
+  log "Checksum strict: ${STRICT_CHECKSUM}"
+}
+
 uninstall() {
   if [ -n "$PREFIX" ]; then
     target="$PREFIX/$BINARY"
@@ -262,6 +376,8 @@ while [ "$#" -gt 0 ]; do
       PREFIX="$1"
       ;;
     --force) FORCE=1 ;;
+    --debug) DEBUG=1 ;;
+    --dry-run) DRY_RUN=1 ;;
     --no-path) NO_PATH=1 ;;
     --quiet) QUIET=1 ;;
     --help|-h) print_usage; exit 0 ;;
@@ -277,6 +393,16 @@ if [ -n "${OXIDE_PREFIX:-}" ]; then
   PREFIX="$OXIDE_PREFIX"
 fi
 
+if [ "$DEBUG" -eq 1 ]; then
+  diagnostics
+  exit 0
+fi
+
+if [ "$DRY_RUN" -eq 1 ]; then
+  dry_run_plan
+  exit 0
+fi
+
 if [ "$ACTION" = "uninstall" ]; then
   uninstall
   exit 0
@@ -285,7 +411,7 @@ fi
 if [ -n "$REQUESTED_VERSION" ]; then
   TAG=$(normalize_version "$REQUESTED_VERSION")
 else
-  TAG=$(fetch "${API_BASE}/releases/latest" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
+  TAG=$(latest_tag)
   [ -n "$TAG" ] || fail "could not determine latest version"
 fi
 
