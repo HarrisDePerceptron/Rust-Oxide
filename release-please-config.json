@@ -1,0 +1,10 @@
+{
+  "packages": {
+    "crates/companion_cli": {
+      "release-type": "rust",
+      "package-name": "rust-oxide-cli",
+      "changelog-path": "crates/companion_cli/CHANGELOG.md"
+    }
+  },
+  "include-v-in-tag": true
+}

@@ -1,27 +1,16 @@
 name: release
 
 on:
-  push:
-    tags:
-      - "v*"
+  release:
+    types: [published]
 
 permissions:
   contents: write
 
 jobs:
-  create_release:
-    name: create-release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          generate_release_notes: true
-
   release:
     name: build-${{ matrix.target }}
     runs-on: ${{ matrix.os }}
-    needs: create_release
     strategy:
       fail-fast: false
       matrix:
@@ -32,10 +21,10 @@ jobs:
             target: x86_64-apple-darwin
           - os: macos-latest
             target: aarch64-apple-darwin
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -44,7 +33,7 @@ jobs:
           bin: oxide
           target: ${{ matrix.target }}
           manifest-path: crates/companion_cli/Cargo.toml
-          archive: oxide-${{ github.ref_name }}-${{ matrix.target }}
+          archive: oxide-${{ github.event.release.tag_name }}-${{ matrix.target }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
   publish:
@@ -53,6 +42,8 @@ jobs:
     needs: release
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo publish --locked -p rust-oxide-cli
         env:
