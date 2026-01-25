@@ -35,6 +35,30 @@ cargo install rust-oxide-cli
 
 This installs the `oxide` binary.
 
+### Install without Rust (macOS/Linux)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/main/scripts/install.sh | sh
+```
+
+Update to the latest version:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/main/scripts/install.sh | sh -s -- --update
+```
+
+Uninstall:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/main/scripts/install.sh | sh -s -- --uninstall
+```
+
+Install a specific version:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/main/scripts/install.sh | sh -s -- --version 0.3.4
+```
+
 ### Run from this repo
 
 ```sh
