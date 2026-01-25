@@ -6,5 +6,7 @@
       "changelog-path": "crates/companion_cli/CHANGELOG.md"
     }
   },
-  "include-v-in-tag": true
+  "include-v-in-tag": true,
+  "draft": false,
+  "prerelease": false
 }
