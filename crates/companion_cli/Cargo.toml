@@ -2,7 +2,7 @@
 name = "rust-oxide-cli"
 version = "0.3.0"
 edition = "2024"
-description = "Companion CLI for the Rust Oxide server template"
+description = "Companion CLI for the Rust Oxide backend framework"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 include = [

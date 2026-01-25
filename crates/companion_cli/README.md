@@ -1,4 +1,4 @@
-# Oxide CLI
+# RUST Oxide CLI
 
 Companion CLI for the Rust Oxide server template. Use it to initialize a new
 project and scaffold or remove CRUD APIs.
