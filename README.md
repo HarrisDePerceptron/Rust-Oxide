@@ -38,37 +38,37 @@ This installs the `oxide` binary.
 ### Install without Rust (macOS/Linux)
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh | sh
 ```
 
 Update to the latest version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/main/scripts/install.sh | sh -s -- --update
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh | sh -s -- --update
 ```
 
 Uninstall:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/main/scripts/install.sh | sh -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh | sh -s -- --uninstall
 ```
 
 Install a specific version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/main/scripts/install.sh | sh -s -- --version 0.3.4
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh | sh -s -- --version 0.3.4
 ```
 
 Diagnostics (target detection, versions, support check):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/main/scripts/install.sh | sh -s -- --debug
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh | sh -s -- --debug
 ```
 
 Dry run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/main/scripts/install.sh | sh -s -- --dry-run
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh | sh -s -- --dry-run
 ```
 
 ### Run from this repo
