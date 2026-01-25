@@ -47,6 +47,6 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name }}
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo publish --locked -p rust-oxide-cli
+      - run: cargo publish -p rust-oxide-cli
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
