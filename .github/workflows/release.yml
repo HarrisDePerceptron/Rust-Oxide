@@ -9,9 +9,19 @@ permissions:
   contents: write
 
 jobs:
+  create_release:
+    name: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+
   release:
     name: build-${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    needs: create_release
     strategy:
       fail-fast: false
       matrix:
