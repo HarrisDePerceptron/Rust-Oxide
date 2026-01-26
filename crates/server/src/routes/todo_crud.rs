@@ -19,6 +19,7 @@ use crate::{
     db::dao::DaoContext,
     db::entities::{todo_item, todo_list},
     error::AppError,
+    response::JsonApiResponse,
     routes::base_api_router::CrudApiRouter,
     services::todo_service,
     state::AppState,
@@ -78,6 +79,8 @@ struct TodoUiTemplate {
     project_name: String,
 }
 
+type HtmlError = (StatusCode, Html<String>);
+
 pub fn router(state: Arc<AppState>) -> Router {
     let daos = DaoContext::new(&state.db);
     let service = todo_service::TodoService::new(daos.todo());
@@ -115,51 +118,52 @@ struct CountResponse {
 
 async fn list_count_handler(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<CountResponse>, AppError> {
+) -> Result<JsonApiResponse<CountResponse>, AppError> {
     let daos = DaoContext::new(&state.db);
     let service = todo_service::TodoService::new(daos.todo());
     let count = service.count_lists().await?;
-    Ok(Json(CountResponse { count }))
+    Ok(JsonApiResponse::ok(CountResponse { count }))
 }
 
 async fn item_count_handler(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
-) -> Result<Json<CountResponse>, AppError> {
+) -> Result<JsonApiResponse<CountResponse>, AppError> {
     let daos = DaoContext::new(&state.db);
     let service = todo_service::TodoService::new(daos.todo());
     let count = service.count_items_by_list(&id).await?;
-    Ok(Json(CountResponse { count }))
+    Ok(JsonApiResponse::ok(CountResponse { count }))
 }
 
-async fn todo_ui() -> Result<Html<String>, AppError> {
+async fn todo_ui() -> Result<Html<String>, HtmlError> {
     let now = Local::now().to_rfc3339();
     let project_name = crate::routes::public::project_name();
-    let rendered = TodoUiTemplate { now, project_name }.render().map_err(|_| {
-        AppError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "failed to render todo ui",
-        )
-    })?;
+    let rendered = TodoUiTemplate { now, project_name }
+        .render()
+        .map_err(|_| html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render todo ui"))?;
     Ok(Html(rendered))
 }
 
 async fn create_list(
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateListRequest>,
-) -> Result<(StatusCode, Json<TodoListResponse>), AppError> {
+) -> Result<JsonApiResponse<TodoListResponse>, AppError> {
     let title = normalize_title(&body.title)?;
     let service = todo_service_from_state(state.as_ref());
     let list = service.create_list(title).await?;
-    Ok((StatusCode::CREATED, Json(list.into())))
+    Ok(JsonApiResponse::with_status(
+        StatusCode::CREATED,
+        "created",
+        list.into(),
+    ))
 }
 
 async fn list_lists(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<TodoListResponse>>, AppError> {
+) -> Result<JsonApiResponse<Vec<TodoListResponse>>, AppError> {
     let service = todo_service_from_state(state.as_ref());
     let lists = service.list_lists().await?;
-    Ok(Json(
+    Ok(JsonApiResponse::ok(
         lists.into_iter().map(TodoListResponse::from).collect(),
     ))
 }
@@ -167,12 +171,12 @@ async fn list_lists(
 async fn get_list(
     State(state): State<Arc<AppState>>,
     Path(list_id): Path<Uuid>,
-) -> Result<Json<TodoListDetailResponse>, AppError> {
+) -> Result<JsonApiResponse<TodoListDetailResponse>, AppError> {
     let list = require_list(state.as_ref(), &list_id).await?;
     let service = todo_service_from_state(state.as_ref());
     let items = service.list_items(&list_id).await?;
     let items = items.into_iter().map(TodoItemResponse::from).collect();
-    Ok(Json(TodoListDetailResponse {
+    Ok(JsonApiResponse::ok(TodoListDetailResponse {
         list: list.into(),
         items,
     }))
@@ -182,42 +186,50 @@ async fn update_list(
     State(state): State<Arc<AppState>>,
     Path(list_id): Path<Uuid>,
     Json(body): Json<UpdateListRequest>,
-) -> Result<Json<TodoListResponse>, AppError> {
+) -> Result<JsonApiResponse<TodoListResponse>, AppError> {
     let title = normalize_title(&body.title)?;
     let service = todo_service_from_state(state.as_ref());
     let list = service.update_list_title(&list_id, title).await?;
-    Ok(Json(list.into()))
+    Ok(JsonApiResponse::ok(list.into()))
 }
 
 async fn delete_list(
     State(state): State<Arc<AppState>>,
     Path(list_id): Path<Uuid>,
-) -> Result<StatusCode, AppError> {
+) -> Result<JsonApiResponse<serde_json::Value>, AppError> {
     let service = todo_service_from_state(state.as_ref());
     service.delete_list(&list_id).await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(JsonApiResponse::with_status(
+        StatusCode::NO_CONTENT,
+        "deleted",
+        serde_json::Value::Null,
+    ))
 }
 
 async fn create_item(
     State(state): State<Arc<AppState>>,
     Path(list_id): Path<Uuid>,
     Json(body): Json<CreateItemRequest>,
-) -> Result<(StatusCode, Json<TodoItemResponse>), AppError> {
+) -> Result<JsonApiResponse<TodoItemResponse>, AppError> {
     let description = normalize_description(&body.description)?;
     require_list(state.as_ref(), &list_id).await?;
     let service = todo_service_from_state(state.as_ref());
     let item = service.create_item(&list_id, description).await?;
-    Ok((StatusCode::CREATED, Json(item.into())))
+    Ok(JsonApiResponse::with_status(
+        StatusCode::CREATED,
+        "created",
+        item.into(),
+    ))
 }
 
 async fn list_items(
     State(state): State<Arc<AppState>>,
     Path(list_id): Path<Uuid>,
-) -> Result<Json<Vec<TodoItemResponse>>, AppError> {
+) -> Result<JsonApiResponse<Vec<TodoItemResponse>>, AppError> {
     require_list(state.as_ref(), &list_id).await?;
     let service = todo_service_from_state(state.as_ref());
     let items = service.list_items(&list_id).await?;
-    Ok(Json(
+    Ok(JsonApiResponse::ok(
         items.into_iter().map(TodoItemResponse::from).collect(),
     ))
 }
@@ -226,7 +238,7 @@ async fn update_item(
     State(state): State<Arc<AppState>>,
     Path((list_id, item_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<UpdateItemRequest>,
-) -> Result<Json<TodoItemResponse>, AppError> {
+) -> Result<JsonApiResponse<TodoItemResponse>, AppError> {
     let UpdateItemRequest { description, done } = body;
     let description = match description {
         Some(value) => Some(normalize_description(&value)?.to_string()),
@@ -242,16 +254,20 @@ async fn update_item(
     let item = service
         .update_item(&list_id, &item_id, description, done)
         .await?;
-    Ok(Json(item.into()))
+    Ok(JsonApiResponse::ok(item.into()))
 }
 
 async fn delete_item(
     State(state): State<Arc<AppState>>,
     Path((list_id, item_id)): Path<(Uuid, Uuid)>,
-) -> Result<StatusCode, AppError> {
+) -> Result<JsonApiResponse<serde_json::Value>, AppError> {
     let service = todo_service_from_state(state.as_ref());
     service.delete_item(&list_id, &item_id).await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(JsonApiResponse::with_status(
+        StatusCode::NO_CONTENT,
+        "deleted",
+        serde_json::Value::Null,
+    ))
 }
 
 async fn require_list(state: &AppState, list_id: &Uuid) -> Result<todo_list::Model, AppError> {
@@ -305,4 +321,8 @@ impl From<todo_item::Model> for TodoItemResponse {
 fn todo_service_from_state(state: &AppState) -> todo_service::TodoService {
     let daos = DaoContext::new(&state.db);
     todo_service::TodoService::new(daos.todo())
+}
+
+fn html_error(status: StatusCode, message: &'static str) -> HtmlError {
+    (status, Html(message.to_string()))
 }

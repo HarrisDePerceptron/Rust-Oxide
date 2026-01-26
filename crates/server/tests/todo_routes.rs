@@ -56,6 +56,16 @@ async fn json_response(
     (status, json)
 }
 
+fn json_data<'a>(json: &'a serde_json::Value) -> &'a serde_json::Value {
+    json.get("data").unwrap_or(json)
+}
+
+fn json_message<'a>(json: &'a serde_json::Value) -> Option<&'a str> {
+    json.get("message")
+        .and_then(|value| value.as_str())
+        .or_else(|| json.get("error").and_then(|value| value.as_str()))
+}
+
 fn auth_header(state: &std::sync::Arc<AppState>) -> String {
     let user_id = Uuid::new_v4();
     let claims = make_access_claims(&user_id, vec![Role::User], 3600);
@@ -123,6 +133,7 @@ async fn todo_create_list() {
     let title = format!("Test List {}", Uuid::new_v4());
 
     let (status, list) = create_todo_list(&state, &title).await;
+    let list = json_data(&list);
 
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(list["title"].as_str(), Some(title.as_str()));
@@ -136,6 +147,7 @@ async fn todo_list_lists() {
     let title = format!("List {}", Uuid::new_v4());
 
     let (_, list) = create_todo_list(&state, &title).await;
+    let list = json_data(&list);
     let list_id = list["id"].as_str().unwrap().to_string();
 
     let (status, lists) = json_response(
@@ -145,6 +157,7 @@ async fn todo_list_lists() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
+    let lists = json_data(&lists);
     assert!(lists
         .as_array()
         .unwrap()
@@ -159,6 +172,7 @@ async fn todo_get_list() {
     let title = format!("List {}", Uuid::new_v4());
 
     let (_, list) = create_todo_list(&state, &title).await;
+    let list = json_data(&list);
     let list_id = list["id"].as_str().unwrap();
 
     let (status, response) = json_response(
@@ -171,6 +185,7 @@ async fn todo_get_list() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
+    let response = json_data(&response);
     assert_eq!(response["list"]["id"].as_str(), Some(list_id));
     assert_eq!(response["list"]["title"].as_str(), Some(title.as_str()));
     assert_eq!(response["items"].as_array().unwrap().len(), 0);
@@ -183,6 +198,7 @@ async fn todo_update_list() {
     let title = format!("List {}", Uuid::new_v4());
 
     let (_, list) = create_todo_list(&state, &title).await;
+    let list = json_data(&list);
     let list_id = list["id"].as_str().unwrap();
 
     let new_title = format!("Updated {}", Uuid::new_v4());
@@ -200,6 +216,7 @@ async fn todo_update_list() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
+    let updated = json_data(&updated);
     assert_eq!(updated["id"].as_str(), Some(list_id));
     assert_eq!(updated["title"].as_str(), Some(new_title.as_str()));
 }
@@ -211,6 +228,7 @@ async fn todo_delete_list() {
     let title = format!("List {}", Uuid::new_v4());
 
     let (_, list) = create_todo_list(&state, &title).await;
+    let list = json_data(&list);
     let list_id = list["id"].as_str().unwrap();
 
     let response = send(
@@ -233,12 +251,14 @@ async fn todo_create_item() {
     let title = format!("List {}", Uuid::new_v4());
 
     let (_, list) = create_todo_list(&state, &title).await;
+    let list = json_data(&list);
     let list_id = Uuid::parse_str(list["id"].as_str().unwrap()).unwrap();
     let list_id_str = list_id.to_string();
 
     let (status, item) = create_todo_item(&state, &list_id, "First item").await;
 
     assert_eq!(status, StatusCode::CREATED);
+    let item = json_data(&item);
     assert_eq!(item["list_id"].as_str(), Some(list_id_str.as_str()));
     assert_eq!(item["done"].as_bool(), Some(false));
 }
@@ -250,9 +270,11 @@ async fn todo_list_items() {
     let title = format!("List {}", Uuid::new_v4());
 
     let (_, list) = create_todo_list(&state, &title).await;
+    let list = json_data(&list);
     let list_id = Uuid::parse_str(list["id"].as_str().unwrap()).unwrap();
 
     let (_, item) = create_todo_item(&state, &list_id, "First item").await;
+    let item = json_data(&item);
     let item_id = item["id"].as_str().unwrap().to_string();
 
     let (status, items) = json_response(
@@ -265,6 +287,7 @@ async fn todo_list_items() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
+    let items = json_data(&items);
     assert!(items
         .as_array()
         .unwrap()
@@ -279,9 +302,11 @@ async fn todo_update_item() {
     let title = format!("List {}", Uuid::new_v4());
 
     let (_, list) = create_todo_list(&state, &title).await;
+    let list = json_data(&list);
     let list_id = Uuid::parse_str(list["id"].as_str().unwrap()).unwrap();
 
     let (_, item) = create_todo_item(&state, &list_id, "First item").await;
+    let item = json_data(&item);
     let item_id = item["id"].as_str().unwrap();
 
     let (status, updated) = json_response(
@@ -296,6 +321,7 @@ async fn todo_update_item() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
+    let updated = json_data(&updated);
     assert_eq!(updated["done"].as_bool(), Some(true));
 }
 
@@ -306,9 +332,11 @@ async fn todo_delete_item() {
     let title = format!("List {}", Uuid::new_v4());
 
     let (_, list) = create_todo_list(&state, &title).await;
+    let list = json_data(&list);
     let list_id = Uuid::parse_str(list["id"].as_str().unwrap()).unwrap();
 
     let (_, item) = create_todo_item(&state, &list_id, "First item").await;
+    let item = json_data(&item);
     let item_id = item["id"].as_str().unwrap();
 
     let response = send(
@@ -332,6 +360,7 @@ async fn todo_crud_create_list() {
     let title = format!("CRUD List {}", Uuid::new_v4());
 
     let (status, list) = create_todo_crud_list(&state, &auth, &title).await;
+    let list = json_data(&list);
 
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(list["title"].as_str(), Some(title.as_str()));
@@ -346,6 +375,7 @@ async fn todo_crud_list_lists() {
     let title = format!("CRUD List {}", Uuid::new_v4());
 
     let (_, list) = create_todo_crud_list(&state, &auth, &title).await;
+    let list = json_data(&list);
     let list_id = list["id"].as_str().unwrap().to_string();
 
     let (status, response) = json_response(
@@ -359,6 +389,7 @@ async fn todo_crud_list_lists() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
+    let response = json_data(&response);
     assert!(response["data"]
         .as_array()
         .unwrap()
@@ -374,6 +405,7 @@ async fn todo_crud_get_list() {
     let title = format!("CRUD List {}", Uuid::new_v4());
 
     let (_, list) = create_todo_crud_list(&state, &auth, &title).await;
+    let list = json_data(&list);
     let list_id = list["id"].as_str().unwrap();
 
     let (status, response) = json_response(
@@ -387,6 +419,7 @@ async fn todo_crud_get_list() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
+    let response = json_data(&response);
     assert_eq!(response["id"].as_str(), Some(list_id));
     assert_eq!(response["title"].as_str(), Some(title.as_str()));
 }
@@ -399,6 +432,7 @@ async fn todo_crud_update_list() {
     let title = format!("CRUD List {}", Uuid::new_v4());
 
     let (_, list) = create_todo_crud_list(&state, &auth, &title).await;
+    let list = json_data(&list);
     let list_id = list["id"].as_str().unwrap();
 
     let new_title = format!("Updated {}", Uuid::new_v4());
@@ -417,6 +451,7 @@ async fn todo_crud_update_list() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
+    let updated = json_data(&updated);
     assert_eq!(updated["id"].as_str(), Some(list_id));
     assert_eq!(updated["title"].as_str(), Some(new_title.as_str()));
 }
@@ -429,6 +464,7 @@ async fn todo_crud_delete_list() {
     let title = format!("CRUD List {}", Uuid::new_v4());
 
     let (_, list) = create_todo_crud_list(&state, &auth, &title).await;
+    let list = json_data(&list);
     let list_id = list["id"].as_str().unwrap();
 
     let response = send(
@@ -461,7 +497,7 @@ async fn todo_crud_count_lists() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let count_before = count_before["count"].as_u64().unwrap();
+    let count_before = json_data(&count_before)["count"].as_u64().unwrap();
 
     let title = format!("Count List {}", Uuid::new_v4());
     let (status, _) = create_todo_crud_list(&state, &auth, &title).await;
@@ -477,7 +513,7 @@ async fn todo_crud_count_lists() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let count_after = count_after["count"].as_u64().unwrap();
+    let count_after = json_data(&count_after)["count"].as_u64().unwrap();
     assert!(count_after > count_before);
 }
 
@@ -490,6 +526,7 @@ async fn todo_crud_count_items() {
 
     let (status, list) = create_todo_crud_list(&state, &auth, &title).await;
     assert_eq!(status, StatusCode::CREATED);
+    let list = json_data(&list);
     let list_id = list["id"].as_str().unwrap();
 
     let (status, response) = json_response(
@@ -503,7 +540,7 @@ async fn todo_crud_count_items() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(response["count"].as_u64(), Some(0));
+    assert_eq!(json_data(&response)["count"].as_u64(), Some(0));
 }
 
 #[tokio::test]
@@ -523,7 +560,7 @@ async fn todo_create_list_requires_title() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(response["error"].as_str(), Some("Title required"));
+    assert_eq!(json_message(&response), Some("Title required"));
 }
 
 #[tokio::test]
@@ -533,6 +570,7 @@ async fn todo_update_list_requires_title() {
     let title = format!("List {}", Uuid::new_v4());
 
     let (_, list) = create_todo_list(&state, &title).await;
+    let list = json_data(&list);
     let list_id = list["id"].as_str().unwrap();
 
     let (status, response) = json_response(
@@ -547,7 +585,7 @@ async fn todo_update_list_requires_title() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(response["error"].as_str(), Some("Title required"));
+    assert_eq!(json_message(&response), Some("Title required"));
 }
 
 #[tokio::test]
@@ -557,6 +595,7 @@ async fn todo_create_item_requires_description() {
     let title = format!("List {}", Uuid::new_v4());
 
     let (_, list) = create_todo_list(&state, &title).await;
+    let list = json_data(&list);
     let list_id = list["id"].as_str().unwrap();
 
     let (status, response) = json_response(
@@ -573,7 +612,7 @@ async fn todo_create_item_requires_description() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(response["error"].as_str(), Some("Description required"));
+    assert_eq!(json_message(&response), Some("Description required"));
 }
 
 #[tokio::test]
@@ -583,9 +622,11 @@ async fn todo_update_item_requires_payload() {
     let title = format!("List {}", Uuid::new_v4());
 
     let (_, list) = create_todo_list(&state, &title).await;
+    let list = json_data(&list);
     let list_id = Uuid::parse_str(list["id"].as_str().unwrap()).unwrap();
 
     let (_, item) = create_todo_item(&state, &list_id, "First item").await;
+    let item = json_data(&item);
     let item_id = item["id"].as_str().unwrap();
 
     let (status, response) = json_response(
@@ -601,7 +642,7 @@ async fn todo_update_item_requires_payload() {
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(
-        response["error"].as_str(),
+        json_message(&response),
         Some("Description or done required")
     );
 }
@@ -622,7 +663,7 @@ async fn todo_get_list_not_found() {
     .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(response["error"].as_str(), Some("Resource not found"));
+    assert_eq!(json_message(&response), Some("Resource not found"));
 }
 
 #[tokio::test]
@@ -632,6 +673,7 @@ async fn todo_update_item_not_found() {
     let title = format!("List {}", Uuid::new_v4());
 
     let (_, list) = create_todo_list(&state, &title).await;
+    let list = json_data(&list);
     let list_id = Uuid::parse_str(list["id"].as_str().unwrap()).unwrap();
     let missing_item = Uuid::new_v4();
 
@@ -647,7 +689,7 @@ async fn todo_update_item_not_found() {
     .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(response["error"].as_str(), Some("Todo item not found"));
+    assert_eq!(json_message(&response), Some("Todo item not found"));
 }
 
 #[tokio::test]
@@ -657,6 +699,7 @@ async fn todo_delete_item_not_found() {
     let title = format!("List {}", Uuid::new_v4());
 
     let (_, list) = create_todo_list(&state, &title).await;
+    let list = json_data(&list);
     let list_id = Uuid::parse_str(list["id"].as_str().unwrap()).unwrap();
     let missing_item = Uuid::new_v4();
 
@@ -671,5 +714,5 @@ async fn todo_delete_item_not_found() {
     .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(response["error"].as_str(), Some("Todo item not found"));
+    assert_eq!(json_message(&response), Some("Todo item not found"));
 }

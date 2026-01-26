@@ -22,6 +22,13 @@ struct TokenResponse {
     expires_in: usize,
 }
 
+#[derive(Debug, Deserialize)]
+struct ApiResponse<T> {
+    status: u16,
+    message: String,
+    data: T,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Defaults assume your axum server is running locally on :3000
@@ -113,8 +120,9 @@ async fn login(http: &Client, url: &str, email: &str, password: &str) -> Result<
         bail!("login failed with status {status}");
     }
 
-    let tr: TokenResponse = serde_json::from_str(&text).context("parsing token response failed")?;
-    Ok(tr)
+    let envelope: ApiResponse<TokenResponse> =
+        serde_json::from_str(&text).context("parsing token response failed")?;
+    Ok(envelope.data)
 }
 
 async fn refresh(http: &Client, url: &str, refresh_token: &str) -> Result<TokenResponse> {
@@ -136,9 +144,9 @@ async fn refresh(http: &Client, url: &str, refresh_token: &str) -> Result<TokenR
         bail!("refresh failed with status {status}");
     }
 
-    let tr: TokenResponse =
+    let envelope: ApiResponse<TokenResponse> =
         serde_json::from_str(&text).context("parsing refresh response failed")?;
-    Ok(tr)
+    Ok(envelope.data)
 }
 
 async fn call_get(http: &Client, url: &str, bearer: Option<&str>) -> Result<()> {

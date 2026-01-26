@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
 
 use askama::Template;
-use axum::{Json, Router, http::StatusCode, response::Html, routing::get};
+use axum::{Router, http::StatusCode, response::Html, routing::get};
 use chrono::Local;
 use tower_http::services::ServeDir;
 
-use crate::error::AppError;
 use crate::routes::route_list::{RouteInfo, routes};
+use crate::response::JsonApiResponse;
 use crate::db::entity_catalog::{self, EntityInfo};
 
 #[derive(Clone)]
@@ -56,6 +56,8 @@ struct DocsTemplate {
     project_name: String,
 }
 
+type HtmlError = (StatusCode, Html<String>);
+
 pub fn router() -> Router {
     let public_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("public");
     Router::new()
@@ -68,15 +70,15 @@ pub fn router() -> Router {
         .route("/routes.json", get(list_routes_json))
 }
 
-async fn handler() -> Json<serde_json::Value> {
-    Json(serde_json::json!({ "ok": true, "route": "public" }))
+async fn handler() -> JsonApiResponse<serde_json::Value> {
+    JsonApiResponse::ok(serde_json::json!({ "ok": true, "route": "public" }))
 }
 
-async fn list_routes_json() -> Json<&'static [RouteInfo]> {
-    Json(routes())
+async fn list_routes_json() -> JsonApiResponse<&'static [RouteInfo]> {
+    JsonApiResponse::ok(routes())
 }
 
-async fn index() -> Result<Html<String>, AppError> {
+async fn index() -> Result<Html<String>, HtmlError> {
     let now = Local::now().to_rfc3339();
     let route_groups = build_route_groups();
     let project_name = project_name();
@@ -86,11 +88,11 @@ async fn index() -> Result<Html<String>, AppError> {
         project_name,
     }
         .render()
-        .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render index"))?;
+        .map_err(|_| html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render index"))?;
     Ok(Html(rendered))
 }
 
-async fn routes_view() -> Result<Html<String>, AppError> {
+async fn routes_view() -> Result<Html<String>, HtmlError> {
     let now = Local::now().to_rfc3339();
     let route_groups = build_route_groups();
     let project_name = project_name();
@@ -100,11 +102,11 @@ async fn routes_view() -> Result<Html<String>, AppError> {
         project_name,
     }
         .render()
-        .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render routes"))?;
+        .map_err(|_| html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render routes"))?;
     Ok(Html(rendered))
 }
 
-async fn entities_view() -> Result<Html<String>, AppError> {
+async fn entities_view() -> Result<Html<String>, HtmlError> {
     let now = Local::now().to_rfc3339();
     let entities = entity_catalog::entities();
     let erd_mermaid = entity_catalog::erd_mermaid();
@@ -116,16 +118,18 @@ async fn entities_view() -> Result<Html<String>, AppError> {
         project_name,
     }
         .render()
-        .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render entities"))?;
+        .map_err(|_| {
+            html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render entities")
+        })?;
     Ok(Html(rendered))
 }
 
-async fn docs_view() -> Result<Html<String>, AppError> {
+async fn docs_view() -> Result<Html<String>, HtmlError> {
     let now = Local::now().to_rfc3339();
     let project_name = project_name();
     let rendered = DocsTemplate { now, project_name }
         .render()
-        .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to render docs"))?;
+        .map_err(|_| html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render docs"))?;
     Ok(Html(rendered))
 }
 
@@ -195,4 +199,8 @@ pub(crate) fn project_name() -> String {
     } else {
         out
     }
+}
+
+fn html_error(status: StatusCode, message: &'static str) -> HtmlError {
+    (status, Html(message.to_string()))
 }

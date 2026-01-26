@@ -16,7 +16,12 @@ use tower::{Layer, Service, util::BoxCloneSyncServiceLayer};
 use uuid::Uuid;
 
 use super::base_router::BaseRouter;
-use crate::{db::dao::DaoBase, error::AppError, services::crud_service::CrudService};
+use crate::{
+    db::dao::DaoBase,
+    error::AppError,
+    response::JsonApiResponse,
+    services::crud_service::CrudService,
+};
 
 type DaoOf<S> = <S as CrudService>::Dao;
 type EntityOf<S> = <DaoOf<S> as DaoBase>::Entity;
@@ -211,7 +216,11 @@ where
                 move |Json(payload)| async move {
                     let active = Self::build_create(payload)?;
                     let model: ModelOf<Self::Service> = service.create(active).await?;
-                    Ok::<_, AppError>((StatusCode::CREATED, Json(model)))
+                    Ok::<_, AppError>(JsonApiResponse::with_status(
+                        StatusCode::CREATED,
+                        "created",
+                        model,
+                    ))
                 }
             });
             router = router.route(base, self.apply_method_middleware(Method::Create, route));
@@ -234,7 +243,7 @@ where
                             |select| Self::list_apply(&query, select),
                         )
                         .await?;
-                    Ok::<_, AppError>(Json(response))
+                    Ok::<_, AppError>(JsonApiResponse::ok(response))
                 }
             });
             router = router.route(base, self.apply_method_middleware(Method::List, route));
@@ -245,7 +254,7 @@ where
                 let service = self.service();
                 move |Path(id): Path<Uuid>| async move {
                     let model: ModelOf<Self::Service> = service.find_by_id(id).await?;
-                    Ok::<_, AppError>(Json(model))
+                    Ok::<_, AppError>(JsonApiResponse::ok(model))
                 }
             });
             router = router.route(&id_path, self.apply_method_middleware(Method::Get, route));
@@ -259,7 +268,7 @@ where
                     let model: ModelOf<Self::Service> = service
                         .update(id, move |active| Self::apply_patch(active, patch))
                         .await?;
-                    Ok::<_, AppError>(Json(model))
+                    Ok::<_, AppError>(JsonApiResponse::ok(model))
                 }
             });
             router = router.route(&id_path, self.apply_method_middleware(Method::Patch, route));
@@ -270,7 +279,11 @@ where
                 let service = self.service();
                 move |Path(id): Path<Uuid>| async move {
                     service.delete(id).await?;
-                    Ok::<_, AppError>(StatusCode::NO_CONTENT)
+                    Ok::<_, AppError>(JsonApiResponse::with_status(
+                        StatusCode::NO_CONTENT,
+                        "deleted",
+                        Value::Null,
+                    ))
                 }
             });
             router = router.route(

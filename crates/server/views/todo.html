@@ -442,6 +442,19 @@
             }
           };
 
+          const unwrapData = (payload) => {
+            if (
+              payload &&
+              typeof payload === "object" &&
+              "status" in payload &&
+              "message" in payload &&
+              "data" in payload
+            ) {
+              return payload.data;
+            }
+            return payload;
+          };
+
           const normalizeSearchTerm = (value) =>
             value.replace(/\*/g, "").trim().replace(/\s+/g, " ");
 
@@ -720,10 +733,11 @@
               return;
             }
             let lists = [];
-            if (Array.isArray(result.data)) {
-              lists = result.data;
-            } else if (result.data && Array.isArray(result.data.data)) {
-              lists = result.data.data;
+            const payload = unwrapData(result.data);
+            if (Array.isArray(payload)) {
+              lists = payload;
+            } else if (payload && Array.isArray(payload.data)) {
+              lists = payload.data;
             }
             state.lists = lists;
             if (state.activeListId && !state.lists.some((list) => list.id === state.activeListId)) {
@@ -737,10 +751,11 @@
 
           const loadListDetail = async (listId) => {
             const result = await apiRequest("GET", `/todo/${listId}`);
-            if (result.ok && result.data) {
+            const payload = unwrapData(result.data);
+            if (result.ok && payload) {
               state.activeListId = listId;
-              state.activeList = result.data.list;
-              state.items = result.data.items || [];
+              state.activeList = payload.list;
+              state.items = payload.items || [];
               state.editingItemId = null;
               renderActiveList();
               renderItems();
@@ -751,10 +766,11 @@
 
           const createList = async (title) => {
             const result = await apiRequest("POST", "/todo", { title });
-            if (result.ok && result.data) {
+            const payload = unwrapData(result.data);
+            if (result.ok && payload) {
               showToast("List created");
               await loadLists();
-              await loadListDetail(result.data.id);
+              await loadListDetail(payload.id);
             } else {
               setError(listError, "Unable to create list.");
             }
@@ -765,8 +781,9 @@
               return;
             }
             const result = await apiRequest("PATCH", `/todo/${state.activeListId}`, { title });
-            if (result.ok && result.data) {
-              state.activeList = result.data;
+            const payload = unwrapData(result.data);
+            if (result.ok && payload) {
+              state.activeList = payload;
               showToast("List updated");
               await loadLists();
               renderActiveList();

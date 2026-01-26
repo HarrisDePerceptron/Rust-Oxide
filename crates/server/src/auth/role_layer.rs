@@ -9,6 +9,7 @@ use tower::{Layer, Service};
 
 use super::Claims;
 use crate::auth::Role;
+use crate::error::AppError;
 
 #[derive(Clone)]
 pub struct RequireRoleLayer {
@@ -59,11 +60,15 @@ where
         Box::pin(async move {
             let claims = match req.extensions().get::<Claims>() {
                 Some(c) => c,
-                None => return Ok((StatusCode::UNAUTHORIZED, "No JWT claims").into_response()),
+                None => {
+                    return Ok(AppError::new(StatusCode::UNAUTHORIZED, "No JWT claims")
+                        .into_response());
+                }
             };
 
             if !claims.roles.iter().any(|r| r == &required) {
-                return Ok((StatusCode::FORBIDDEN, "Missing required role").into_response());
+                return Ok(AppError::new(StatusCode::FORBIDDEN, "Missing required role")
+                    .into_response());
             }
 
             inner.call(req).await

@@ -5,6 +5,7 @@ pub mod role_layer;
 use axum::{extract::FromRequestParts, http::StatusCode};
 use serde::{Deserialize, Serialize};
 
+use crate::error::AppError;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
@@ -46,7 +47,7 @@ impl<S> FromRequestParts<S> for Claims
 where
     S: Send + Sync,
 {
-    type Rejection = (StatusCode, &'static str);
+    type Rejection = AppError;
 
     async fn from_request_parts(
         parts: &mut axum::http::request::Parts,
@@ -56,6 +57,6 @@ where
             .extensions
             .get::<Claims>()
             .cloned()
-            .ok_or((StatusCode::UNAUTHORIZED, "No claims in request"))
+            .ok_or_else(|| AppError::new(StatusCode::UNAUTHORIZED, "No claims in request"))
     }
 }

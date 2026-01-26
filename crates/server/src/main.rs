@@ -4,13 +4,8 @@ use axum::Router;
 use tower_http::trace::TraceLayer;
 
 use rust_oxide::{
-    config::AppConfig,
-    db::connection,
-    db::dao::DaoContext,
-    logging::init_tracing,
-    routes::router,
-    services::auth_service,
-    state::AppState,
+    config::AppConfig, db::connection, db::dao::DaoContext, logging::init_tracing, routes::router,
+    services::auth_service, state::AppState,
 };
 
 #[tokio::main]

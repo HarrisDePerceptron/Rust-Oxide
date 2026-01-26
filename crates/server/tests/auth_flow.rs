@@ -65,7 +65,8 @@ async fn public_route_works() {
     assert_eq!(res.status(), StatusCode::OK);
     let body = body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(json["route"], "public");
+    let payload = json.get("data").unwrap_or(&json);
+    assert_eq!(payload["route"], "public");
 }
 
 #[tokio::test]
@@ -98,7 +99,8 @@ async fn login_returns_token() {
     assert_eq!(res.status(), StatusCode::OK);
     let body = body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert!(json["access_token"].as_str().is_some());
+    let payload = json.get("data").unwrap_or(&json);
+    assert!(payload["access_token"].as_str().is_some());
 }
 
 #[tokio::test]

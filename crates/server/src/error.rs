@@ -1,14 +1,9 @@
 use axum::{
-    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use serde::Serialize;
 
-#[derive(Debug, Serialize)]
-pub struct ErrorBody {
-    pub error: String,
-}
+use crate::response::JsonApiResponse;
 
 #[derive(Debug)]
 pub struct AppError {
@@ -24,9 +19,6 @@ impl AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let body = Json(ErrorBody {
-            error: self.message.to_string(),
-        });
-        (self.status, body).into_response()
+        JsonApiResponse::error(&self).into_response()
     }
 }

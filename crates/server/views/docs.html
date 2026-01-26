@@ -54,8 +54,11 @@
         </section>
 
         <section id="getting-started" class="fade-2 mx-auto mt-14 max-w-3xl space-y-4">
-          <p class="text-xs uppercase tracking-[0.3em] text-black/40">Getting started</p>
-          <h2 class="font-display text-3xl text-[color:var(--pine)]">From entity to API in four steps.</h2>
+          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
+            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
+            Getting started
+          </p>
+          <h2 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">From entity to API in four steps.</h2>
           <p class="text-sm text-black/70">
             The minimum path is: define your SeaORM entity, add a DAO, implement a service,
             then mount a CRUD router. Each layer stays focused so you can iterate quickly.
@@ -158,8 +161,11 @@ pub fn router(state: Arc<AppState>) -> Router {
         </section>
 
         <section id="project-structure" class="fade-2 mx-auto mt-14 max-w-3xl space-y-4">
-          <p class="text-xs uppercase tracking-[0.3em] text-black/40">Project structure</p>
-          <h2 class="font-display text-3xl text-[color:var(--pine)]">Know where to look first.</h2>
+          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
+            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
+            Project structure
+          </p>
+          <h2 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">Know where to look first.</h2>
           <p class="text-sm text-black/70">
             This tree highlights the core modules you will touch most when extending the template.
           </p>
@@ -187,8 +193,11 @@ views/
         </section>
 
         <section id="auth" class="fade-2 mx-auto mt-14 max-w-3xl space-y-4">
-          <p class="text-xs uppercase tracking-[0.3em] text-black/40">JWT auth</p>
-          <h2 class="font-display text-3xl text-[color:var(--pine)]">Register, get a token, protect routes.</h2>
+          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
+            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
+            JWT auth
+          </p>
+          <h2 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">Register, get a token, protect routes.</h2>
           <p class="text-sm text-black/70">
             The auth router provides <span class="font-semibold">/register</span>,
             <span class="font-semibold">/login</span>, and <span class="font-semibold">/refresh</span>.
@@ -300,8 +309,11 @@ pub fn router(state: Arc<AppState>) -> Router {
         </section>
 
         <section id="config" class="fade-2 mx-auto mt-14 max-w-3xl space-y-4">
-          <p class="text-xs uppercase tracking-[0.3em] text-black/40">Application config</p>
-          <h2 class="font-display text-3xl text-[color:var(--pine)]">Extend AppConfig, then use it anywhere.</h2>
+          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
+            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
+            Application config
+          </p>
+          <h2 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">Extend AppConfig, then use it anywhere.</h2>
           <p class="text-sm text-black/70">
             Configuration lives in <span class="font-semibold">src/config.rs</span> and is loaded once
             at startup. The config is stored on <span class="font-semibold">AppState</span>, so routes
@@ -343,8 +355,11 @@ async fn handler(State(state): State<Arc<AppState>>) {
         </section>
 
         <section id="crud-router" class="fade-2 mx-auto mt-14 max-w-3xl space-y-4">
-          <p class="text-xs uppercase tracking-[0.3em] text-black/40">CRUD router</p>
-          <h2 class="font-display text-3xl text-[color:var(--pine)]">Wrap a service, expose CRUD JSON.</h2>
+          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
+            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
+            CRUD router
+          </p>
+          <h2 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">Wrap a service, expose CRUD JSON.</h2>
           <p class="text-sm text-black/70">
             The file <span class="font-semibold">src/routes/base_api_router.rs</span> provides
             <span class="font-semibold">CrudApiRouter</span>. Hand it a service that implements
@@ -422,8 +437,11 @@ fn list_apply(query: &ListQuery, select: Select<Entity>) -> Select<Entity> {
         </section>
 
         <section id="filters" class="fade-3 mx-auto mt-14 max-w-3xl space-y-4">
-          <p class="text-xs uppercase tracking-[0.3em] text-black/40">Filters</p>
-          <h3 class="font-display text-3xl text-[color:var(--pine)]">Flexible filtering with clear syntax.</h3>
+          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
+            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
+            Filters
+          </p>
+          <h3 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">Flexible filtering with clear syntax.</h3>
           <p class="text-sm text-black/70">
             List endpoints accept query params and can turn them into SQL filters.
             The default mode allows all columns and parses by column type. You can
@@ -527,12 +545,60 @@ fn list_filter_mode() -> FilterMode {
         </section>
 
         <section id="cli" class="fade-2 mx-auto mt-14 max-w-3xl space-y-4">
-          <p class="text-xs uppercase tracking-[0.3em] text-black/40">CLI</p>
-          <h2 class="font-display text-3xl text-[color:var(--pine)]">Scaffold projects and APIs fast.</h2>
-          <p class="text-sm text-black/70">
-            The companion CLI is named <span class="font-semibold">oxide</span>. Use it to initialize
-            a fresh project, then add or remove CRUD APIs from your project root.
+          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
+            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
+            CLI
           </p>
+          <h2 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">Scaffold projects and APIs fast.</h2>
+          <p class="text-sm text-black/70">
+            The companion CLI is named <span class="font-semibold">oxide</span>. Install it once, then initialize
+            a fresh project and add or remove CRUD APIs from your project root.
+          </p>
+          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
+            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Install the CLI</p>
+            <div
+              class="mt-4 rounded-2xl border border-black/10 shadow-inner"
+              data-terminal="true"
+              style="background-color: var(--pine); color: var(--mist);"
+            >
+              <div class="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/70">
+                <span>Terminal</span>
+                <button
+                  class="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/40 hover:text-white"
+                  data-copy-target="terminal-cli-install"
+                  type="button"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-cli-install"># with Rust installed (crates.io)
+cargo install rust-oxide-cli
+
+# no Rust required (macOS/Linux)
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh | sh</code></pre>
+            </div>
+            <div
+              class="mt-3 rounded-2xl border border-black/10 shadow-inner"
+              data-terminal="true"
+              style="background-color: var(--pine); color: var(--mist);"
+            >
+              <div class="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/70">
+                <span>Terminal</span>
+                <button
+                  class="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/40 hover:text-white"
+                  data-copy-target="terminal-cli-update"
+                  type="button"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-cli-update"># update to the latest version
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh | sh -s -- --update
+
+# uninstall
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh | sh -s -- --uninstall</code></pre>
+            </div>
+          </div>
           <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
             <p class="text-xs uppercase tracking-[0.3em] text-black/50">Init a new project</p>
             <div
@@ -550,11 +616,11 @@ fn list_filter_mode() -> FilterMode {
                   Copy
                 </button>
               </div>
-              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-cli-init"># from this repo
-cargo run -p rust-oxide-cli -- init my_app
+              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-cli-init"># installed via cargo or installer
+oxide init my_app
 
-# or if the CLI is installed
-oxide init my_app</code></pre>
+# from this repo
+cargo run -p rust-oxide-cli -- init my_app</code></pre>
             </div>
             <p class="mt-2 text-xs text-black/50">
               Add <span class="font-semibold">--non-interactive</span> or
@@ -582,18 +648,20 @@ oxide init my_app</code></pre>
                 </button>
               </div>
               <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-cli-api"># add a CRUD API
-cargo run -p rust-oxide-cli -- api add todo_item --fields "title:string,done:bool"
+oxide api add todo_item --fields "title:string,done:bool"
 
 # remove a CRUD API
-cargo run -p rust-oxide-cli -- api remove todo_item
+oxide api remove todo_item
 
 # preview changes
-cargo run -p rust-oxide-cli -- api add todo_item --dry-run</code></pre>
+oxide api add todo_item --dry-run</code></pre>
             </div>
             <p class="mt-2 text-xs text-black/50">
               Use <span class="font-semibold">--no-auth</span> to skip auth middleware and
               <span class="font-semibold">--force</span> to overwrite or prune when needed.
+              For local dev, prefix with <span class="font-semibold">cargo run -p rust-oxide-cli --</span>.
             </p>
+            <p class="mt-2 text-xs text-black/50">Run <span class="font-semibold">oxide --help</span> for full flags.</p>
           </div>
         </section>
 

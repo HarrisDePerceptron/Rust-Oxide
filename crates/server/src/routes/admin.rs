@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
-use axum::{Json, Router, middleware, routing::get};
+use axum::{Router, middleware, routing::get};
 
 use crate::{
     auth::{Claims, Role, jwt::jwt_auth, role_layer::RequireRoleLayer},
+    response::JsonApiResponse,
     state::AppState,
 };
 
@@ -15,6 +16,6 @@ pub fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
-async fn admin_stats(claims: Claims) -> Json<serde_json::Value> {
-    Json(serde_json::json!({ "ok": true, "admin": claims.sub }))
+async fn admin_stats(claims: Claims) -> JsonApiResponse<serde_json::Value> {
+    JsonApiResponse::ok(serde_json::json!({ "ok": true, "admin": claims.sub }))
 }
