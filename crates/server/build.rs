@@ -1689,6 +1689,13 @@ fn describe_response_ok(
             describe_type(inner, module_path, registry, context)
         );
     }
+    if let Some(inner) = extract_generic_inner(ty, "JsonApiResponse") {
+        let data_desc = describe_type(inner, module_path, registry, context);
+        return format!(
+            "{{ \"status\": u16, \"message\": String, \"data\": {} }}",
+            data_desc
+        );
+    }
     if is_unit_type(ty) {
         return "None".to_string();
     }
@@ -1701,11 +1708,22 @@ fn describe_response_type(
     registry: &TypeRegistry,
     context: &CrudTypeContext,
 ) -> String {
+    if let Some(inner) = extract_generic_inner(ty, "ApiResult") {
+        let data_desc = describe_type(inner, module_path, registry, context);
+        let ok_desc = format!(
+            "{{ \"status\": u16, \"message\": String, \"data\": {} }}",
+            data_desc
+        );
+        return ok_desc;
+    }
     let result_args = extract_generic_types(ty, "Result");
     if result_args.len() >= 2 {
         let ok_desc = describe_response_ok(result_args[0], module_path, registry, context);
         let err_desc = describe_type(result_args[1], module_path, registry, context);
-        return format!("ok: {}, err: {}", ok_desc, err_desc);
+        if err_desc == "AppError" {
+            return ok_desc;
+        }
+        return format!("{} | err: {}", ok_desc, err_desc);
     }
     describe_response_ok(ty, module_path, registry, context)
 }
@@ -1850,9 +1868,15 @@ fn crud_route_entries(
         &describe_type_name("PaginatedResponse", registry, context),
         &model_desc,
     );
-    let model_response = format!("ok: {}, err: AppError", model_desc);
-    let list_response = format!("ok: {}, err: AppError", list_response);
-    let delete_response = "ok: StatusCode, err: AppError".to_string();
+    let model_response = format!(
+        "{{ \"status\": u16, \"message\": String, \"data\": {} }}",
+        model_desc
+    );
+    let list_response = format!(
+        "{{ \"status\": u16, \"message\": String, \"data\": {} }}",
+        list_response
+    );
+    let delete_response = "{ \"status\": u16, \"message\": String, \"data\": JSON }".to_string();
     vec![
         RouteEntry {
             method: "POST".to_string(),
