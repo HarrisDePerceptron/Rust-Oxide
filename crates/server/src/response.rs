@@ -38,7 +38,7 @@ impl JsonApiResponse<serde_json::Value> {
     pub(crate) fn from_error(err: &AppError) -> Self {
         Self {
             status: err.status.as_u16(),
-            message: err.message.to_string(),
+            message: err.message.clone(),
             data: serde_json::Value::Null,
         }
     }

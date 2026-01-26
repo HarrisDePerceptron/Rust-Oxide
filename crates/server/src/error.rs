@@ -8,12 +8,15 @@ use crate::response::JsonApiResponse;
 #[derive(Debug)]
 pub struct AppError {
     pub status: StatusCode,
-    pub message: &'static str,
+    pub message: String,
 }
 
 impl AppError {
-    pub fn new(status: StatusCode, message: &'static str) -> Self {
-        Self { status, message }
+    pub fn new(status: StatusCode, message: impl Into<String>) -> Self {
+        Self {
+            status,
+            message: message.into(),
+        }
     }
 }
 

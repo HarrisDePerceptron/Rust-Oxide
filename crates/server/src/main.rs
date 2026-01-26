@@ -1,11 +1,11 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use axum::Router;
+use axum::{Router, middleware};
 use tower_http::trace::TraceLayer;
 
 use rust_oxide::{
-    config::AppConfig, db::connection, db::dao::DaoContext, logging::init_tracing, routes::router,
-    services::auth_service, state::AppState,
+    config::AppConfig, db::connection, db::dao::DaoContext, logging::init_tracing,
+    middleware::json_error_middleware, routes::router, services::auth_service, state::AppState,
 };
 
 #[tokio::main]
@@ -30,6 +30,7 @@ async fn run() -> anyhow::Result<()> {
 
     let app = Router::new()
         .merge(router(Arc::clone(&state)))
+        .layer(middleware::from_fn(json_error_middleware))
         .layer(TraceLayer::new_for_http());
 
     let addr: SocketAddr = format!("{}:{}", state.config.host.as_str(), state.config.port)
