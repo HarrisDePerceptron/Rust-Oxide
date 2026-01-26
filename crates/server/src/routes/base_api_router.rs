@@ -216,11 +216,11 @@ where
                 move |Json(payload)| async move {
                     let active = Self::build_create(payload)?;
                     let model: ModelOf<Self::Service> = service.create(active).await?;
-                    Ok::<_, AppError>(JsonApiResponse::with_status(
+                    JsonApiResponse::with_status(
                         StatusCode::CREATED,
                         "created",
                         model,
-                    ))
+                    )
                 }
             });
             router = router.route(base, self.apply_method_middleware(Method::Create, route));
@@ -243,7 +243,7 @@ where
                             |select| Self::list_apply(&query, select),
                         )
                         .await?;
-                    Ok::<_, AppError>(JsonApiResponse::ok(response))
+                    JsonApiResponse::ok(response)
                 }
             });
             router = router.route(base, self.apply_method_middleware(Method::List, route));
@@ -254,7 +254,7 @@ where
                 let service = self.service();
                 move |Path(id): Path<Uuid>| async move {
                     let model: ModelOf<Self::Service> = service.find_by_id(id).await?;
-                    Ok::<_, AppError>(JsonApiResponse::ok(model))
+                    JsonApiResponse::ok(model)
                 }
             });
             router = router.route(&id_path, self.apply_method_middleware(Method::Get, route));
@@ -268,7 +268,7 @@ where
                     let model: ModelOf<Self::Service> = service
                         .update(id, move |active| Self::apply_patch(active, patch))
                         .await?;
-                    Ok::<_, AppError>(JsonApiResponse::ok(model))
+                    JsonApiResponse::ok(model)
                 }
             });
             router = router.route(&id_path, self.apply_method_middleware(Method::Patch, route));
@@ -279,11 +279,11 @@ where
                 let service = self.service();
                 move |Path(id): Path<Uuid>| async move {
                     service.delete(id).await?;
-                    Ok::<_, AppError>(JsonApiResponse::with_status(
+                    JsonApiResponse::with_status(
                         StatusCode::NO_CONTENT,
                         "deleted",
                         Value::Null,
-                    ))
+                    )
                 }
             });
             router = router.route(

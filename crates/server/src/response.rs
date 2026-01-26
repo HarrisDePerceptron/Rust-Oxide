@@ -3,6 +3,8 @@ use serde::Serialize;
 
 use crate::error::AppError;
 
+pub type ApiResult<T> = Result<JsonApiResponse<T>, AppError>;
+
 #[derive(Debug, Serialize)]
 pub struct JsonApiResponse<T: Serialize> {
     pub status: u16,
@@ -11,26 +13,29 @@ pub struct JsonApiResponse<T: Serialize> {
 }
 
 impl<T: Serialize> JsonApiResponse<T> {
-    pub fn ok(data: T) -> Self {
-        Self {
+    pub fn ok(data: T) -> ApiResult<T> {
+        Ok(Self {
             status: StatusCode::OK.as_u16(),
             message: "ok".to_string(),
             data,
-        }
+        })
     }
 
-    pub fn with_status(status: StatusCode, message: impl Into<String>, data: T) -> Self {
-        Self {
+    pub fn with_status(status: StatusCode, message: impl Into<String>, data: T) -> ApiResult<T> {
+        Ok(Self {
             status: status.as_u16(),
             message: message.into(),
             data,
-        }
+        })
     }
-
 }
 
 impl JsonApiResponse<serde_json::Value> {
-    pub fn error(err: &AppError) -> Self {
+    pub fn error(err: AppError) -> ApiResult<serde_json::Value> {
+        Err(err)
+    }
+
+    pub(crate) fn from_error(err: &AppError) -> Self {
         Self {
             status: err.status.as_u16(),
             message: err.message.to_string(),

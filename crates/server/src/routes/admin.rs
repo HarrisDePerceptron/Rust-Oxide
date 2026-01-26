@@ -4,7 +4,7 @@ use axum::{Router, middleware, routing::get};
 
 use crate::{
     auth::{Claims, Role, jwt::jwt_auth, role_layer::RequireRoleLayer},
-    response::JsonApiResponse,
+    response::{ApiResult, JsonApiResponse},
     state::AppState,
 };
 
@@ -16,6 +16,6 @@ pub fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
-async fn admin_stats(claims: Claims) -> JsonApiResponse<serde_json::Value> {
+async fn admin_stats(claims: Claims) -> ApiResult<serde_json::Value> {
     JsonApiResponse::ok(serde_json::json!({ "ok": true, "admin": claims.sub }))
 }

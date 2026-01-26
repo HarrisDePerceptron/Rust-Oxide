@@ -19,7 +19,7 @@ use crate::{
     db::dao::DaoContext,
     db::entities::{todo_item, todo_list},
     error::AppError,
-    response::JsonApiResponse,
+    response::{ApiResult, JsonApiResponse},
     routes::base_api_router::CrudApiRouter,
     services::todo_service,
     state::AppState,
@@ -118,21 +118,21 @@ struct CountResponse {
 
 async fn list_count_handler(
     State(state): State<Arc<AppState>>,
-) -> Result<JsonApiResponse<CountResponse>, AppError> {
+) -> ApiResult<CountResponse> {
     let daos = DaoContext::new(&state.db);
     let service = todo_service::TodoService::new(daos.todo());
     let count = service.count_lists().await?;
-    Ok(JsonApiResponse::ok(CountResponse { count }))
+    JsonApiResponse::ok(CountResponse { count })
 }
 
 async fn item_count_handler(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
-) -> Result<JsonApiResponse<CountResponse>, AppError> {
+) -> ApiResult<CountResponse> {
     let daos = DaoContext::new(&state.db);
     let service = todo_service::TodoService::new(daos.todo());
     let count = service.count_items_by_list(&id).await?;
-    Ok(JsonApiResponse::ok(CountResponse { count }))
+    JsonApiResponse::ok(CountResponse { count })
 }
 
 async fn todo_ui() -> Result<Html<String>, HtmlError> {
@@ -147,98 +147,94 @@ async fn todo_ui() -> Result<Html<String>, HtmlError> {
 async fn create_list(
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateListRequest>,
-) -> Result<JsonApiResponse<TodoListResponse>, AppError> {
+) -> ApiResult<TodoListResponse> {
     let title = normalize_title(&body.title)?;
     let service = todo_service_from_state(state.as_ref());
     let list = service.create_list(title).await?;
-    Ok(JsonApiResponse::with_status(
+    JsonApiResponse::with_status(
         StatusCode::CREATED,
         "created",
         list.into(),
-    ))
+    )
 }
 
 async fn list_lists(
     State(state): State<Arc<AppState>>,
-) -> Result<JsonApiResponse<Vec<TodoListResponse>>, AppError> {
+) -> ApiResult<Vec<TodoListResponse>> {
     let service = todo_service_from_state(state.as_ref());
     let lists = service.list_lists().await?;
-    Ok(JsonApiResponse::ok(
-        lists.into_iter().map(TodoListResponse::from).collect(),
-    ))
+    JsonApiResponse::ok(lists.into_iter().map(TodoListResponse::from).collect())
 }
 
 async fn get_list(
     State(state): State<Arc<AppState>>,
     Path(list_id): Path<Uuid>,
-) -> Result<JsonApiResponse<TodoListDetailResponse>, AppError> {
+) -> ApiResult<TodoListDetailResponse> {
     let list = require_list(state.as_ref(), &list_id).await?;
     let service = todo_service_from_state(state.as_ref());
     let items = service.list_items(&list_id).await?;
     let items = items.into_iter().map(TodoItemResponse::from).collect();
-    Ok(JsonApiResponse::ok(TodoListDetailResponse {
+    JsonApiResponse::ok(TodoListDetailResponse {
         list: list.into(),
         items,
-    }))
+    })
 }
 
 async fn update_list(
     State(state): State<Arc<AppState>>,
     Path(list_id): Path<Uuid>,
     Json(body): Json<UpdateListRequest>,
-) -> Result<JsonApiResponse<TodoListResponse>, AppError> {
+) -> ApiResult<TodoListResponse> {
     let title = normalize_title(&body.title)?;
     let service = todo_service_from_state(state.as_ref());
     let list = service.update_list_title(&list_id, title).await?;
-    Ok(JsonApiResponse::ok(list.into()))
+    JsonApiResponse::ok(list.into())
 }
 
 async fn delete_list(
     State(state): State<Arc<AppState>>,
     Path(list_id): Path<Uuid>,
-) -> Result<JsonApiResponse<serde_json::Value>, AppError> {
+) -> ApiResult<serde_json::Value> {
     let service = todo_service_from_state(state.as_ref());
     service.delete_list(&list_id).await?;
-    Ok(JsonApiResponse::with_status(
+    JsonApiResponse::with_status(
         StatusCode::NO_CONTENT,
         "deleted",
         serde_json::Value::Null,
-    ))
+    )
 }
 
 async fn create_item(
     State(state): State<Arc<AppState>>,
     Path(list_id): Path<Uuid>,
     Json(body): Json<CreateItemRequest>,
-) -> Result<JsonApiResponse<TodoItemResponse>, AppError> {
+) -> ApiResult<TodoItemResponse> {
     let description = normalize_description(&body.description)?;
     require_list(state.as_ref(), &list_id).await?;
     let service = todo_service_from_state(state.as_ref());
     let item = service.create_item(&list_id, description).await?;
-    Ok(JsonApiResponse::with_status(
+    JsonApiResponse::with_status(
         StatusCode::CREATED,
         "created",
         item.into(),
-    ))
+    )
 }
 
 async fn list_items(
     State(state): State<Arc<AppState>>,
     Path(list_id): Path<Uuid>,
-) -> Result<JsonApiResponse<Vec<TodoItemResponse>>, AppError> {
+) -> ApiResult<Vec<TodoItemResponse>> {
     require_list(state.as_ref(), &list_id).await?;
     let service = todo_service_from_state(state.as_ref());
     let items = service.list_items(&list_id).await?;
-    Ok(JsonApiResponse::ok(
-        items.into_iter().map(TodoItemResponse::from).collect(),
-    ))
+    JsonApiResponse::ok(items.into_iter().map(TodoItemResponse::from).collect())
 }
 
 async fn update_item(
     State(state): State<Arc<AppState>>,
     Path((list_id, item_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<UpdateItemRequest>,
-) -> Result<JsonApiResponse<TodoItemResponse>, AppError> {
+) -> ApiResult<TodoItemResponse> {
     let UpdateItemRequest { description, done } = body;
     let description = match description {
         Some(value) => Some(normalize_description(&value)?.to_string()),
@@ -254,20 +250,20 @@ async fn update_item(
     let item = service
         .update_item(&list_id, &item_id, description, done)
         .await?;
-    Ok(JsonApiResponse::ok(item.into()))
+    JsonApiResponse::ok(item.into())
 }
 
 async fn delete_item(
     State(state): State<Arc<AppState>>,
     Path((list_id, item_id)): Path<(Uuid, Uuid)>,
-) -> Result<JsonApiResponse<serde_json::Value>, AppError> {
+) -> ApiResult<serde_json::Value> {
     let service = todo_service_from_state(state.as_ref());
     service.delete_item(&list_id, &item_id).await?;
-    Ok(JsonApiResponse::with_status(
+    JsonApiResponse::with_status(
         StatusCode::NO_CONTENT,
         "deleted",
         serde_json::Value::Null,
-    ))
+    )
 }
 
 async fn require_list(state: &AppState, list_id: &Uuid) -> Result<todo_list::Model, AppError> {

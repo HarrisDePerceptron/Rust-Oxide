@@ -19,6 +19,6 @@ impl AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        JsonApiResponse::error(&self).into_response()
+        JsonApiResponse::from_error(&self).into_response()
     }
 }

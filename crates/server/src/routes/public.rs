@@ -6,7 +6,7 @@ use chrono::Local;
 use tower_http::services::ServeDir;
 
 use crate::routes::route_list::{RouteInfo, routes};
-use crate::response::JsonApiResponse;
+use crate::response::{ApiResult, JsonApiResponse};
 use crate::db::entity_catalog::{self, EntityInfo};
 
 #[derive(Clone)]
@@ -70,11 +70,11 @@ pub fn router() -> Router {
         .route("/routes.json", get(list_routes_json))
 }
 
-async fn handler() -> JsonApiResponse<serde_json::Value> {
+async fn handler() -> ApiResult<serde_json::Value> {
     JsonApiResponse::ok(serde_json::json!({ "ok": true, "route": "public" }))
 }
 
-async fn list_routes_json() -> JsonApiResponse<&'static [RouteInfo]> {
+async fn list_routes_json() -> ApiResult<&'static [RouteInfo]> {
     JsonApiResponse::ok(routes())
 }
 

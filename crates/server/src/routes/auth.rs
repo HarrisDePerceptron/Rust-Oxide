@@ -5,8 +5,7 @@ use serde::Deserialize;
 
 use crate::{
     db::dao::DaoContext,
-    error::AppError,
-    response::JsonApiResponse,
+    response::{ApiResult, JsonApiResponse},
     services::auth_service,
     state::AppState,
 };
@@ -47,28 +46,28 @@ pub fn router(state: Arc<AppState>) -> Router {
 async fn register(
     State(state): State<Arc<AppState>>,
     Json(body): Json<RegisterRequest>,
-) -> Result<JsonApiResponse<TokenResponse>, AppError> {
+) -> ApiResult<TokenResponse> {
     let service = auth_service_from_state(state.as_ref());
     let tokens = service.register(&body.email, &body.password).await?;
-    Ok(JsonApiResponse::ok(tokens.into()))
+    JsonApiResponse::ok(tokens.into())
 }
 
 async fn login(
     State(state): State<Arc<AppState>>,
     Json(body): Json<LoginRequest>,
-) -> Result<JsonApiResponse<TokenResponse>, AppError> {
+) -> ApiResult<TokenResponse> {
     let service = auth_service_from_state(state.as_ref());
     let tokens = service.login(&body.email, &body.password).await?;
-    Ok(JsonApiResponse::ok(tokens.into()))
+    JsonApiResponse::ok(tokens.into())
 }
 
 async fn refresh(
     State(state): State<Arc<AppState>>,
     Json(body): Json<RefreshRequest>,
-) -> Result<JsonApiResponse<TokenResponse>, AppError> {
+) -> ApiResult<TokenResponse> {
     let service = auth_service_from_state(state.as_ref());
     let tokens = service.refresh(&body.refresh_token).await?;
-    Ok(JsonApiResponse::ok(tokens.into()))
+    JsonApiResponse::ok(tokens.into())
 }
 
 impl From<auth_service::TokenBundle> for TokenResponse {
