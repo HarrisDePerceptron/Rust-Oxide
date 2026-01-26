@@ -45,6 +45,7 @@ struct RouteEntry {
     source: String,
     request: String,
     response: String,
+    curl: String,
 }
 
 #[derive(Debug, Clone)]
@@ -134,6 +135,8 @@ impl ExtractorKind {
         }
     }
 }
+
+const CURL_BASE_URL_PLACEHOLDER: &str = "{BASE_URL}";
 
 impl TypeDoc {
     fn render(&self) -> String {
@@ -227,12 +230,14 @@ impl<'a, 'ast> Visit<'ast> for RouteVisitor<'a> {
                         .and_then(|name| self.handlers.get(name))
                         .map(|info| (info.request.clone(), info.response.clone()))
                         .unwrap_or_else(|| ("Unknown".to_string(), "Unknown".to_string()));
+                    let curl = build_curl(&handler.method, &path, &request);
                     self.routes.push(RouteEntry {
                         method: handler.method,
                         path: path.clone(),
                         source: self.source.clone(),
                         request,
                         response,
+                        curl,
                     });
                 }
             } else {
@@ -243,12 +248,14 @@ impl<'a, 'ast> Visit<'ast> for RouteVisitor<'a> {
             }
         } else if method_name == "route_service" {
             if let Some(path) = node.args.first().and_then(extract_string_literal) {
+                let curl = build_curl("SERVICE", &path, "N/A");
                 self.routes.push(RouteEntry {
                     method: "SERVICE".to_string(),
                     path,
                     source: self.source.clone(),
                     request: "N/A".to_string(),
                     response: "N/A".to_string(),
+                    curl,
                 });
             } else {
                 println!(
@@ -1674,6 +1681,181 @@ fn format_request(parts: Vec<(ExtractorKind, String)>) -> String {
     formatted.join(" | ")
 }
 
+fn build_curl(method: &str, path: &str, request: &str) -> String {
+    let parts = split_request_parts(request);
+    let mut query = None;
+    let mut json_body = None;
+
+    for part in parts {
+        let trimmed = part.trim();
+        if let Some(rest) = trimmed.strip_prefix("query:") {
+            if let Some(built) = build_query(rest.trim()) {
+                query = Some(built);
+            }
+            continue;
+        }
+        if trimmed.starts_with('{') && trimmed.ends_with('}') {
+            json_body = Some(build_json_body(trimmed));
+        }
+    }
+    if json_body.is_none() {
+        let trimmed = request.trim();
+        if !(trimmed.is_empty()
+            || trimmed == "None"
+            || trimmed == "N/A"
+            || trimmed == "Unknown"
+            || trimmed.starts_with("path:")
+            || trimmed.starts_with("query:"))
+        {
+            json_body = Some(sample_json_value(trimmed));
+        }
+    }
+
+    let method = match method {
+        "ROUTE" | "SERVICE" => "GET",
+        _ => method,
+    };
+
+    let mut url = format!("{}{}", CURL_BASE_URL_PLACEHOLDER, path);
+    if let Some(query) = query {
+        if !query.is_empty() {
+            url.push('?');
+            url.push_str(&query);
+        }
+    }
+
+    let mut cmd = format!("curl -sS -X {} \"{}\"", method, url);
+    if let Some(body) = json_body {
+        let escaped = escape_single_quotes(&body);
+        cmd.push_str(" \\\n  -H 'content-type: application/json' \\\n  -d '");
+        cmd.push_str(&escaped);
+        cmd.push('\'');
+    }
+    cmd
+}
+
+fn split_request_parts(request: &str) -> Vec<&str> {
+    if request.contains(" | ") {
+        request.split(" | ").collect()
+    } else {
+        vec![request]
+    }
+}
+
+fn build_query(desc: &str) -> Option<String> {
+    let fields = parse_object_fields(desc);
+    if fields.is_empty() {
+        return None;
+    }
+    let pairs: Vec<String> = fields
+        .into_iter()
+        .map(|(key, ty)| format!("{}={}", key, sample_query_value(&ty)))
+        .collect();
+    Some(pairs.join("&"))
+}
+
+fn build_json_body(desc: &str) -> String {
+    let fields = parse_object_fields(desc);
+    if fields.is_empty() {
+        return "{}".to_string();
+    }
+    let parts: Vec<String> = fields
+        .into_iter()
+        .map(|(key, ty)| format!("\"{}\": {}", key, sample_json_value(&ty)))
+        .collect();
+    format!("{{ {} }}", parts.join(", "))
+}
+
+fn parse_object_fields(desc: &str) -> Vec<(String, String)> {
+    let trimmed = desc.trim();
+    if !(trimmed.starts_with('{') && trimmed.ends_with('}')) {
+        return Vec::new();
+    }
+    let inner = &trimmed[1..trimmed.len() - 1];
+    let mut parts = Vec::new();
+    let mut depth = 0usize;
+    let mut start = 0usize;
+    for (idx, ch) in inner.char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                parts.push(inner[start..idx].to_string());
+                start = idx + 1;
+            }
+            _ => {}
+        }
+    }
+    if start < inner.len() {
+        parts.push(inner[start..].to_string());
+    }
+
+    let mut out = Vec::new();
+    for part in parts {
+        let piece = part.trim();
+        if piece.is_empty() {
+            continue;
+        }
+        let mut splitter = piece.splitn(2, ':');
+        let key = splitter.next().unwrap_or("").trim();
+        let ty = splitter.next().unwrap_or("").trim();
+        if key.is_empty() || ty.is_empty() {
+            continue;
+        }
+        let key = key.trim_matches('"').to_string();
+        out.push((key, ty.to_string()));
+    }
+    out
+}
+
+fn sample_json_value(ty: &str) -> String {
+    let cleaned = ty.trim();
+    if cleaned.starts_with("Option<") {
+        return "null".to_string();
+    }
+    if cleaned.starts_with("Vec<") {
+        return "[]".to_string();
+    }
+    if cleaned.starts_with('{') {
+        return "{}".to_string();
+    }
+    match cleaned {
+        "String" | "&str" => "\"string\"".to_string(),
+        "bool" => "false".to_string(),
+        "Uuid" => "\"00000000-0000-0000-0000-000000000000\"".to_string(),
+        "JSON" => "{}".to_string(),
+        "i16" | "i32" | "i64" | "isize" | "u16" | "u32" | "u64" | "usize" => "0".to_string(),
+        "DateTimeWithTimeZone" => "\"2024-01-01T00:00:00Z\"".to_string(),
+        _ => "\"value\"".to_string(),
+    }
+}
+
+fn sample_query_value(ty: &str) -> String {
+    let cleaned = ty.trim();
+    if cleaned.starts_with("Option<") {
+        return "1".to_string();
+    }
+    if cleaned.starts_with("Vec<") {
+        return "value".to_string();
+    }
+    if cleaned.starts_with('{') {
+        return "value".to_string();
+    }
+    match cleaned {
+        "String" | "&str" => "string".to_string(),
+        "bool" => "true".to_string(),
+        "Uuid" => "00000000-0000-0000-0000-000000000000".to_string(),
+        "JSON" => "value".to_string(),
+        "i16" | "i32" | "i64" | "isize" | "u16" | "u32" | "u64" | "usize" => "1".to_string(),
+        "DateTimeWithTimeZone" => "2024-01-01T00:00:00Z".to_string(),
+        _ => "value".to_string(),
+    }
+}
+
+fn escape_single_quotes(value: &str) -> String {
+    value.replace('\'', "'\\''")
+}
+
 fn describe_response_ok(
     ty: &Type,
     module_path: &str,
@@ -1884,6 +2066,7 @@ fn crud_route_entries(
             source: source.to_string(),
             request: model_desc.clone(),
             response: model_response.clone(),
+            curl: build_curl("POST", base, &model_desc),
         },
         RouteEntry {
             method: "GET".to_string(),
@@ -1891,6 +2074,7 @@ fn crud_route_entries(
             source: source.to_string(),
             request: format!("query: {}", list_query_desc),
             response: list_response,
+            curl: build_curl("GET", base, &format!("query: {}", list_query_desc)),
         },
         RouteEntry {
             method: "GET".to_string(),
@@ -1898,6 +2082,7 @@ fn crud_route_entries(
             source: source.to_string(),
             request: "path: Uuid".to_string(),
             response: model_response.clone(),
+            curl: build_curl("GET", &id_path, "path: Uuid"),
         },
         RouteEntry {
             method: "PATCH".to_string(),
@@ -1905,6 +2090,7 @@ fn crud_route_entries(
             source: source.to_string(),
             request: model_desc.clone(),
             response: model_response.clone(),
+            curl: build_curl("PATCH", &id_path, &model_desc),
         },
         RouteEntry {
             method: "DELETE".to_string(),
@@ -1912,6 +2098,7 @@ fn crud_route_entries(
             source: source.to_string(),
             request: "path: Uuid".to_string(),
             response: delete_response,
+            curl: build_curl("DELETE", &format!("{}/{{id}}", base), "path: Uuid"),
         },
     ]
 }
@@ -2164,12 +2351,13 @@ fn main() {
     let mut output = String::from("pub static ROUTES: &[RouteInfo] = &[\n");
     for route in routes {
         output.push_str(&format!(
-            "    RouteInfo {{ method: \"{}\", path: \"{}\", source: \"{}\", request: \"{}\", response: \"{}\" }},\n",
+            "    RouteInfo {{ method: \"{}\", path: \"{}\", source: \"{}\", request: \"{}\", response: \"{}\", curl: \"{}\" }},\n",
             escape_rust_string(&route.method),
             escape_rust_string(&route.path),
             escape_rust_string(&route.source),
             escape_rust_string(&route.request),
-            escape_rust_string(&route.response)
+            escape_rust_string(&route.response),
+            escape_rust_string(&route.curl)
         ));
     }
     output.push_str("];\n");

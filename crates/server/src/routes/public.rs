@@ -15,6 +15,7 @@ struct RouteItem {
     path: String,
     request: String,
     response: String,
+    curl: String,
 }
 
 #[derive(Clone)]
@@ -144,6 +145,7 @@ fn build_route_groups() -> Vec<RouteGroup> {
                 path: route.path.to_string(),
                 request: route.request.to_string(),
                 response: route.response.to_string(),
+                curl: route.curl.to_string(),
             });
     }
 
