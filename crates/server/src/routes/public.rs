@@ -15,6 +15,7 @@ struct RouteItem {
     path: String,
     request: String,
     response: String,
+    required_headers: String,
     curl: String,
 }
 
@@ -145,6 +146,7 @@ fn build_route_groups() -> Vec<RouteGroup> {
                 path: route.path.to_string(),
                 request: route.request.to_string(),
                 response: route.response.to_string(),
+                required_headers: route.required_headers.to_string(),
                 curl: route.curl.to_string(),
             });
     }

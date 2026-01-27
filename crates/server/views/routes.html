@@ -73,9 +73,10 @@
                 >
                   <tr>
                     <th class="px-4 py-2">Endpoint</th>
-                    <th class="px-4 py-2">Request</th>
-                    <th class="px-4 py-2">Response</th>
                     <th class="px-4 py-2 text-right">Method</th>
+                    <th class="px-4 py-2">Request</th>
+                    <th class="px-4 py-2">Response Type</th>
+                    <th class="px-4 py-2">Required Headers</th>
                     <th class="px-4 py-2 text-right">Curl</th>
                   </tr>
                 </thead>
@@ -85,16 +86,19 @@
                     <td class="px-4 py-2 font-mono text-xs text-black/70">
                       {{ route.path }}
                     </td>
+                    <td
+                      class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--clay)]"
+                    >
+                      {{ route.method }}
+                    </td>
                     <td class="px-4 py-2 font-mono text-xs text-black/70">
                       {{ route.request }}
                     </td>
                     <td class="px-4 py-2 font-mono text-xs text-black/70">
                       {{ route.response }}
                     </td>
-                    <td
-                      class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--clay)]"
-                    >
-                      {{ route.method }}
+                    <td class="px-4 py-2 font-mono text-xs text-black/70">
+                      {{ route.required_headers }}
                     </td>
                     <td class="px-4 py-2 text-right">
                       <button
@@ -107,7 +111,7 @@
                     </td>
                   </tr>
                   <tr class="hidden" data-curl-panel-row>
-                    <td colspan="5" class="px-4 pb-4">
+                    <td colspan="6" class="px-4 pb-4">
                       <div class="rounded-2xl border border-black/10 bg-white/95 p-4 text-xs text-[color:var(--pine)] shadow-lg shadow-black/5">
                         <div class="flex flex-wrap items-center justify-between gap-3">
                           <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-black/50">

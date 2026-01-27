@@ -7,6 +7,7 @@ pub struct RouteInfo {
     pub source: &'static str,
     pub request: &'static str,
     pub response: &'static str,
+    pub required_headers: &'static str,
     pub curl: &'static str,
 }
 

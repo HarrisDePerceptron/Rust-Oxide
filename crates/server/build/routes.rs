@@ -51,6 +51,7 @@ pub(crate) struct RouteEntry {
     pub(crate) source: String,
     pub(crate) request: String,
     pub(crate) response: String,
+    pub(crate) required_headers: String,
     pub(crate) curl: String,
 }
 
@@ -59,6 +60,7 @@ struct HandlerInfo {
     request: String,
     response: String,
     auth_required: bool,
+    required_headers: String,
 }
 
 #[derive(Debug, Clone)]
@@ -182,7 +184,7 @@ impl<'a, 'ast> Visit<'ast> for RouteVisitor<'a> {
                     });
                 }
                 for handler in handlers {
-                    let (request, response, auth_required) = handler
+                    let (request, response, auth_required, required_headers) = handler
                         .handler
                         .as_ref()
                         .and_then(|name| self.handlers.get(name))
@@ -191,9 +193,17 @@ impl<'a, 'ast> Visit<'ast> for RouteVisitor<'a> {
                                 info.request.clone(),
                                 info.response.clone(),
                                 info.auth_required,
+                                info.required_headers.clone(),
                             )
                         })
-                        .unwrap_or_else(|| ("Unknown".to_string(), "Unknown".to_string(), false));
+                        .unwrap_or_else(|| {
+                            (
+                                "Unknown".to_string(),
+                                "Unknown".to_string(),
+                                false,
+                                "None".to_string(),
+                            )
+                        });
                     let curl = build_curl(&handler.method, &path, &request, auth_required);
                     self.routes.push(RouteEntry {
                         method: handler.method,
@@ -201,6 +211,7 @@ impl<'a, 'ast> Visit<'ast> for RouteVisitor<'a> {
                         source: self.source.clone(),
                         request,
                         response,
+                        required_headers,
                         curl,
                     });
                 }
@@ -219,6 +230,7 @@ impl<'a, 'ast> Visit<'ast> for RouteVisitor<'a> {
                     source: self.source.clone(),
                     request: "N/A".to_string(),
                     response: "N/A".to_string(),
+                    required_headers: "None".to_string(),
                     curl,
                 });
             } else {
@@ -628,11 +640,19 @@ fn has_serde_derive(attrs: &[Attribute]) -> bool {
     false
 }
 
+fn is_relation_field(ty: &Type) -> bool {
+    let (_, last) = type_path_parts(ty);
+    matches!(last.as_deref(), Some("HasOne") | Some("HasMany"))
+}
+
 fn build_struct_doc(item_struct: &ItemStruct) -> TypeDoc {
     let mut fields = Vec::new();
     match &item_struct.fields {
         syn::Fields::Named(named) => {
             for field in &named.named {
+                if is_relation_field(&field.ty) {
+                    continue;
+                }
                 let mut name = field
                     .ident
                     .as_ref()
@@ -647,6 +667,9 @@ fn build_struct_doc(item_struct: &ItemStruct) -> TypeDoc {
         }
         syn::Fields::Unnamed(unnamed) => {
             for (index, field) in unnamed.unnamed.iter().enumerate() {
+                if is_relation_field(&field.ty) {
+                    continue;
+                }
                 let name = index.to_string();
                 let ty = type_to_string(&field.ty);
                 fields.push(FieldDoc { name, ty });
@@ -862,6 +885,21 @@ fn is_auth_guard_type(ty: &Type) -> bool {
         last.as_deref(),
         Some("AuthGuard") | Some("AuthRoleGuard") | Some("Claims")
     )
+}
+
+fn build_required_headers(auth_required: bool, has_json_body: bool) -> String {
+    let mut headers = Vec::new();
+    if auth_required {
+        headers.push("Authorization: Bearer $ACCESS_TOKEN");
+    }
+    if has_json_body {
+        headers.push("Content-Type: application/json");
+    }
+    if headers.is_empty() {
+        "None".to_string()
+    } else {
+        headers.join(" | ")
+    }
 }
 
 fn build_curl(method: &str, path: &str, request: &str, auth_required: bool) -> String {
@@ -1104,6 +1142,7 @@ fn build_handler_info(
 ) -> HandlerInfo {
     let mut request_parts = Vec::new();
     let mut auth_required = false;
+    let mut has_json_body = false;
     for input in &item_fn.sig.inputs {
         if let FnArg::Typed(PatType { ty, .. }) = input {
             if is_auth_guard_type(ty) {
@@ -1112,6 +1151,9 @@ fn build_handler_info(
             }
             if let Some((kind, inner)) = extract_request_extractor(ty) {
                 let desc = describe_type(inner, module_path, registry, context);
+                if matches!(kind, ExtractorKind::Json) {
+                    has_json_body = true;
+                }
                 request_parts.push((kind, desc));
             }
         }
@@ -1121,10 +1163,12 @@ fn build_handler_info(
         ReturnType::Default => "None".to_string(),
         ReturnType::Type(_, ty) => describe_response_type(ty, module_path, registry, context),
     };
+    let required_headers = build_required_headers(auth_required, has_json_body);
     HandlerInfo {
         request,
         response,
         auth_required,
+        required_headers,
     }
 }
 
@@ -1262,6 +1306,7 @@ fn crud_route_entries(
             source: source.to_string(),
             request: model_desc.clone(),
             response: model_response.clone(),
+            required_headers: build_required_headers(false, true),
             curl: build_curl("POST", base, &model_desc, false),
         },
         RouteEntry {
@@ -1270,6 +1315,7 @@ fn crud_route_entries(
             source: source.to_string(),
             request: format!("query: {}", list_query_desc),
             response: list_response,
+            required_headers: "None".to_string(),
             curl: build_curl("GET", base, &format!("query: {}", list_query_desc), false),
         },
         RouteEntry {
@@ -1278,14 +1324,16 @@ fn crud_route_entries(
             source: source.to_string(),
             request: "path: Uuid".to_string(),
             response: model_response.clone(),
+            required_headers: "None".to_string(),
             curl: build_curl("GET", &id_path, "path: Uuid", false),
         },
         RouteEntry {
             method: "PATCH".to_string(),
             path: id_path.clone(),
             source: source.to_string(),
-            request: model_desc.clone(),
+            request: format!("path: Uuid | {}", model_desc),
             response: model_response.clone(),
+            required_headers: build_required_headers(false, true),
             curl: build_curl("PATCH", &id_path, &model_desc, false),
         },
         RouteEntry {
@@ -1294,6 +1342,7 @@ fn crud_route_entries(
             source: source.to_string(),
             request: "path: Uuid".to_string(),
             response: delete_response,
+            required_headers: "None".to_string(),
             curl: build_curl("DELETE", &format!("{}/{{id}}", base), "path: Uuid", false),
         },
     ]
@@ -1471,12 +1520,13 @@ pub(crate) fn write_routes(out_dir: &Path, routes: &[RouteEntry]) {
     let mut output = String::from("pub static ROUTES: &[RouteInfo] = &[\n");
     for route in routes {
         output.push_str(&format!(
-            "    RouteInfo {{ method: \"{}\", path: \"{}\", source: \"{}\", request: \"{}\", response: \"{}\", curl: \"{}\" }},\n",
+            "    RouteInfo {{ method: \"{}\", path: \"{}\", source: \"{}\", request: \"{}\", response: \"{}\", required_headers: \"{}\", curl: \"{}\" }},\n",
             escape_rust_string(&route.method),
             escape_rust_string(&route.path),
             escape_rust_string(&route.source),
             escape_rust_string(&route.request),
             escape_rust_string(&route.response),
+            escape_rust_string(&route.required_headers),
             escape_rust_string(&route.curl)
         ));
     }
