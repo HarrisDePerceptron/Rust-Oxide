@@ -56,11 +56,11 @@ pub async fn jwt_auth(
 }
 
 #[derive(Clone)]
-pub struct RequireRoleLayer {
+pub struct AuthRolGuardLayer {
     required: Role,
 }
 
-impl RequireRoleLayer {
+impl AuthRolGuardLayer {
     pub fn new(required: Role) -> Self {
         Self { required }
     }
@@ -72,7 +72,7 @@ pub struct RequireRole<S> {
     required: Role,
 }
 
-impl<S> Layer<S> for RequireRoleLayer {
+impl<S> Layer<S> for AuthRolGuardLayer {
     type Service = RequireRole<S>;
 
     fn layer(&self, inner: S) -> Self::Service {

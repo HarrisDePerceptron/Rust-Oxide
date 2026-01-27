@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
-use axum::{Router, extract::State, middleware, routing::get};
+use axum::{Router, extract::State, routing::get};
 
 use crate::{
-    auth::Claims,
+    auth::AuthGuard,
     db::dao::DaoContext,
-    middleware::jwt_auth,
     response::{ApiResult, JsonApiResponse},
     services::user_service,
     state::AppState,
@@ -14,13 +13,12 @@ use crate::{
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/me", get(me))
-        .route_layer(middleware::from_fn_with_state(state.clone(), jwt_auth))
         .with_state(state)
 }
 
 async fn me(
     State(state): State<Arc<AppState>>,
-    claims: Claims,
+    claims: AuthGuard,
 ) -> ApiResult<serde_json::Value> {
     let service = user_service_from_state(state.as_ref());
     let user = if let Ok(id) = claims.sub.parse() {

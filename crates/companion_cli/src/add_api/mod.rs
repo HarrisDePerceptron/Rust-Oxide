@@ -99,7 +99,7 @@ pub fn run(args: AddApiArgs) -> Result<()> {
 
     let auth_enabled = !args.no_auth;
     let auth_imports = if auth_enabled {
-        "use axum::middleware;\nuse crate::auth::jwt::jwt_auth;\n"
+        "use axum::middleware;\nuse crate::middleware::jwt_auth;\n"
     } else {
         ""
     };

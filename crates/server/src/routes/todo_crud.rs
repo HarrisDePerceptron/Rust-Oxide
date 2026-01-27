@@ -5,7 +5,6 @@ use axum::{
     Json, Router,
     extract::{Path, State},
     http::StatusCode,
-    middleware,
     response::Html,
     routing::{get, patch, post},
 };
@@ -15,10 +14,10 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
+    auth::AuthGuard,
     db::dao::DaoContext,
     db::entities::{todo_item, todo_list},
     error::AppError,
-    middleware::jwt_auth,
     response::{ApiResult, JsonApiResponse},
     routes::base_api_router::CrudApiRouter,
     services::todo_service,
@@ -84,11 +83,10 @@ type HtmlError = (StatusCode, Html<String>);
 pub fn router(state: Arc<AppState>) -> Router {
     let daos = DaoContext::new(&state.db);
     let service = todo_service::TodoService::new(daos.todo());
-    let auth_layer = middleware::from_fn_with_state(state.clone(), jwt_auth);
     let crud_router = CrudApiRouter::new(service.clone(), BASE_PATH);
 
-    let list_count_route = get(list_count_handler).route_layer(auth_layer.clone());
-    let item_count_route = get(item_count_handler).route_layer(auth_layer);
+    let list_count_route = get(list_count_handler);
+    let item_count_route = get(item_count_handler);
 
     let todo_routes = Router::new()
         .route("/todo/ui", get(todo_ui))
@@ -118,6 +116,7 @@ struct CountResponse {
 
 async fn list_count_handler(
     State(state): State<Arc<AppState>>,
+    _auth: AuthGuard,
 ) -> ApiResult<CountResponse> {
     let daos = DaoContext::new(&state.db);
     let service = todo_service::TodoService::new(daos.todo());
@@ -128,6 +127,7 @@ async fn list_count_handler(
 async fn item_count_handler(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
+    _auth: AuthGuard,
 ) -> ApiResult<CountResponse> {
     let daos = DaoContext::new(&state.db);
     let service = todo_service::TodoService::new(daos.todo());

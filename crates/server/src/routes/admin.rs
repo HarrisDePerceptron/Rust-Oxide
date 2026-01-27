@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
-use axum::{Router, middleware, routing::get};
+use axum::{Router, routing::get};
 
 use crate::{
-    auth::{Claims, Role},
-    middleware::{RequireRoleLayer, jwt_auth},
+    auth::{AdminRole, AuthRoleGuard},
     response::{ApiResult, JsonApiResponse},
     state::AppState,
 };
@@ -12,11 +11,11 @@ use crate::{
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/admin/stats", get(admin_stats))
-        .layer(RequireRoleLayer::new(Role::Admin))
-        .route_layer(middleware::from_fn_with_state(state.clone(), jwt_auth))
         .with_state(state)
 }
 
-async fn admin_stats(claims: Claims) -> ApiResult<serde_json::Value> {
+async fn admin_stats(
+    AuthRoleGuard { claims, .. }: AuthRoleGuard<AdminRole>,
+) -> ApiResult<serde_json::Value> {
     JsonApiResponse::ok(serde_json::json!({ "ok": true, "admin": claims.sub }))
 }

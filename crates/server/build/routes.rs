@@ -58,6 +58,7 @@ pub(crate) struct RouteEntry {
 struct HandlerInfo {
     request: String,
     response: String,
+    auth_required: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -181,13 +182,19 @@ impl<'a, 'ast> Visit<'ast> for RouteVisitor<'a> {
                     });
                 }
                 for handler in handlers {
-                    let (request, response) = handler
+                    let (request, response, auth_required) = handler
                         .handler
                         .as_ref()
                         .and_then(|name| self.handlers.get(name))
-                        .map(|info| (info.request.clone(), info.response.clone()))
-                        .unwrap_or_else(|| ("Unknown".to_string(), "Unknown".to_string()));
-                    let curl = build_curl(&handler.method, &path, &request);
+                        .map(|info| {
+                            (
+                                info.request.clone(),
+                                info.response.clone(),
+                                info.auth_required,
+                            )
+                        })
+                        .unwrap_or_else(|| ("Unknown".to_string(), "Unknown".to_string(), false));
+                    let curl = build_curl(&handler.method, &path, &request, auth_required);
                     self.routes.push(RouteEntry {
                         method: handler.method,
                         path: path.clone(),
@@ -205,7 +212,7 @@ impl<'a, 'ast> Visit<'ast> for RouteVisitor<'a> {
             }
         } else if method_name == "route_service" {
             if let Some(path) = node.args.first().and_then(extract_string_literal) {
-                let curl = build_curl("SERVICE", &path, "N/A");
+                let curl = build_curl("SERVICE", &path, "N/A", false);
                 self.routes.push(RouteEntry {
                     method: "SERVICE".to_string(),
                     path,
@@ -849,7 +856,15 @@ fn format_request(parts: Vec<(ExtractorKind, String)>) -> String {
     formatted.join(" | ")
 }
 
-fn build_curl(method: &str, path: &str, request: &str) -> String {
+fn is_auth_guard_type(ty: &Type) -> bool {
+    let (_, last) = type_path_parts(ty);
+    matches!(
+        last.as_deref(),
+        Some("AuthGuard") | Some("AuthRoleGuard") | Some("Claims")
+    )
+}
+
+fn build_curl(method: &str, path: &str, request: &str, auth_required: bool) -> String {
     let parts = split_request_parts(request);
     let mut query = None;
     let mut json_body = None;
@@ -893,6 +908,9 @@ fn build_curl(method: &str, path: &str, request: &str) -> String {
     }
 
     let mut cmd = format!("curl -sS -X {} \"{}\"", method, url);
+    if auth_required {
+        cmd.push_str(" \\\n  -H \"Authorization: Bearer $ACCESS_TOKEN\"");
+    }
     if let Some(body) = json_body {
         let escaped = escape_single_quotes(&body);
         cmd.push_str(" \\\n  -H 'content-type: application/json' \\\n  -d '");
@@ -1085,8 +1103,13 @@ fn build_handler_info(
     context: &CrudTypeContext,
 ) -> HandlerInfo {
     let mut request_parts = Vec::new();
+    let mut auth_required = false;
     for input in &item_fn.sig.inputs {
         if let FnArg::Typed(PatType { ty, .. }) = input {
+            if is_auth_guard_type(ty) {
+                auth_required = true;
+                continue;
+            }
             if let Some((kind, inner)) = extract_request_extractor(ty) {
                 let desc = describe_type(inner, module_path, registry, context);
                 request_parts.push((kind, desc));
@@ -1098,7 +1121,11 @@ fn build_handler_info(
         ReturnType::Default => "None".to_string(),
         ReturnType::Type(_, ty) => describe_response_type(ty, module_path, registry, context),
     };
-    HandlerInfo { request, response }
+    HandlerInfo {
+        request,
+        response,
+        auth_required,
+    }
 }
 
 fn collect_handlers(
@@ -1235,7 +1262,7 @@ fn crud_route_entries(
             source: source.to_string(),
             request: model_desc.clone(),
             response: model_response.clone(),
-            curl: build_curl("POST", base, &model_desc),
+            curl: build_curl("POST", base, &model_desc, false),
         },
         RouteEntry {
             method: "GET".to_string(),
@@ -1243,7 +1270,7 @@ fn crud_route_entries(
             source: source.to_string(),
             request: format!("query: {}", list_query_desc),
             response: list_response,
-            curl: build_curl("GET", base, &format!("query: {}", list_query_desc)),
+            curl: build_curl("GET", base, &format!("query: {}", list_query_desc), false),
         },
         RouteEntry {
             method: "GET".to_string(),
@@ -1251,7 +1278,7 @@ fn crud_route_entries(
             source: source.to_string(),
             request: "path: Uuid".to_string(),
             response: model_response.clone(),
-            curl: build_curl("GET", &id_path, "path: Uuid"),
+            curl: build_curl("GET", &id_path, "path: Uuid", false),
         },
         RouteEntry {
             method: "PATCH".to_string(),
@@ -1259,7 +1286,7 @@ fn crud_route_entries(
             source: source.to_string(),
             request: model_desc.clone(),
             response: model_response.clone(),
-            curl: build_curl("PATCH", &id_path, &model_desc),
+            curl: build_curl("PATCH", &id_path, &model_desc, false),
         },
         RouteEntry {
             method: "DELETE".to_string(),
@@ -1267,7 +1294,7 @@ fn crud_route_entries(
             source: source.to_string(),
             request: "path: Uuid".to_string(),
             response: delete_response,
-            curl: build_curl("DELETE", &format!("{}/{{id}}", base), "path: Uuid"),
+            curl: build_curl("DELETE", &format!("{}/{{id}}", base), "path: Uuid", false),
         },
     ]
 }
