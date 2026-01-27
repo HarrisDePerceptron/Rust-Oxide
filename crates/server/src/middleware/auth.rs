@@ -1,15 +1,59 @@
+use std::{
+    sync::Arc,
+    task::{Context, Poll},
+};
+
 use axum::{
     body::Body,
-    http::{Request, StatusCode},
+    extract::{Request, State},
+    http::{Request as HttpRequest, StatusCode, header},
+    middleware::Next,
     response::{IntoResponse, Response},
 };
 use futures_util::future::BoxFuture;
-use std::task::{Context, Poll};
+use jsonwebtoken::{Algorithm, Validation, decode};
 use tower::{Layer, Service};
 
-use super::Claims;
-use crate::auth::Role;
-use crate::error::AppError;
+use crate::{
+    auth::{Claims, Role},
+    error::AppError,
+    state::AppState,
+};
+
+pub async fn jwt_auth(
+    State(state): State<Arc<AppState>>,
+    mut req: Request,
+    next: Next,
+) -> Result<Response, Response> {
+    let auth = req
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    let token = auth.strip_prefix("Bearer ").ok_or_else(|| {
+        AppError::new(
+            axum::http::StatusCode::UNAUTHORIZED,
+            "Missing/invalid Authorization header",
+        )
+        .into_response()
+    })?;
+
+    let mut validation = Validation::new(Algorithm::HS256);
+    validation.validate_exp = true;
+
+    let data = decode::<Claims>(token, &state.jwt.dec, &validation).map_err(|err| {
+        AppError::new(
+            axum::http::StatusCode::BAD_REQUEST,
+            format!("Invalid or expired token: {err}"),
+        )
+        .into_response()
+    })?;
+
+    req.extensions_mut().insert(data.claims);
+
+    Ok(next.run(req).await)
+}
 
 #[derive(Clone)]
 pub struct RequireRoleLayer {
@@ -39,9 +83,9 @@ impl<S> Layer<S> for RequireRoleLayer {
     }
 }
 
-impl<S> Service<Request<Body>> for RequireRole<S>
+impl<S> Service<HttpRequest<Body>> for RequireRole<S>
 where
-    S: Service<Request<Body>, Response = Response> + Clone + Send + 'static,
+    S: Service<HttpRequest<Body>, Response = Response> + Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Send + 'static,
 {
@@ -53,7 +97,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&mut self, req: HttpRequest<Body>) -> Self::Future {
         let required = self.required.clone();
         let mut inner = self.inner.clone();
 

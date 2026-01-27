@@ -1,6 +1,5 @@
 pub mod jwt;
 pub mod password;
-pub mod role_layer;
 
 use axum::{extract::FromRequestParts, http::StatusCode};
 use serde::{Deserialize, Serialize};

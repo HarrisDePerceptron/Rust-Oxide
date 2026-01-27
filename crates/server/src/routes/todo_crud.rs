@@ -15,10 +15,10 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    auth::jwt::jwt_auth,
     db::dao::DaoContext,
     db::entities::{todo_item, todo_list},
     error::AppError,
+    middleware::jwt_auth,
     response::{ApiResult, JsonApiResponse},
     routes::base_api_router::CrudApiRouter,
     services::todo_service,

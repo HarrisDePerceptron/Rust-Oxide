@@ -3,8 +3,9 @@ use std::sync::Arc;
 use axum::{Router, extract::State, middleware, routing::get};
 
 use crate::{
-    auth::{Claims, jwt::jwt_auth},
+    auth::Claims,
     db::dao::DaoContext,
+    middleware::jwt_auth,
     response::{ApiResult, JsonApiResponse},
     services::user_service,
     state::AppState,
