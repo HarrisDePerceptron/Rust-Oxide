@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::{Router, extract::State, routing::get};
 
 use crate::{
-    auth::AuthGuard,
+    middleware::AuthGuard,
     db::dao::DaoContext,
     response::{ApiResult, JsonApiResponse},
     services::user_service,

@@ -14,13 +14,13 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    auth::{AuthGuard, Role},
+    auth::Role,
     db::{
         dao::DaoContext,
         entities::{todo_item, todo_list},
     },
     error::AppError,
-    middleware::AuthRolGuardLayer,
+    middleware::{AuthGuard, AuthRolGuardLayer},
     response::{ApiResult, JsonApiResponse},
     routes::base_api_router::{CrudApiRouter, Method},
     services::todo_service,
