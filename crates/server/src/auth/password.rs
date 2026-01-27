@@ -19,10 +19,10 @@ pub fn hash_password(password: &str) -> Result<String, AppError> {
     let salt = SaltString::generate(&mut thread_rng());
     let hash = Argon2::default()
         .hash_password(password.as_bytes(), &salt)
-        .map_err(|_| {
+        .map_err(|err| {
             AppError::new(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "Password hashing failed",
+                axum::http::StatusCode::BAD_REQUEST,
+                format!("Password hashing failed: {err}"),
             )
         })?
         .to_string();
@@ -30,10 +30,10 @@ pub fn hash_password(password: &str) -> Result<String, AppError> {
 }
 
 pub fn verify_password(password: &str, hash: &str) -> Result<bool, AppError> {
-    let parsed = PasswordHash::new(hash).map_err(|_| {
+    let parsed = PasswordHash::new(hash).map_err(|err| {
         AppError::new(
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "Invalid password hash",
+            axum::http::StatusCode::BAD_REQUEST,
+            format!("Invalid password hash: {err}"),
         )
     })?;
 

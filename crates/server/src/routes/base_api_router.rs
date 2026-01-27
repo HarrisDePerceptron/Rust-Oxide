@@ -151,7 +151,12 @@ where
         let mut active = <ActiveModelOf<Self::Service> as ActiveModelTrait>::default();
         active
             .set_from_json(payload)
-            .map_err(|_| AppError::new(StatusCode::BAD_REQUEST, INVALID_PAYLOAD_MESSAGE))?;
+            .map_err(|err| {
+                AppError::new(
+                    StatusCode::BAD_REQUEST,
+                    format!("{INVALID_PAYLOAD_MESSAGE}: {err}"),
+                )
+            })?;
         Ok(active)
     }
 
@@ -159,7 +164,12 @@ where
         let mut active = <ActiveModelOf<Self::Service> as ActiveModelTrait>::default();
         active
             .set_from_json(payload)
-            .map_err(|_| AppError::new(StatusCode::BAD_REQUEST, INVALID_PAYLOAD_MESSAGE))?;
+            .map_err(|err| {
+                AppError::new(
+                    StatusCode::BAD_REQUEST,
+                    format!("{INVALID_PAYLOAD_MESSAGE}: {err}"),
+                )
+            })?;
         Ok(active)
     }
 
@@ -231,7 +241,12 @@ where
                 let service = self.service();
                 move |query: Result<Query<ListQuery>, QueryRejection>| async move {
                     let Query(query) = query
-                        .map_err(|_| AppError::new(StatusCode::BAD_REQUEST, INVALID_QUERY_MESSAGE))?;
+                        .map_err(|err| {
+                            AppError::new(
+                                StatusCode::BAD_REQUEST,
+                                format!("{INVALID_QUERY_MESSAGE}: {err}"),
+                            )
+                        })?;
                     let page = query.page.unwrap_or(1);
                     let page_size = query.page_size.unwrap_or_else(Self::list_default_page_size);
                     let response = service

@@ -32,14 +32,14 @@ impl TodoService {
         self.todo_dao
             .list_lists()
             .await
-            .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "List fetch failed"))
+            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))
     }
 
     pub async fn count_lists(&self) -> Result<u64, AppError> {
         self.todo_dao
             .count_lists()
             .await
-            .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "Count lists failed"))
+            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))
     }
 
     pub async fn require_list(&self, list_id: &Uuid) -> Result<todo_list::Model, AppError> {
@@ -70,26 +70,21 @@ impl TodoService {
         self.todo_dao
             .create_item(list_id, description)
             .await
-            .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "Create item failed"))
+            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))
     }
 
     pub async fn list_items(&self, list_id: &Uuid) -> Result<Vec<todo_item::Model>, AppError> {
         self.todo_dao
             .list_items(list_id)
             .await
-            .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "Item fetch failed"))
+            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))
     }
 
     pub async fn count_items_by_list(&self, list_id: &Uuid) -> Result<u64, AppError> {
         self.todo_dao
             .count_items_by_list(list_id)
             .await
-            .map_err(|_| {
-                AppError::new(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Count items failed",
-                )
-            })
+            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))
     }
 
     pub async fn update_item(
@@ -102,7 +97,7 @@ impl TodoService {
         self.todo_dao
             .update_item(list_id, item_id, description, done)
             .await
-            .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "Update item failed"))?
+            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))?
             .ok_or_else(|| AppError::new(StatusCode::NOT_FOUND, "Todo item not found"))
     }
 
@@ -111,7 +106,7 @@ impl TodoService {
             .todo_dao
             .delete_item(list_id, item_id)
             .await
-            .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "Delete item failed"))?;
+            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))?;
         if !deleted {
             return Err(AppError::new(StatusCode::NOT_FOUND, "Todo item not found"));
         }

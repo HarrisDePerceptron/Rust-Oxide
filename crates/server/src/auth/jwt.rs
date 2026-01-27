@@ -25,10 +25,10 @@ pub fn encode_token(keys: &JwtKeys, claims: &Claims) -> Result<String, AppError>
     let mut header = Header::new(Algorithm::HS256);
     header.typ = Some("JWT".into());
 
-    encode(&header, claims, &keys.enc).map_err(|_| {
+    encode(&header, claims, &keys.enc).map_err(|err| {
         AppError::new(
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "Token encoding failed",
+            axum::http::StatusCode::BAD_REQUEST,
+            format!("Token encoding failed: {err}"),
         )
     })
 }
@@ -66,10 +66,10 @@ pub async fn jwt_auth(
     let mut validation = Validation::new(Algorithm::HS256);
     validation.validate_exp = true;
 
-    let data = decode::<Claims>(token, &state.jwt.dec, &validation).map_err(|_| {
+    let data = decode::<Claims>(token, &state.jwt.dec, &validation).map_err(|err| {
         AppError::new(
-            axum::http::StatusCode::UNAUTHORIZED,
-            "Invalid or expired token",
+            axum::http::StatusCode::BAD_REQUEST,
+            format!("Invalid or expired token: {err}"),
         )
         .into_response()
     })?;

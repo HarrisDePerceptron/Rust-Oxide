@@ -90,23 +90,21 @@ pub trait CrudService {
 
     fn map_error(&self, op: CrudOp, err: DaoLayerError) -> AppError {
         let errors = self.errors();
-        match err {
-            DaoLayerError::NotFound { .. } => {
-                AppError::new(StatusCode::NOT_FOUND, errors.not_found)
-            }
-            DaoLayerError::InvalidPagination { .. } => {
-                AppError::new(StatusCode::BAD_REQUEST, errors.invalid_pagination)
-            }
+        let detail = err.to_string();
+        let message = match err {
             DaoLayerError::Db(_) => {
-                let message = match op {
+                let context = match op {
                     CrudOp::Create => errors.create_failed,
                     CrudOp::Find | CrudOp::List => errors.find_failed,
                     CrudOp::Update => errors.update_failed,
                     CrudOp::Delete => errors.delete_failed,
                 };
-                AppError::new(StatusCode::INTERNAL_SERVER_ERROR, message)
+                format!("{context}: {detail}")
             }
-        }
+            DaoLayerError::NotFound { .. } => detail,
+            DaoLayerError::InvalidPagination { .. } => detail,
+        };
+        AppError::new(StatusCode::BAD_REQUEST, message)
     }
 
     async fn create<T>(&self, data: T) -> Result<CrudModel<Self::Dao>, AppError>
@@ -265,6 +263,13 @@ fn invalid_filter_value() -> AppError {
     AppError::new(StatusCode::BAD_REQUEST, INVALID_FILTER_VALUE_MESSAGE)
 }
 
+fn invalid_filter_value_with(detail: impl std::fmt::Display) -> AppError {
+    AppError::new(
+        StatusCode::BAD_REQUEST,
+        format!("{INVALID_FILTER_VALUE_MESSAGE}: {detail}"),
+    )
+}
+
 fn parse_bool(raw: &str) -> Result<bool, AppError> {
     match raw.trim().to_ascii_lowercase().as_str() {
         "true" | "t" | "1" | "yes" | "y" => Ok(true),
@@ -276,16 +281,22 @@ fn parse_bool(raw: &str) -> Result<bool, AppError> {
 fn parse_int<T>(raw: &str) -> Result<T, AppError>
 where
     T: std::str::FromStr,
+    <T as std::str::FromStr>::Err: std::fmt::Display,
 {
-    raw.trim().parse::<T>().map_err(|_| invalid_filter_value())
+    raw.trim()
+        .parse::<T>()
+        .map_err(|err| invalid_filter_value_with(err))
 }
 
 fn parse_float(raw: &str) -> Result<f64, AppError> {
-    raw.trim().parse::<f64>().map_err(|_| invalid_filter_value())
+    raw.trim()
+        .parse::<f64>()
+        .map_err(|err| invalid_filter_value_with(err))
 }
 
 fn parse_date(raw: &str) -> Result<NaiveDate, AppError> {
-    NaiveDate::parse_from_str(raw.trim(), "%Y-%m-%d").map_err(|_| invalid_filter_value())
+    NaiveDate::parse_from_str(raw.trim(), "%Y-%m-%d")
+        .map_err(|err| invalid_filter_value_with(err))
 }
 
 fn parse_time(raw: &str) -> Result<NaiveTime, AppError> {
@@ -295,7 +306,9 @@ fn parse_time(raw: &str) -> Result<NaiveTime, AppError> {
             return Ok(time);
         }
     }
-    Err(invalid_filter_value())
+    Err(invalid_filter_value_with(format!(
+        "Unrecognized time format: {raw}"
+    )))
 }
 
 fn parse_naive_datetime(raw: &str) -> Result<NaiveDateTime, AppError> {
@@ -313,15 +326,17 @@ fn parse_naive_datetime(raw: &str) -> Result<NaiveDateTime, AppError> {
             return Ok(dt);
         }
     }
-    Err(invalid_filter_value())
+    Err(invalid_filter_value_with(format!(
+        "Unrecognized datetime format: {raw}"
+    )))
 }
 
 fn parse_datetime_with_tz(raw: &str) -> Result<DateTime<FixedOffset>, AppError> {
-    DateTime::parse_from_rfc3339(raw.trim()).map_err(|_| invalid_filter_value())
+    DateTime::parse_from_rfc3339(raw.trim()).map_err(|err| invalid_filter_value_with(err))
 }
 
 fn parse_json(raw: &str) -> Result<JsonValue, AppError> {
-    serde_json::from_str(raw.trim()).map_err(|_| invalid_filter_value())
+    serde_json::from_str(raw.trim()).map_err(|err| invalid_filter_value_with(err))
 }
 
 fn ensure_no_wildcard(raw: &str) -> Result<(), AppError> {
@@ -510,7 +525,8 @@ fn parse_value_by_column_type(raw: &str, column_type: &ColumnType) -> Result<Que
             Ok(QueryValue::Json(Some(Box::new(parse_json(raw)?))))
         }
         ColumnType::Uuid => {
-            let uuid = Uuid::parse_str(raw.trim()).map_err(|_| invalid_filter_value())?;
+            let uuid =
+                Uuid::parse_str(raw.trim()).map_err(|err| invalid_filter_value_with(err))?;
             Ok(QueryValue::Uuid(Some(uuid)))
         }
         ColumnType::Enum { variants, .. } => {

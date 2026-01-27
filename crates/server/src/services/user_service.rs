@@ -21,7 +21,7 @@ impl UserService {
         match self.user_dao.find_by_id(*id).await {
             Ok(model) => Ok(Some(model)),
             Err(DaoLayerError::NotFound { .. }) => Ok(None),
-            Err(_) => Err(AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB error")),
+            Err(err) => Err(AppError::new(StatusCode::BAD_REQUEST, err.to_string())),
         }
     }
 }

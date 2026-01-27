@@ -50,7 +50,7 @@ impl AuthService {
             .user_dao
             .find_by_email(email)
             .await
-            .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?
+            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))?
             .is_some()
         {
             return Err(AppError::new(StatusCode::CONFLICT, "User already exists"));
@@ -61,7 +61,7 @@ impl AuthService {
             .user_dao
             .create_user(email, &password_hash, Role::User.as_str())
             .await
-            .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "Create user failed"))?;
+            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))?;
 
         self.issue_tokens(&user).await
     }
@@ -71,7 +71,7 @@ impl AuthService {
             .user_dao
             .find_by_email(email)
             .await
-            .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?
+            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))?
             .ok_or_else(|| AppError::new(StatusCode::UNAUTHORIZED, "Invalid credentials"))?;
 
         let password_ok = verify_password(password, &user.password_hash)?;
@@ -86,12 +86,7 @@ impl AuthService {
         self.user_dao
             .set_last_login(&user.id, &now)
             .await
-            .map_err(|_| {
-                AppError::new(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Failed to update last login",
-                )
-            })?;
+            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))?;
 
         self.issue_tokens(&user).await
     }
@@ -101,7 +96,7 @@ impl AuthService {
             .refresh_token_dao
             .find_active_by_token(refresh_token)
             .await
-            .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?
+            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))?
             .ok_or_else(|| AppError::new(StatusCode::UNAUTHORIZED, "Invalid refresh token"))?;
 
         if token.expires_at < chrono::Utc::now().fixed_offset() || token.revoked {
@@ -115,17 +110,12 @@ impl AuthService {
             .user_dao
             .find_by_id(token.user_id)
             .await
-            .map_err(|err| match err {
-                DaoLayerError::NotFound { .. } => {
-                    AppError::new(StatusCode::UNAUTHORIZED, "User missing")
-                }
-                _ => AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB error"),
-            })?;
+            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))?;
 
         self.refresh_token_dao
             .revoke_token(refresh_token)
             .await
-            .map_err(|_| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, "Token revoke failed"))?;
+            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))?;
 
         self.issue_tokens(&user).await
     }
@@ -165,12 +155,7 @@ impl AuthService {
             .refresh_token_dao
             .create_refresh_token(&user.id, Some(REFRESH_TTL_DAYS))
             .await
-            .map_err(|_| {
-                AppError::new(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Refresh token issue failed",
-                )
-            })?;
+            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))?;
 
         Ok(TokenBundle {
             access_token,
