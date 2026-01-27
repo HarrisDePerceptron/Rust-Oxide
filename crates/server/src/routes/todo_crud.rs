@@ -14,12 +14,15 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    auth::AuthGuard,
-    db::dao::DaoContext,
-    db::entities::{todo_item, todo_list},
+    auth::{AuthGuard, Role},
+    db::{
+        dao::DaoContext,
+        entities::{todo_item, todo_list},
+    },
     error::AppError,
+    middleware::AuthRolGuardLayer,
     response::{ApiResult, JsonApiResponse},
-    routes::base_api_router::CrudApiRouter,
+    routes::base_api_router::{CrudApiRouter, Method},
     services::todo_service,
     state::AppState,
 };
@@ -83,7 +86,10 @@ type HtmlError = (StatusCode, Html<String>);
 pub fn router(state: Arc<AppState>) -> Router {
     let daos = DaoContext::new(&state.db);
     let service = todo_service::TodoService::new(daos.todo());
-    let crud_router = CrudApiRouter::new(service.clone(), BASE_PATH);
+    let crud_router = CrudApiRouter::new(service.clone(), BASE_PATH).set_method_middleware(
+        Method::Create,
+        AuthRolGuardLayer::new(state.clone(), Role::User),
+    );
 
     let list_count_route = get(list_count_handler);
     let item_count_route = get(item_count_handler);
@@ -138,9 +144,12 @@ async fn item_count_handler(
 async fn todo_ui() -> Result<Html<String>, HtmlError> {
     let now = Local::now().to_rfc3339();
     let project_name = crate::routes::public::project_name();
-    let rendered = TodoUiTemplate { now, project_name }
-        .render()
-        .map_err(|_| html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render todo ui"))?;
+    let rendered = TodoUiTemplate { now, project_name }.render().map_err(|_| {
+        html_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "failed to render todo ui",
+        )
+    })?;
     Ok(Html(rendered))
 }
 
@@ -151,16 +160,10 @@ async fn create_list(
     let title = normalize_title(&body.title)?;
     let service = todo_service_from_state(state.as_ref());
     let list = service.create_list(title).await?;
-    JsonApiResponse::with_status(
-        StatusCode::CREATED,
-        "created",
-        list.into(),
-    )
+    JsonApiResponse::with_status(StatusCode::CREATED, "created", list.into())
 }
 
-async fn list_lists(
-    State(state): State<Arc<AppState>>,
-) -> ApiResult<Vec<TodoListResponse>> {
+async fn list_lists(State(state): State<Arc<AppState>>) -> ApiResult<Vec<TodoListResponse>> {
     let service = todo_service_from_state(state.as_ref());
     let lists = service.list_lists().await?;
     JsonApiResponse::ok(lists.into_iter().map(TodoListResponse::from).collect())
@@ -197,11 +200,7 @@ async fn delete_list(
 ) -> ApiResult<serde_json::Value> {
     let service = todo_service_from_state(state.as_ref());
     service.delete_list(&list_id).await?;
-    JsonApiResponse::with_status(
-        StatusCode::NO_CONTENT,
-        "deleted",
-        serde_json::Value::Null,
-    )
+    JsonApiResponse::with_status(StatusCode::NO_CONTENT, "deleted", serde_json::Value::Null)
 }
 
 async fn create_item(
@@ -213,11 +212,7 @@ async fn create_item(
     require_list(state.as_ref(), &list_id).await?;
     let service = todo_service_from_state(state.as_ref());
     let item = service.create_item(&list_id, description).await?;
-    JsonApiResponse::with_status(
-        StatusCode::CREATED,
-        "created",
-        item.into(),
-    )
+    JsonApiResponse::with_status(StatusCode::CREATED, "created", item.into())
 }
 
 async fn list_items(
@@ -259,11 +254,7 @@ async fn delete_item(
 ) -> ApiResult<serde_json::Value> {
     let service = todo_service_from_state(state.as_ref());
     service.delete_item(&list_id, &item_id).await?;
-    JsonApiResponse::with_status(
-        StatusCode::NO_CONTENT,
-        "deleted",
-        serde_json::Value::Null,
-    )
+    JsonApiResponse::with_status(StatusCode::NO_CONTENT, "deleted", serde_json::Value::Null)
 }
 
 async fn require_list(state: &AppState, list_id: &Uuid) -> Result<todo_list::Model, AppError> {

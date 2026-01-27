@@ -58,11 +58,12 @@ pub async fn jwt_auth(
 #[derive(Clone)]
 pub struct AuthRolGuardLayer {
     required: Role,
+    state: Arc<AppState>,
 }
 
 impl AuthRolGuardLayer {
-    pub fn new(required: Role) -> Self {
-        Self { required }
+    pub fn new(state: Arc<AppState>, required: Role) -> Self {
+        Self { required, state }
     }
 }
 
@@ -70,6 +71,7 @@ impl AuthRolGuardLayer {
 pub struct RequireRole<S> {
     inner: S,
     required: Role,
+    state: Arc<AppState>,
 }
 
 impl<S> Layer<S> for AuthRolGuardLayer {
@@ -79,6 +81,7 @@ impl<S> Layer<S> for AuthRolGuardLayer {
         RequireRole {
             inner,
             required: self.required.clone(),
+            state: Arc::clone(&self.state),
         }
     }
 }
@@ -100,15 +103,48 @@ where
     fn call(&mut self, req: HttpRequest<Body>) -> Self::Future {
         let required = self.required.clone();
         let mut inner = self.inner.clone();
+        let state = Arc::clone(&self.state);
 
         Box::pin(async move {
-            let claims = match req.extensions().get::<Claims>() {
-                Some(c) => c,
-                None => {
-                    return Ok(AppError::new(StatusCode::UNAUTHORIZED, "No JWT claims")
+            let mut req = req;
+            let claims = if let Some(claims) = req.extensions().get::<Claims>() {
+                claims.clone()
+            } else {
+                let auth = req
+                    .headers()
+                    .get(header::AUTHORIZATION)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("");
+
+                let token = match auth.strip_prefix("Bearer ") {
+                    Some(token) => token,
+                    None => {
+                        return Ok(AppError::new(
+                            StatusCode::UNAUTHORIZED,
+                            "Missing/invalid Authorization header",
+                        )
                         .into_response());
-                }
+                    }
+                };
+
+                let mut validation = Validation::new(Algorithm::HS256);
+                validation.validate_exp = true;
+
+                let data = match decode::<Claims>(token, &state.jwt.dec, &validation) {
+                    Ok(data) => data,
+                    Err(err) => {
+                        return Ok(AppError::new(
+                            StatusCode::BAD_REQUEST,
+                            format!("Invalid or expired token: {err}"),
+                        )
+                        .into_response());
+                    }
+                };
+
+                data.claims
             };
+
+            req.extensions_mut().insert(claims.clone());
 
             if !claims.roles.iter().any(|r| r == &required) {
                 return Ok(AppError::new(StatusCode::FORBIDDEN, "Missing required role")
