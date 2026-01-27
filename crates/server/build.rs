@@ -119,6 +119,23 @@ struct FieldSeaOrmAttrs {
     nullable: bool,
 }
 
+#[derive(Debug, Clone)]
+struct BaseEntityDefaults {
+    id: String,
+    created_at: String,
+    updated_at: String,
+}
+
+impl Default for BaseEntityDefaults {
+    fn default() -> Self {
+        Self {
+            id: "id".to_string(),
+            created_at: "created_at".to_string(),
+            updated_at: "updated_at".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 enum ExtractorKind {
     Json,
@@ -781,6 +798,57 @@ fn parse_field_sea_orm_attrs(attrs: &[Attribute]) -> FieldSeaOrmAttrs {
     out
 }
 
+fn base_entity_defaults_from_attrs(attrs: &[Attribute]) -> Option<BaseEntityDefaults> {
+    let mut config: Option<BaseEntityDefaults> = None;
+    for attr in attrs {
+        if !attr.path().is_ident("base_entity") {
+            continue;
+        }
+        let defaults = config.get_or_insert_with(BaseEntityDefaults::default);
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("id") {
+                let value: LitStr = meta.value()?.parse()?;
+                defaults.id = value.value();
+            } else if meta.path.is_ident("created_at") {
+                let value: LitStr = meta.value()?.parse()?;
+                defaults.created_at = value.value();
+            } else if meta.path.is_ident("updated_at") {
+                let value: LitStr = meta.value()?.parse()?;
+                defaults.updated_at = value.value();
+            }
+            Ok(())
+        });
+    }
+    config
+}
+
+fn normalize_field_name(name: &str) -> String {
+    name.strip_prefix("r#").unwrap_or(name).to_string()
+}
+
+fn push_base_entity_column(
+    columns: &mut Vec<EntityColumnEntry>,
+    existing: &mut HashSet<String>,
+    name: &str,
+    rust_type: &str,
+    primary_key: bool,
+) {
+    let normalized = normalize_field_name(name);
+    if existing.contains(&normalized) {
+        return;
+    }
+    existing.insert(normalized);
+    let mut attributes = Vec::new();
+    if primary_key {
+        add_attribute(&mut attributes, "Primary Key");
+    }
+    columns.push(EntityColumnEntry {
+        name: name.to_string(),
+        rust_type: rust_type.to_string(),
+        attributes,
+    });
+}
+
 fn to_pascal_case(value: &str) -> String {
     if !value.contains('_') && !value.contains('-') {
         let has_upper = value.chars().any(|ch| ch.is_uppercase());
@@ -1025,6 +1093,29 @@ fn build_entity_columns(
     let Fields::Named(named) = &item_struct.fields else {
         return columns;
     };
+    let base_entity_defaults = base_entity_defaults_from_attrs(&item_struct.attrs);
+    let mut existing_fields: HashSet<String> = named
+        .named
+        .iter()
+        .filter_map(|field| field.ident.as_ref().map(|ident| normalize_field_name(&ident.to_string())))
+        .collect();
+    if let Some(defaults) = base_entity_defaults {
+        push_base_entity_column(&mut columns, &mut existing_fields, &defaults.id, "uuid::Uuid", true);
+        push_base_entity_column(
+            &mut columns,
+            &mut existing_fields,
+            &defaults.created_at,
+            "sea_orm::entity::prelude::DateTimeWithTimeZone",
+            false,
+        );
+        push_base_entity_column(
+            &mut columns,
+            &mut existing_fields,
+            &defaults.updated_at,
+            "sea_orm::entity::prelude::DateTimeWithTimeZone",
+            false,
+        );
+    }
     for field in &named.named {
         if field_has_relation_attr(&field.attrs) || is_relation_type(&field.ty) {
             continue;
