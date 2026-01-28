@@ -47,6 +47,8 @@ impl JsonApiResponse<serde_json::Value> {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
+        let status = status_for(&self);
+        log_app_error(&self, status);
         JsonApiResponse::from_error(&self).into_response()
     }
 }
@@ -67,5 +69,38 @@ fn status_for(err: &AppError) -> StatusCode {
         AppError::NotFound(_) => StatusCode::NOT_FOUND,
         AppError::Conflict(_) => StatusCode::CONFLICT,
         AppError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+pub(crate) fn log_app_error(err: &AppError, status: StatusCode) {
+    let kind = error_kind(err);
+    let message = err.message();
+
+    if status.is_server_error() {
+        if let Some(source) = err.source() {
+            tracing::error!(
+                status = status.as_u16(),
+                error_kind = %kind,
+                message = %message,
+                error = %source
+            );
+        } else {
+            tracing::error!(status = status.as_u16(), error_kind = %kind, message = %message);
+        }
+    } else if matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
+        tracing::debug!(status = status.as_u16(), error_kind = %kind, message = %message);
+    } else {
+        tracing::warn!(status = status.as_u16(), error_kind = %kind, message = %message);
+    }
+}
+
+fn error_kind(err: &AppError) -> &'static str {
+    match err {
+        AppError::BadRequest(_) => "bad_request",
+        AppError::Unauthorized(_) => "unauthorized",
+        AppError::Forbidden(_) => "forbidden",
+        AppError::NotFound(_) => "not_found",
+        AppError::Conflict(_) => "conflict",
+        AppError::Internal(_) => "internal",
     }
 }

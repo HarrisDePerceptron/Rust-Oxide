@@ -6,7 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use crate::{error::AppError, response::JsonApiResponse};
+use crate::{error::AppError, response::{JsonApiResponse, log_app_error}};
 
 const MAX_ERROR_BODY_BYTES: usize = 16 * 1024;
 
@@ -29,6 +29,9 @@ pub async fn json_error_middleware(req: Request, next: Next) -> Response {
         Err(_) => default_message(status),
     };
     let app_error = app_error_from_status(status, message);
+    if status.is_server_error() {
+        log_app_error(&app_error, status);
+    }
 
     let mut new_response = JsonApiResponse::from_error(&app_error).into_response();
     copy_headers(&parts.headers, &mut new_response);

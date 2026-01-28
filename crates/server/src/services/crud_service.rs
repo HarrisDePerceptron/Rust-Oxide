@@ -89,21 +89,21 @@ pub trait CrudService {
 
     fn map_error(&self, op: CrudOp, err: DaoLayerError) -> AppError {
         let errors = self.errors();
-        let detail = err.to_string();
-        let message = match err {
-            DaoLayerError::Db(_) => {
+        match err {
+            DaoLayerError::Db(db_err) => {
                 let context = match op {
                     CrudOp::Create => errors.create_failed,
                     CrudOp::Find | CrudOp::List => errors.find_failed,
                     CrudOp::Update => errors.update_failed,
                     CrudOp::Delete => errors.delete_failed,
                 };
-                format!("{context}: {detail}")
+                let message = format!("{context}. Please check the logs for more details");
+                AppError::internal_with_source(message, db_err)
             }
-            DaoLayerError::NotFound { .. } => detail,
-            DaoLayerError::InvalidPagination { .. } => detail,
-        };
-        AppError::bad_request(message)
+            DaoLayerError::NotFound { .. } | DaoLayerError::InvalidPagination { .. } => {
+                AppError::bad_request(err.to_string())
+            }
+        }
     }
 
     async fn create<T>(&self, data: T) -> Result<CrudModel<Self::Dao>, AppError>

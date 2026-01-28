@@ -1,3 +1,11 @@
+use std::error::Error;
+
+#[derive(Debug)]
+pub(crate) struct InternalError {
+    message: String,
+    source: Option<Box<dyn Error + Send + Sync>>,
+}
+
 #[derive(Debug)]
 pub enum AppError {
     BadRequest(String),
@@ -5,7 +13,7 @@ pub enum AppError {
     Forbidden(String),
     NotFound(String),
     Conflict(String),
-    Internal(String),
+    Internal(InternalError),
 }
 
 impl AppError {
@@ -30,7 +38,20 @@ impl AppError {
     }
 
     pub fn internal(message: impl Into<String>) -> Self {
-        Self::Internal(message.into())
+        Self::Internal(InternalError {
+            message: message.into(),
+            source: None,
+        })
+    }
+
+    pub fn internal_with_source(
+        message: impl Into<String>,
+        source: impl Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::Internal(InternalError {
+            message: message.into(),
+            source: Some(Box::new(source)),
+        })
     }
 
     pub fn message(&self) -> &str {
@@ -39,8 +60,15 @@ impl AppError {
             | Self::Unauthorized(message)
             | Self::Forbidden(message)
             | Self::NotFound(message)
-            | Self::Conflict(message)
-            | Self::Internal(message) => message.as_str(),
+            | Self::Conflict(message) => message.as_str(),
+            Self::Internal(internal) => internal.message.as_str(),
+        }
+    }
+
+    pub fn source(&self) -> Option<&(dyn Error + Send + Sync)> {
+        match self {
+            Self::Internal(internal) => internal.source.as_deref(),
+            _ => None,
         }
     }
 }
@@ -54,13 +82,15 @@ impl std::fmt::Display for AppError {
 impl From<crate::db::dao::DaoLayerError> for AppError {
     fn from(err: crate::db::dao::DaoLayerError) -> Self {
         match err {
-            crate::db::dao::DaoLayerError::NotFound { .. } => {
-                AppError::not_found(err.to_string())
-            }
-            crate::db::dao::DaoLayerError::InvalidPagination { .. } => {
-                AppError::bad_request(err.to_string())
-            }
-            crate::db::dao::DaoLayerError::Db(_) => AppError::bad_request(err.to_string()),
+            //crate::db::dao::DaoLayerError::NotFound { .. } => AppError::not_found(err.to_string()),
+            //crate::db::dao::DaoLayerError::InvalidPagination { .. } => {
+            //    AppError::bad_request(err.to_string())
+            //}
+            crate::db::dao::DaoLayerError::Db(db_err) => AppError::internal_with_source(
+                "database operation failed. Please check the logs for more details",
+                db_err,
+            ),
+            _ => AppError::bad_request(format!("Database error: {}", err)),
         }
     }
 }

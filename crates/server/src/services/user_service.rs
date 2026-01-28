@@ -20,6 +20,10 @@ impl UserService {
         match self.user_dao.find_by_id(*id).await {
             Ok(model) => Ok(Some(model)),
             Err(DaoLayerError::NotFound { .. }) => Ok(None),
+            Err(DaoLayerError::Db(db_err)) => Err(AppError::internal_with_source(
+                "database operation failed. Please check the logs for more details",
+                db_err,
+            )),
             Err(err) => Err(AppError::bad_request(err.to_string())),
         }
     }
@@ -28,6 +32,10 @@ impl UserService {
         match self.user_dao.find_by_email(email).await {
             Ok(model) => Ok(model),
             Err(DaoLayerError::NotFound { .. }) => Ok(None),
+            Err(DaoLayerError::Db(db_err)) => Err(AppError::internal_with_source(
+                "database operation failed. Please check the logs for more details",
+                db_err,
+            )),
             Err(err) => Err(AppError::bad_request(err.to_string())),
         }
     }
