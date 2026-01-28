@@ -4,17 +4,23 @@ use axum::{
     body::{self, Body},
     http::{Request, StatusCode},
 };
-use sea_orm::{ConnectOptions, Database, DatabaseBackend, MockDatabase};
+use sea_orm::{ConnectOptions, Database, DatabaseBackend, DatabaseConnection, MockDatabase};
 use serde_json::json;
 use tower::ServiceExt; // for `oneshot`
 use uuid::Uuid;
 
 use rust_oxide::{
-    auth::{Claims, Role, jwt::now_unix, password},
+    auth::{
+        Claims, Role,
+        jwt::now_unix,
+        password,
+        providers::{AuthProviders, LocalAuthProvider},
+    },
     config::AppConfig,
     db::dao::DaoContext,
     routes::router,
-    state::AppState,
+    services::user_service,
+    state::{AppState, JwtKeys},
 };
 
 use jsonwebtoken::{Algorithm, Header, encode};
@@ -25,7 +31,7 @@ fn app() -> axum::Router {
     let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
     let mut cfg = AppConfig::from_env().expect("load app config");
     cfg.jwt_secret = String::from_utf8_lossy(secret).into_owned();
-    let state = AppState::new(cfg, db);
+    let state = build_state(cfg, db);
     router(state)
 }
 
@@ -45,7 +51,25 @@ async fn app_with_db() -> std::sync::Arc<AppState> {
 
     let mut cfg = cfg;
     cfg.jwt_secret = "test-secret".to_string();
-    AppState::new(cfg, db)
+    build_state(cfg, db)
+}
+
+fn build_state(cfg: AppConfig, db: DatabaseConnection) -> std::sync::Arc<AppState> {
+    let jwt = JwtKeys::from_secret(cfg.jwt_secret.as_bytes());
+    let daos = DaoContext::new(&db);
+    let user_service = user_service::UserService::new(daos.user());
+    let local_provider = LocalAuthProvider::new(
+        user_service,
+        daos.refresh_token(),
+        jwt.clone(),
+    );
+    let mut providers = AuthProviders::new(cfg.auth_provider)
+        .with_provider(std::sync::Arc::new(local_provider))
+        .expect("create auth providers");
+    providers
+        .set_active(cfg.auth_provider)
+        .expect("set active auth provider");
+    AppState::new(cfg, db, jwt, providers)
 }
 
 #[tokio::test]
@@ -122,7 +146,7 @@ async fn me_with_token_succeeds() {
     let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
     let mut cfg = AppConfig::from_env().expect("load app config");
     cfg.jwt_secret = String::from_utf8_lossy(secret).into_owned();
-    let state = AppState::new(cfg, db);
+    let state = build_state(cfg, db);
     let app = router(state.clone());
 
     let token = login_token(secret, vec![Role::User]);
@@ -148,7 +172,7 @@ async fn admin_requires_role() {
     let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
     let mut cfg = AppConfig::from_env().expect("load app config");
     cfg.jwt_secret = String::from_utf8_lossy(secret).into_owned();
-    let app = router(AppState::new(cfg, db));
+    let app = router(build_state(cfg, db));
 
     // token without Admin role
     let token = login_token(secret, vec![Role::User]);

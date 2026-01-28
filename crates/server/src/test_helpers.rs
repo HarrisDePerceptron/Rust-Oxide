@@ -24,11 +24,12 @@ pub fn test_router(secret: &[u8]) -> Router {
         daos.refresh_token(),
         jwt.clone(),
     );
-    let providers = AuthProviders::new(
-        cfg.auth_provider,
-        vec![std::sync::Arc::new(local_provider)],
-    )
-    .expect("create auth providers");
+    let mut providers = AuthProviders::new(cfg.auth_provider)
+        .with_provider(std::sync::Arc::new(local_provider))
+        .expect("create auth providers");
+    providers
+        .set_active(cfg.auth_provider)
+        .expect("set active auth provider");
     let state = AppState::new(cfg, db, jwt, providers);
     router(Arc::clone(&state))
 }

@@ -53,43 +53,63 @@ pub trait AuthProvider: Send + Sync {
 #[derive(Clone)]
 pub struct AuthProviders {
     active_id: AuthProviderId,
-    active: Arc<dyn AuthProvider>,
     providers: HashMap<AuthProviderId, Arc<dyn AuthProvider>>,
 }
 
 impl AuthProviders {
-    pub fn new(
-        active_id: AuthProviderId,
-        providers: Vec<Arc<dyn AuthProvider>>,
-    ) -> Result<Self, AppError> {
-        let mut map = HashMap::new();
-        for provider in providers {
-            map.insert(provider.id(), provider);
-        }
-
-        let active = map
-            .get(&active_id)
-            .cloned()
-            .ok_or_else(|| {
-                AppError::new(
-                    StatusCode::BAD_REQUEST,
-                    format!("Auth provider not configured: {}", active_id.as_str()),
-                )
-            })?;
-
-        Ok(Self {
+    pub fn new(active_id: AuthProviderId) -> Self {
+        Self {
             active_id,
-            active,
-            providers: map,
-        })
+            providers: HashMap::new(),
+        }
+    }
+
+    pub fn with_provider(mut self, provider: Arc<dyn AuthProvider>) -> Result<Self, AppError> {
+        self.add(provider)?;
+        Ok(self)
+    }
+
+    pub fn add(&mut self, provider: Arc<dyn AuthProvider>) -> Result<(), AppError> {
+        let id = provider.id();
+        if self.providers.contains_key(&id) {
+            return Err(AppError::new(
+                StatusCode::CONFLICT,
+                format!("Auth provider already registered: {}", id.as_str()),
+            ));
+        }
+        self.providers.insert(id, provider);
+        Ok(())
+    }
+
+    pub fn set_active(&mut self, id: AuthProviderId) -> Result<(), AppError> {
+        if self.providers.contains_key(&id) {
+            self.active_id = id;
+            Ok(())
+        } else {
+            Err(AppError::new(
+                StatusCode::BAD_REQUEST,
+                format!("Auth provider not configured: {}", id.as_str()),
+            ))
+        }
     }
 
     pub fn active_id(&self) -> AuthProviderId {
         self.active_id
     }
 
-    pub fn active(&self) -> &dyn AuthProvider {
-        self.active.as_ref()
+    pub fn active(&self) -> Result<&dyn AuthProvider, AppError> {
+        self.providers
+            .get(&self.active_id)
+            .map(|provider| provider.as_ref())
+            .ok_or_else(|| {
+                AppError::new(
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "Auth provider not configured: {}",
+                        self.active_id.as_str()
+                    ),
+                )
+            })
     }
 
     pub fn get(&self, id: AuthProviderId) -> Option<&Arc<dyn AuthProvider>> {

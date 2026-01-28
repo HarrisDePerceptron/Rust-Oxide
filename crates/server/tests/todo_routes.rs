@@ -4,7 +4,7 @@ use axum::{
     body::{self, Body},
     http::{Request, StatusCode},
 };
-use sea_orm::{ConnectOptions, Database};
+use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use serde_json::json;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -13,10 +13,14 @@ use rust_oxide::{
     auth::{
         Role,
         jwt::{encode_token, make_access_claims},
+        providers::{AuthProviders, LocalAuthProvider},
     },
     config::AppConfig,
+    db::dao::DaoContext,
     routes::router,
+    services::user_service,
     state::AppState,
+    state::JwtKeys,
 };
 
 async fn app_state() -> std::sync::Arc<AppState> {
@@ -35,7 +39,25 @@ async fn app_state() -> std::sync::Arc<AppState> {
 
     let mut cfg = cfg;
     cfg.jwt_secret = "test-secret".to_string();
-    AppState::new(cfg, db)
+    build_state(cfg, db)
+}
+
+fn build_state(cfg: AppConfig, db: DatabaseConnection) -> std::sync::Arc<AppState> {
+    let jwt = JwtKeys::from_secret(cfg.jwt_secret.as_bytes());
+    let daos = DaoContext::new(&db);
+    let user_service = user_service::UserService::new(daos.user());
+    let local_provider = LocalAuthProvider::new(
+        user_service,
+        daos.refresh_token(),
+        jwt.clone(),
+    );
+    let mut providers = AuthProviders::new(cfg.auth_provider)
+        .with_provider(std::sync::Arc::new(local_provider))
+        .expect("create auth providers");
+    providers
+        .set_active(cfg.auth_provider)
+        .expect("set active auth provider");
+    AppState::new(cfg, db, jwt, providers)
 }
 
 async fn send(

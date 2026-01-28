@@ -37,11 +37,12 @@ async fn run() -> anyhow::Result<()> {
         daos.refresh_token(),
         jwt.clone(),
     );
-    let providers = AuthProviders::new(
-        cfg.auth_provider,
-        vec![std::sync::Arc::new(local_provider)],
-    )
-    .map_err(|err| anyhow::anyhow!(err.message))?;
+    let mut providers = AuthProviders::new(cfg.auth_provider)
+        .with_provider(std::sync::Arc::new(local_provider))
+        .map_err(|err| anyhow::anyhow!(err.message))?;
+    providers
+        .set_active(cfg.auth_provider)
+        .map_err(|err| anyhow::anyhow!(err.message))?;
     let state = AppState::new(cfg, db, jwt, providers);
 
     let auth_service = auth_service::AuthService::new(&state.auth_providers);
