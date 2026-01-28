@@ -30,7 +30,6 @@ struct RouteGroup {
 #[template(path = "index.html")]
 struct IndexTemplate {
     now: String,
-    route_groups: Vec<RouteGroup>,
     project_name: String,
 }
 
@@ -82,11 +81,9 @@ async fn list_routes_json() -> ApiResult<&'static [RouteInfo]> {
 
 async fn index() -> Result<Html<String>, HtmlError> {
     let now = Local::now().to_rfc3339();
-    let route_groups = build_route_groups();
     let project_name = project_name();
     let rendered = IndexTemplate {
         now,
-        route_groups,
         project_name,
     }
         .render()

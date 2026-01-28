@@ -99,17 +99,6 @@ impl ExtractorKind {
 const CURL_BASE_URL_PLACEHOLDER: &str = "{BASE_URL}";
 
 impl TypeDoc {
-    fn render(&self) -> String {
-        if self.fields.is_empty() {
-            return "{}".to_string();
-        }
-        let mut parts = Vec::new();
-        for field in &self.fields {
-            parts.push(format!("\"{}\": {}", field.name, field.ty));
-        }
-        format!("{{ {} }}", parts.join(", "))
-    }
-
     fn render_with<F>(&self, expand: F) -> String
     where
         F: Fn(&str) -> String,
@@ -408,10 +397,6 @@ fn type_from_constructor(expr: &Expr) -> Option<String> {
         }
         _ => None,
     }
-}
-
-fn type_from_struct(expr: &ExprStruct) -> Option<String> {
-    type_from_path(&expr.path)
 }
 
 fn type_from_path(path: &SynPath) -> Option<String> {

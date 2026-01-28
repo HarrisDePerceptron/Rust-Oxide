@@ -1,7 +1,7 @@
 use std::error::Error;
 
 #[derive(Debug)]
-pub(crate) struct InternalError {
+pub struct InternalError {
     message: String,
     source: Option<Box<dyn Error + Send + Sync>>,
 }
