@@ -1,4 +1,3 @@
-use axum::http::StatusCode;
 use sea_orm::Set;
 use uuid::Uuid;
 
@@ -29,17 +28,11 @@ impl TodoService {
     }
 
     pub async fn list_lists(&self) -> Result<Vec<todo_list::Model>, AppError> {
-        self.todo_dao
-            .list_lists()
-            .await
-            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))
+        Ok(self.todo_dao.list_lists().await?)
     }
 
     pub async fn count_lists(&self) -> Result<u64, AppError> {
-        self.todo_dao
-            .count_lists()
-            .await
-            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))
+        Ok(self.todo_dao.count_lists().await?)
     }
 
     pub async fn require_list(&self, list_id: &Uuid) -> Result<todo_list::Model, AppError> {
@@ -67,24 +60,15 @@ impl TodoService {
         list_id: &Uuid,
         description: &str,
     ) -> Result<todo_item::Model, AppError> {
-        self.todo_dao
-            .create_item(list_id, description)
-            .await
-            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))
+        Ok(self.todo_dao.create_item(list_id, description).await?)
     }
 
     pub async fn list_items(&self, list_id: &Uuid) -> Result<Vec<todo_item::Model>, AppError> {
-        self.todo_dao
-            .list_items(list_id)
-            .await
-            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))
+        Ok(self.todo_dao.list_items(list_id).await?)
     }
 
     pub async fn count_items_by_list(&self, list_id: &Uuid) -> Result<u64, AppError> {
-        self.todo_dao
-            .count_items_by_list(list_id)
-            .await
-            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))
+        Ok(self.todo_dao.count_items_by_list(list_id).await?)
     }
 
     pub async fn update_item(
@@ -96,19 +80,17 @@ impl TodoService {
     ) -> Result<todo_item::Model, AppError> {
         self.todo_dao
             .update_item(list_id, item_id, description, done)
-            .await
-            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))?
-            .ok_or_else(|| AppError::new(StatusCode::NOT_FOUND, "Todo item not found"))
+            .await?
+            .ok_or_else(|| AppError::not_found("Todo item not found"))
     }
 
     pub async fn delete_item(&self, list_id: &Uuid, item_id: &Uuid) -> Result<(), AppError> {
         let deleted = self
             .todo_dao
             .delete_item(list_id, item_id)
-            .await
-            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))?;
+            .await?;
         if !deleted {
-            return Err(AppError::new(StatusCode::NOT_FOUND, "Todo item not found"));
+            return Err(AppError::not_found("Todo item not found"));
         }
         Ok(())
     }

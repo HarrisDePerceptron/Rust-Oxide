@@ -39,10 +39,10 @@ async fn run() -> anyhow::Result<()> {
     );
     let mut providers = AuthProviders::new(cfg.auth_provider)
         .with_provider(std::sync::Arc::new(local_provider))
-        .map_err(|err| anyhow::anyhow!(err.message))?;
+        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
     providers
         .set_active(cfg.auth_provider)
-        .map_err(|err| anyhow::anyhow!(err.message))?;
+        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
     let state = AppState::new(cfg, db, jwt, providers);
 
     let auth_service = auth_service::AuthService::new(&state.auth_providers);

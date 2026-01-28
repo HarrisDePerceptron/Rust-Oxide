@@ -33,7 +33,7 @@ impl<'a> AuthService<'a> {
     pub async fn seed_admin(&self, cfg: &AppConfig) -> anyhow::Result<()> {
         self.providers
             .active()
-            .map_err(|err| anyhow::anyhow!(err.message))?
+            .map_err(|err| anyhow::anyhow!(err.to_string()))?
             .seed_admin(cfg)
             .await
     }

@@ -10,20 +10,14 @@ const MIN_PASSWORD_LEN: usize = 8;
 
 pub fn hash_password(password: &str) -> Result<String, AppError> {
     if password.len() < MIN_PASSWORD_LEN {
-        return Err(AppError::new(
-            axum::http::StatusCode::BAD_REQUEST,
-            "Password too short",
-        ));
+        return Err(AppError::bad_request("Password too short"));
     }
 
     let salt = SaltString::generate(&mut thread_rng());
     let hash = Argon2::default()
         .hash_password(password.as_bytes(), &salt)
         .map_err(|err| {
-            AppError::new(
-                axum::http::StatusCode::BAD_REQUEST,
-                format!("Password hashing failed: {err}"),
-            )
+            AppError::bad_request(format!("Password hashing failed: {err}"))
         })?
         .to_string();
     Ok(hash)
@@ -31,10 +25,7 @@ pub fn hash_password(password: &str) -> Result<String, AppError> {
 
 pub fn verify_password(password: &str, hash: &str) -> Result<bool, AppError> {
     let parsed = PasswordHash::new(hash).map_err(|err| {
-        AppError::new(
-            axum::http::StatusCode::BAD_REQUEST,
-            format!("Invalid password hash: {err}"),
-        )
+        AppError::bad_request(format!("Invalid password hash: {err}"))
     })?;
 
     Ok(Argon2::default()

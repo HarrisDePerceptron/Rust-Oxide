@@ -1,7 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
-use axum::http::StatusCode;
 
 use crate::{
     auth::{Claims, TokenBundle},
@@ -72,10 +71,10 @@ impl AuthProviders {
     pub fn add(&mut self, provider: Arc<dyn AuthProvider>) -> Result<(), AppError> {
         let id = provider.id();
         if self.providers.contains_key(&id) {
-            return Err(AppError::new(
-                StatusCode::CONFLICT,
-                format!("Auth provider already registered: {}", id.as_str()),
-            ));
+            return Err(AppError::conflict(format!(
+                "Auth provider already registered: {}",
+                id.as_str()
+            )));
         }
         self.providers.insert(id, provider);
         Ok(())
@@ -86,10 +85,10 @@ impl AuthProviders {
             self.active_id = id;
             Ok(())
         } else {
-            Err(AppError::new(
-                StatusCode::BAD_REQUEST,
-                format!("Auth provider not configured: {}", id.as_str()),
-            ))
+            Err(AppError::bad_request(format!(
+                "Auth provider not configured: {}",
+                id.as_str()
+            )))
         }
     }
 
@@ -102,13 +101,10 @@ impl AuthProviders {
             .get(&self.active_id)
             .map(|provider| provider.as_ref())
             .ok_or_else(|| {
-                AppError::new(
-                    StatusCode::BAD_REQUEST,
-                    format!(
-                        "Auth provider not configured: {}",
-                        self.active_id.as_str()
-                    ),
-                )
+                AppError::bad_request(format!(
+                    "Auth provider not configured: {}",
+                    self.active_id.as_str()
+                ))
             })
     }
 

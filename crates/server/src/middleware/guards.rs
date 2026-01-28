@@ -2,7 +2,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use axum::{
     extract::FromRequestParts,
-    http::{StatusCode, header},
+    http::header,
 };
 use jsonwebtoken::{Algorithm, Validation, decode};
 
@@ -30,22 +30,14 @@ impl FromRequestParts<Arc<AppState>> for Claims {
             .and_then(|value| value.to_str().ok())
             .unwrap_or("");
 
-        let token = auth.strip_prefix("Bearer ").ok_or_else(|| {
-            AppError::new(
-                StatusCode::UNAUTHORIZED,
-                "Missing/invalid Authorization header",
-            )
-        })?;
+        let token = auth
+            .strip_prefix("Bearer ")
+            .ok_or_else(|| AppError::unauthorized("Missing/invalid Authorization header"))?;
 
         let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
 
-        let data = decode::<Claims>(token, &state.jwt.dec, &validation).map_err(|err| {
-            AppError::new(
-                StatusCode::BAD_REQUEST,
-                format!("Invalid or expired token: {err}"),
-            )
-        })?;
+        let data = decode::<Claims>(token, &state.jwt.dec, &validation)?;
 
         parts.extensions.insert(data.claims.clone());
         Ok(data.claims)
@@ -72,10 +64,7 @@ where
         let claims = Claims::from_request_parts(parts, state).await?;
 
         if !claims.roles.iter().any(|role| role == &R::required()) {
-            return Err(AppError::new(
-                StatusCode::FORBIDDEN,
-                "Missing required role",
-            ));
+            return Err(AppError::forbidden("Missing required role"));
         }
 
         Ok(Self {

@@ -16,12 +16,8 @@ pub fn encode_token(keys: &JwtKeys, claims: &Claims) -> Result<String, AppError>
     let mut header = Header::new(Algorithm::HS256);
     header.typ = Some("JWT".into());
 
-    encode(&header, claims, &keys.enc).map_err(|err| {
-        AppError::new(
-            axum::http::StatusCode::BAD_REQUEST,
-            format!("Token encoding failed: {err}"),
-        )
-    })
+    encode(&header, claims, &keys.enc)
+        .map_err(|err| AppError::bad_request(format!("Token encoding failed: {err}")))
 }
 
 pub fn make_access_claims(user_id: &uuid::Uuid, roles: Vec<Role>, ttl_secs: usize) -> Claims {
@@ -32,5 +28,11 @@ pub fn make_access_claims(user_id: &uuid::Uuid, roles: Vec<Role>, ttl_secs: usiz
         roles,
         iat,
         exp,
+    }
+}
+
+impl From<jsonwebtoken::errors::Error> for AppError {
+    fn from(err: jsonwebtoken::errors::Error) -> Self {
+        AppError::bad_request(format!("Invalid or expired token: {err}"))
     }
 }

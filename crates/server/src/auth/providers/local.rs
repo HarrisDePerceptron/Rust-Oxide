@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use axum::http::StatusCode;
 
 use crate::{
     auth::{
@@ -52,8 +51,7 @@ impl LocalAuthProvider {
         let refresh = self
             .refresh_token_dao
             .create_refresh_token(&user.id, Some(REFRESH_TTL_DAYS))
-            .await
-            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))?;
+            .await?;
 
         Ok(TokenBundle {
             access_token,
@@ -73,11 +71,11 @@ impl AuthProvider for LocalAuthProvider {
     async fn register(&self, email: &str, password: &str) -> Result<TokenBundle, AppError> {
         let email = email.trim();
         if email.is_empty() {
-            return Err(AppError::new(StatusCode::BAD_REQUEST, "Email required"));
+            return Err(AppError::bad_request("Email required"));
         }
 
         if self.user_service.find_by_email(email).await?.is_some() {
-            return Err(AppError::new(StatusCode::CONFLICT, "User already exists"));
+            return Err(AppError::conflict("User already exists"));
         }
 
         let password_hash = hash_password(password)?;
@@ -94,14 +92,11 @@ impl AuthProvider for LocalAuthProvider {
             .user_service
             .find_by_email(email)
             .await?
-            .ok_or_else(|| AppError::new(StatusCode::UNAUTHORIZED, "Invalid credentials"))?;
+            .ok_or_else(|| AppError::unauthorized("Invalid credentials"))?;
 
         let password_ok = verify_password(password, &user.password_hash)?;
         if !password_ok {
-            return Err(AppError::new(
-                StatusCode::UNAUTHORIZED,
-                "Invalid credentials",
-            ));
+            return Err(AppError::unauthorized("Invalid credentials"));
         }
 
         let now = chrono::Utc::now().fixed_offset();
@@ -114,27 +109,22 @@ impl AuthProvider for LocalAuthProvider {
         let token = self
             .refresh_token_dao
             .find_active_by_token(refresh_token)
-            .await
-            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))?
-            .ok_or_else(|| AppError::new(StatusCode::UNAUTHORIZED, "Invalid refresh token"))?;
+            .await?
+            .ok_or_else(|| AppError::unauthorized("Invalid refresh token"))?;
 
         if token.expires_at < chrono::Utc::now().fixed_offset() || token.revoked {
-            return Err(AppError::new(
-                StatusCode::UNAUTHORIZED,
-                "Refresh token expired",
-            ));
+            return Err(AppError::unauthorized("Refresh token expired"));
         }
 
         let user = self
             .user_service
             .find_by_id(&token.user_id)
             .await?
-            .ok_or_else(|| AppError::new(StatusCode::UNAUTHORIZED, "Invalid refresh token"))?;
+            .ok_or_else(|| AppError::unauthorized("Invalid refresh token"))?;
 
         self.refresh_token_dao
             .revoke_token(refresh_token)
-            .await
-            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))?;
+            .await?;
 
         self.issue_tokens(&user).await
     }
@@ -142,13 +132,7 @@ impl AuthProvider for LocalAuthProvider {
     async fn verify(&self, access_token: &str) -> Result<Claims, AppError> {
         let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::HS256);
         validation.validate_exp = true;
-        let data = jsonwebtoken::decode::<Claims>(access_token, &self.jwt.dec, &validation)
-            .map_err(|err| {
-                AppError::new(
-                    StatusCode::BAD_REQUEST,
-                    format!("Invalid or expired token: {err}"),
-                )
-            })?;
+        let data = jsonwebtoken::decode::<Claims>(access_token, &self.jwt.dec, &validation)?;
         Ok(data.claims)
     }
 
@@ -157,19 +141,19 @@ impl AuthProvider for LocalAuthProvider {
             .user_service
             .find_by_email(&cfg.admin_email)
             .await
-            .map_err(|err| anyhow::anyhow!(err.message))?
+            .map_err(|err| anyhow::anyhow!(err.to_string()))?
         {
             tracing::info!("admin user already present: {}", existing.email);
             return Ok(());
         }
 
         let hash = hash_password(&cfg.admin_password)
-            .map_err(|e| anyhow::anyhow!("admin seed hash error: {}", e.message))?;
+            .map_err(|e| anyhow::anyhow!("admin seed hash error: {}", e.to_string()))?;
         let user = self
             .user_service
             .create_user(&cfg.admin_email, &hash, Role::Admin.as_str())
             .await
-            .map_err(|err| anyhow::anyhow!(err.message))?;
+            .map_err(|err| anyhow::anyhow!(err.to_string()))?;
         tracing::info!("seeded admin user {}", user.email);
         Ok(())
     }

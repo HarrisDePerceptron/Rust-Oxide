@@ -28,7 +28,7 @@ pub async fn json_error_middleware(req: Request, next: Next) -> Response {
         Ok(bytes) => body_bytes_to_message(status, bytes),
         Err(_) => default_message(status),
     };
-    let app_error = AppError::new(status, message);
+    let app_error = app_error_from_status(status, message);
 
     let mut new_response = JsonApiResponse::from_error(&app_error).into_response();
     copy_headers(&parts.headers, &mut new_response);
@@ -77,6 +77,19 @@ fn default_message(status: StatusCode) -> String {
         .canonical_reason()
         .unwrap_or("Request failed")
         .to_string()
+}
+
+fn app_error_from_status(status: StatusCode, message: String) -> AppError {
+    match status {
+        StatusCode::BAD_REQUEST => AppError::bad_request(message),
+        StatusCode::UNAUTHORIZED => AppError::unauthorized(message),
+        StatusCode::FORBIDDEN => AppError::forbidden(message),
+        StatusCode::NOT_FOUND => AppError::not_found(message),
+        StatusCode::CONFLICT => AppError::conflict(message),
+        StatusCode::UNPROCESSABLE_ENTITY => AppError::bad_request(message),
+        _ if status.is_client_error() => AppError::bad_request(message),
+        _ => AppError::internal(message),
+    }
 }
 
 fn copy_headers(src: &HeaderMap, dest: &mut Response) {

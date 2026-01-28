@@ -36,11 +36,18 @@ impl JsonApiResponse<serde_json::Value> {
     }
 
     pub(crate) fn from_error(err: &AppError) -> Self {
+        let status = status_for(err);
         Self {
-            status: err.status.as_u16(),
-            message: err.message.clone(),
+            status: status.as_u16(),
+            message: err.message().to_string(),
             data: serde_json::Value::Null,
         }
+    }
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        JsonApiResponse::from_error(&self).into_response()
     }
 }
 
@@ -49,5 +56,16 @@ impl<T: Serialize> IntoResponse for JsonApiResponse<T> {
         let status = StatusCode::from_u16(self.status)
             .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         (status, Json(self)).into_response()
+    }
+}
+
+fn status_for(err: &AppError) -> StatusCode {
+    match err {
+        AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
+        AppError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
+        AppError::Forbidden(_) => StatusCode::FORBIDDEN,
+        AppError::NotFound(_) => StatusCode::NOT_FOUND,
+        AppError::Conflict(_) => StatusCode::CONFLICT,
+        AppError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }

@@ -6,7 +6,7 @@ use std::{
 use axum::{
     body::Body,
     extract::{Request, State},
-    http::{Request as HttpRequest, StatusCode, header},
+    http::{Request as HttpRequest, header},
     middleware::Next,
     response::{IntoResponse, Response},
 };
@@ -32,10 +32,7 @@ pub async fn jwt_auth(
         .unwrap_or("");
 
     let token = auth.strip_prefix("Bearer ").ok_or_else(|| {
-        AppError::new(
-            axum::http::StatusCode::UNAUTHORIZED,
-            "Missing/invalid Authorization header",
-        )
+        AppError::unauthorized("Missing/invalid Authorization header")
         .into_response()
     })?;
 
@@ -43,11 +40,7 @@ pub async fn jwt_auth(
     validation.validate_exp = true;
 
     let data = decode::<Claims>(token, &state.jwt.dec, &validation).map_err(|err| {
-        AppError::new(
-            axum::http::StatusCode::BAD_REQUEST,
-            format!("Invalid or expired token: {err}"),
-        )
-        .into_response()
+        AppError::bad_request(format!("Invalid or expired token: {err}")).into_response()
     })?;
 
     req.extensions_mut().insert(data.claims);
@@ -119,11 +112,8 @@ where
                 let token = match auth.strip_prefix("Bearer ") {
                     Some(token) => token,
                     None => {
-                        return Ok(AppError::new(
-                            StatusCode::UNAUTHORIZED,
-                            "Missing/invalid Authorization header",
-                        )
-                        .into_response());
+                        return Ok(AppError::unauthorized("Missing/invalid Authorization header")
+                            .into_response());
                     }
                 };
 
@@ -133,11 +123,10 @@ where
                 let data = match decode::<Claims>(token, &state.jwt.dec, &validation) {
                     Ok(data) => data,
                     Err(err) => {
-                        return Ok(AppError::new(
-                            StatusCode::BAD_REQUEST,
-                            format!("Invalid or expired token: {err}"),
-                        )
-                        .into_response());
+                        return Ok(
+                            AppError::bad_request(format!("Invalid or expired token: {err}"))
+                                .into_response(),
+                        );
                     }
                 };
 
@@ -147,8 +136,7 @@ where
             req.extensions_mut().insert(claims.clone());
 
             if !claims.roles.iter().any(|r| r == &required) {
-                return Ok(AppError::new(StatusCode::FORBIDDEN, "Missing required role")
-                    .into_response());
+                return Ok(AppError::forbidden("Missing required role").into_response());
             }
 
             inner.call(req).await

@@ -1,4 +1,3 @@
-use axum::http::StatusCode;
 use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime};
 use sea_orm::{
     ColumnTrait, EntityTrait, IdenStatic, IntoActiveModel, Iterable, Order, Select,
@@ -104,7 +103,7 @@ pub trait CrudService {
             DaoLayerError::NotFound { .. } => detail,
             DaoLayerError::InvalidPagination { .. } => detail,
         };
-        AppError::new(StatusCode::BAD_REQUEST, message)
+        AppError::bad_request(message)
     }
 
     async fn create<T>(&self, data: T) -> Result<CrudModel<Self::Dao>, AppError>
@@ -256,18 +255,15 @@ pub trait CrudService {
 }
 
 fn invalid_filter() -> AppError {
-    AppError::new(StatusCode::BAD_REQUEST, INVALID_FILTER_MESSAGE)
+    AppError::bad_request(INVALID_FILTER_MESSAGE)
 }
 
 fn invalid_filter_value() -> AppError {
-    AppError::new(StatusCode::BAD_REQUEST, INVALID_FILTER_VALUE_MESSAGE)
+    AppError::bad_request(INVALID_FILTER_VALUE_MESSAGE)
 }
 
 fn invalid_filter_value_with(detail: impl std::fmt::Display) -> AppError {
-    AppError::new(
-        StatusCode::BAD_REQUEST,
-        format!("{INVALID_FILTER_VALUE_MESSAGE}: {detail}"),
-    )
+    AppError::bad_request(format!("{INVALID_FILTER_VALUE_MESSAGE}: {detail}"))
 }
 
 fn parse_bool(raw: &str) -> Result<bool, AppError> {

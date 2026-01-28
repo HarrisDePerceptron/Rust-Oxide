@@ -236,10 +236,7 @@ async fn update_item(
         None => None,
     };
     if description.is_none() && done.is_none() {
-        return Err(AppError::new(
-            StatusCode::BAD_REQUEST,
-            "Description or done required",
-        ));
+        return Err(AppError::bad_request("Description or done required"));
     }
     let service = todo_service_from_state(state.as_ref());
     let item = service
@@ -265,7 +262,7 @@ async fn require_list(state: &AppState, list_id: &Uuid) -> Result<todo_list::Mod
 fn normalize_title(title: &str) -> Result<&str, AppError> {
     let trimmed = title.trim();
     if trimmed.is_empty() {
-        return Err(AppError::new(StatusCode::BAD_REQUEST, "Title required"));
+        return Err(AppError::bad_request("Title required"));
     }
     Ok(trimmed)
 }
@@ -273,10 +270,7 @@ fn normalize_title(title: &str) -> Result<&str, AppError> {
 fn normalize_description(description: &str) -> Result<&str, AppError> {
     let trimmed = description.trim();
     if trimmed.is_empty() {
-        return Err(AppError::new(
-            StatusCode::BAD_REQUEST,
-            "Description required",
-        ));
+        return Err(AppError::bad_request("Description required"));
     }
     Ok(trimmed)
 }
