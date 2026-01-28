@@ -65,7 +65,7 @@ impl AppError {
         }
     }
 
-    pub fn source(&self) -> Option<&(dyn Error + Send + Sync)> {
+    pub fn source(&self) -> Option<&(dyn Error + Send + Sync + 'static)> {
         match self {
             Self::Internal(internal) => internal.source.as_deref(),
             _ => None,
@@ -79,18 +79,21 @@ impl std::fmt::Display for AppError {
     }
 }
 
+impl std::error::Error for AppError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.source()
+            .map(|source| source as &(dyn std::error::Error + 'static))
+    }
+}
+
 impl From<crate::db::dao::DaoLayerError> for AppError {
     fn from(err: crate::db::dao::DaoLayerError) -> Self {
         match err {
-            //crate::db::dao::DaoLayerError::NotFound { .. } => AppError::not_found(err.to_string()),
-            //crate::db::dao::DaoLayerError::InvalidPagination { .. } => {
-            //    AppError::bad_request(err.to_string())
-            //}
             crate::db::dao::DaoLayerError::Db(db_err) => AppError::internal_with_source(
                 "database operation failed. Please check the logs for more details",
                 db_err,
             ),
-            _ => AppError::bad_request(format!("Database error: {}", err)),
+            _ => AppError::bad_request(format!("database operation failed: {}", err)),
         }
     }
 }

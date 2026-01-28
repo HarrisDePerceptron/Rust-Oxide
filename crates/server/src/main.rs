@@ -31,22 +31,10 @@ async fn run() -> anyhow::Result<()> {
     let jwt = rust_oxide::state::JwtKeys::from_secret(cfg.jwt_secret.as_bytes());
     let db = connection::connect(&cfg).await?;
     let daos = DaoContext::new(&db);
-    let user_service = user_service::UserService::new(daos.user());
-    let local_provider = LocalAuthProvider::new(
-        user_service,
-        daos.refresh_token(),
-        jwt.clone(),
-    );
-    let mut providers = AuthProviders::new(cfg.auth_provider)
-        .with_provider(std::sync::Arc::new(local_provider))
-        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
-    providers
-        .set_active(cfg.auth_provider)
-        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
-    let state = AppState::new(cfg, db, jwt, providers);
 
-    let auth_service = auth_service::AuthService::new(&state.auth_providers);
-    auth_service.seed_admin(&state.config).await?;
+    let providers = init_auth(&cfg, &daos, &jwt).await?;
+
+    let state = AppState::new(cfg, db, jwt, providers);
 
     let app = Router::new()
         .merge(router(Arc::clone(&state)))
@@ -61,4 +49,21 @@ async fn run() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+async fn init_auth(
+    cfg: &AppConfig,
+    daos: &DaoContext,
+    jwt: &rust_oxide::state::JwtKeys,
+) -> anyhow::Result<AuthProviders> {
+    let user_service = user_service::UserService::new(daos.user());
+    let local_provider = LocalAuthProvider::new(user_service, daos.refresh_token(), jwt.clone());
+    let mut providers =
+        AuthProviders::new(cfg.auth_provider).with_provider(std::sync::Arc::new(local_provider))?;
+    providers.set_active(cfg.auth_provider)?;
+
+    let auth_service = auth_service::AuthService::new(&providers);
+    auth_service.seed_admin(cfg).await?;
+
+    Ok(providers)
 }
