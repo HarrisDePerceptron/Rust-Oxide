@@ -24,4 +24,35 @@ impl UserService {
             Err(err) => Err(AppError::new(StatusCode::BAD_REQUEST, err.to_string())),
         }
     }
+
+    pub async fn find_by_email(&self, email: &str) -> Result<Option<user::Model>, AppError> {
+        match self.user_dao.find_by_email(email).await {
+            Ok(model) => Ok(model),
+            Err(DaoLayerError::NotFound { .. }) => Ok(None),
+            Err(err) => Err(AppError::new(StatusCode::BAD_REQUEST, err.to_string())),
+        }
+    }
+
+    pub async fn create_user(
+        &self,
+        email: &str,
+        password_hash: &str,
+        role: &str,
+    ) -> Result<user::Model, AppError> {
+        self.user_dao
+            .create_user(email, password_hash, role)
+            .await
+            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))
+    }
+
+    pub async fn set_last_login(
+        &self,
+        user_id: &Uuid,
+        last_login: &chrono::DateTime<chrono::FixedOffset>,
+    ) -> Result<(), AppError> {
+        self.user_dao
+            .set_last_login(user_id, last_login)
+            .await
+            .map_err(|err| AppError::new(StatusCode::BAD_REQUEST, err.to_string()))
+    }
 }

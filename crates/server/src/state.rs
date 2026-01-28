@@ -3,13 +3,14 @@ use std::sync::Arc;
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use sea_orm::DatabaseConnection;
 
-use crate::config::AppConfig;
+use crate::{auth::providers::AuthProviders, config::AppConfig};
 
 #[derive(Clone)]
 pub struct AppState {
     pub config: AppConfig,
     pub jwt: JwtKeys,
     pub db: DatabaseConnection,
+    pub auth_providers: AuthProviders,
 }
 
 #[derive(Clone)]
@@ -28,11 +29,17 @@ impl JwtKeys {
 }
 
 impl AppState {
-    pub fn new(config: AppConfig, db: DatabaseConnection) -> Arc<Self> {
+    pub fn new(
+        config: AppConfig,
+        db: DatabaseConnection,
+        jwt: JwtKeys,
+        auth_providers: AuthProviders,
+    ) -> Arc<Self> {
         Arc::new(Self {
-            jwt: JwtKeys::from_secret(config.jwt_secret.as_bytes()),
             db,
             config,
+            jwt,
+            auth_providers,
         })
     }
 }

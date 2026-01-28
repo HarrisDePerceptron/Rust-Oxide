@@ -4,8 +4,16 @@ use axum::{Router, middleware};
 use tower_http::trace::TraceLayer;
 
 use rust_oxide::{
-    config::AppConfig, db::connection, db::dao::DaoContext, logging::init_tracing,
-    middleware::json_error_middleware, routes::router, services::auth_service, state::AppState,
+    auth::providers::{AuthProviders, LocalAuthProvider},
+    config::AppConfig,
+    db::connection,
+    db::dao::DaoContext,
+    logging::init_tracing,
+    middleware::json_error_middleware,
+    routes::router,
+    services::auth_service,
+    services::user_service,
+    state::AppState,
 };
 
 #[tokio::main]
@@ -20,12 +28,23 @@ async fn run() -> anyhow::Result<()> {
     let cfg = AppConfig::from_env().expect("failed to load config");
     init_tracing(&cfg.log_level);
 
+    let jwt = rust_oxide::state::JwtKeys::from_secret(cfg.jwt_secret.as_bytes());
     let db = connection::connect(&cfg).await?;
-    let state = AppState::new(cfg, db);
+    let daos = DaoContext::new(&db);
+    let user_service = user_service::UserService::new(daos.user());
+    let local_provider = LocalAuthProvider::new(
+        user_service,
+        daos.refresh_token(),
+        jwt.clone(),
+    );
+    let providers = AuthProviders::new(
+        cfg.auth_provider,
+        vec![std::sync::Arc::new(local_provider)],
+    )
+    .map_err(|err| anyhow::anyhow!(err.message))?;
+    let state = AppState::new(cfg, db, jwt, providers);
 
-    let daos = DaoContext::new(&state.db);
-    let auth_service =
-        auth_service::AuthService::new(daos.user(), daos.refresh_token(), state.jwt.clone());
+    let auth_service = auth_service::AuthService::new(&state.auth_providers);
     auth_service.seed_admin(&state.config).await?;
 
     let app = Router::new()

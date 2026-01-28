@@ -4,7 +4,7 @@ use axum::{Json, Router, extract::State, routing::post};
 use serde::Deserialize;
 
 use crate::{
-    db::dao::DaoContext,
+    auth::TokenBundle,
     response::{ApiResult, JsonApiResponse},
     services::auth_service,
     state::AppState,
@@ -47,7 +47,7 @@ async fn register(
     State(state): State<Arc<AppState>>,
     Json(body): Json<RegisterRequest>,
 ) -> ApiResult<TokenResponse> {
-    let service = auth_service_from_state(state.as_ref());
+    let service = auth_service::AuthService::new(&state.auth_providers);
     let tokens = service.register(&body.email, &body.password).await?;
     JsonApiResponse::ok(tokens.into())
 }
@@ -56,7 +56,7 @@ async fn login(
     State(state): State<Arc<AppState>>,
     Json(body): Json<LoginRequest>,
 ) -> ApiResult<TokenResponse> {
-    let service = auth_service_from_state(state.as_ref());
+    let service = auth_service::AuthService::new(&state.auth_providers);
     let tokens = service.login(&body.email, &body.password).await?;
     JsonApiResponse::ok(tokens.into())
 }
@@ -65,13 +65,13 @@ async fn refresh(
     State(state): State<Arc<AppState>>,
     Json(body): Json<RefreshRequest>,
 ) -> ApiResult<TokenResponse> {
-    let service = auth_service_from_state(state.as_ref());
+    let service = auth_service::AuthService::new(&state.auth_providers);
     let tokens = service.refresh(&body.refresh_token).await?;
     JsonApiResponse::ok(tokens.into())
 }
 
-impl From<auth_service::TokenBundle> for TokenResponse {
-    fn from(bundle: auth_service::TokenBundle) -> Self {
+impl From<TokenBundle> for TokenResponse {
+    fn from(bundle: TokenBundle) -> Self {
         Self {
             access_token: bundle.access_token,
             refresh_token: bundle.refresh_token,
@@ -79,9 +79,4 @@ impl From<auth_service::TokenBundle> for TokenResponse {
             expires_in: bundle.expires_in,
         }
     }
-}
-
-fn auth_service_from_state(state: &AppState) -> auth_service::AuthService {
-    let daos = DaoContext::new(&state.db);
-    auth_service::AuthService::new(daos.user(), daos.refresh_token(), state.jwt.clone())
 }

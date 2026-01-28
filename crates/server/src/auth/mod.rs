@@ -1,5 +1,6 @@
 pub mod jwt;
 pub mod password;
+pub mod providers;
 
 use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -56,4 +57,12 @@ pub struct Claims {
     pub exp: usize,  // expiry (unix)
     pub iat: usize,  // issued at
     pub roles: Vec<Role>,
+}
+
+#[derive(Debug)]
+pub struct TokenBundle {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub token_type: &'static str,
+    pub expires_in: usize,
 }

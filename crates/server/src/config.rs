@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
 
+use crate::auth::providers::AuthProviderId;
+
 #[derive(Debug, Clone)]
 pub struct AppConfig {
     pub host: String,
@@ -11,6 +13,7 @@ pub struct AppConfig {
     pub db_min_idle: u32,
     pub admin_email: String,
     pub admin_password: String,
+    pub auth_provider: AuthProviderId,
 }
 
 impl AppConfig {
@@ -71,6 +74,12 @@ impl AppConfig {
             }
         };
 
+        let auth_provider = std::env::var("AUTH_PROVIDER")
+            .unwrap_or_else(|_| "local".to_string())
+            .parse::<AuthProviderId>()
+            .map_err(|err| anyhow::anyhow!(err))
+            .context("AUTH_PROVIDER must be a supported provider")?;
+
         Ok(Self {
             host,
             port,
@@ -81,6 +90,7 @@ impl AppConfig {
             db_min_idle,
             admin_email,
             admin_password,
+            auth_provider,
         })
     }
 }
