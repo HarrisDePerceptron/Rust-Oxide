@@ -3,10 +3,7 @@ use std::any::Any;
 use axum::{http::StatusCode, response::{IntoResponse, Response}};
 use tower_http::catch_panic::CatchPanicLayer;
 
-use crate::{
-    error::AppError,
-    response::{JsonApiResponse, log_app_error},
-};
+use crate::response::JsonApiResponse;
 
 pub fn catch_panic_layer(
 ) -> CatchPanicLayer<fn(Box<dyn Any + Send + 'static>) -> Response> {
@@ -22,12 +19,6 @@ fn panic_to_json(panic: Box<dyn Any + Send + 'static>) -> Response {
         "unknown panic"
     };
 
-    let app_error = AppError::internal_with_source(
-        "internal server error",
-        PanicSource::new(details),
-    );
-    log_app_error(&app_error, StatusCode::INTERNAL_SERVER_ERROR);
-
     let client_message = if cfg!(debug_assertions) {
         format!("internal server error: {}", details)
     } else {
@@ -41,24 +32,3 @@ fn panic_to_json(panic: Box<dyn Any + Send + 'static>) -> Response {
     }
     .into_response()
 }
-
-#[derive(Debug)]
-struct PanicSource {
-    message: String,
-}
-
-impl PanicSource {
-    fn new(message: &str) -> Self {
-        Self {
-            message: message.to_string(),
-        }
-    }
-}
-
-impl std::fmt::Display for PanicSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message)
-    }
-}
-
-impl std::error::Error for PanicSource {}
