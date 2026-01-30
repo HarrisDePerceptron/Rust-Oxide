@@ -105,7 +105,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/todo/{list_id}/items/{item_id}",
             patch(update_item).delete(delete_item),
-        );
+        )
+        .route("/todo/panic", get(failing_handler));
 
     crud_router
         .router()
@@ -113,6 +114,11 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/todo-crud/{id}/items/count", item_count_route)
         .merge(todo_routes)
         .with_state(state)
+}
+
+async fn failing_handler() -> ApiResult<()> {
+    Err::<&str, _>("this should fail").expect("inside the  failign handler");
+    JsonApiResponse::ok(())
 }
 
 #[derive(Debug, serde::Serialize)]

@@ -9,7 +9,7 @@ use rust_oxide::{
     db::connection,
     db::dao::DaoContext,
     logging::init_tracing,
-    middleware::json_error_middleware,
+    middleware::{catch_panic_layer, json_error_middleware},
     routes::router,
     services::auth_service,
     services::user_service,
@@ -39,6 +39,7 @@ async fn run() -> anyhow::Result<()> {
     let app = Router::new()
         .merge(router(Arc::clone(&state)))
         .layer(middleware::from_fn(json_error_middleware))
+        .layer(catch_panic_layer())
         .layer(TraceLayer::new_for_http());
 
     let addr: SocketAddr = format!("{}:{}", state.config.host.as_str(), state.config.port)
