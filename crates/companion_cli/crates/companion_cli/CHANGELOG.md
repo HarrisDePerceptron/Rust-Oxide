@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/HarrisDePerceptron/Rust-Oxide/compare/v0.3.4...v0.4.0) (2026-01-30)
+
+
+### Features
+
+* updated curl for auth headers ([9962f32](https://github.com/HarrisDePerceptron/Rust-Oxide/commit/9962f32115f79d8d4d1a4f723f4b88444750ed39))
+
 ## [0.3.4](https://github.com/HarrisDePerceptron/Rust-Oxide/compare/v0.3.3...v0.3.4) (2026-01-25)
 
 
