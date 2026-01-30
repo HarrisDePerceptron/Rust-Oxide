@@ -1,10 +1,15 @@
 use std::backtrace::Backtrace;
 
-use tracing_subscriber::{EnvFilter, fmt};
+use tracing_error::ErrorLayer;
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 pub fn init_tracing(log_level: &str) {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level));
-    fmt().with_env_filter(filter).with_target(false).init();
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt::layer().with_target(false))
+        .with(ErrorLayer::default())
+        .init();
     set_panic_hook();
 }
 

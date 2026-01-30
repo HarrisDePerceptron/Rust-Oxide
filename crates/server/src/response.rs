@@ -75,17 +75,41 @@ fn status_for(err: &AppError) -> StatusCode {
 pub(crate) fn log_app_error(err: &AppError, status: StatusCode) {
     let kind = error_kind(err);
     let message = err.message();
+    let span_trace = err.span_trace();
 
     if status.is_server_error() {
         if let Some(source) = err.source() {
-            tracing::error!(
-                status = status.as_u16(),
-                error_kind = %kind,
-                message = %message,
-                error = %source
-            );
+            if let Some(span_trace) = span_trace {
+                tracing::error!(
+                    status = status.as_u16(),
+                    error_kind = %kind,
+                    message = %message,
+                    error = ?source,
+                    span_trace = ?span_trace
+                );
+            } else {
+                tracing::error!(
+                    status = status.as_u16(),
+                    error_kind = %kind,
+                    message = %message,
+                    error = ?source
+                );
+            }
         } else {
-            tracing::error!(status = status.as_u16(), error_kind = %kind, message = %message);
+            if let Some(span_trace) = span_trace {
+                tracing::error!(
+                    status = status.as_u16(),
+                    error_kind = %kind,
+                    message = %message,
+                    span_trace = ?span_trace
+                );
+            } else {
+                tracing::error!(
+                    status = status.as_u16(),
+                    error_kind = %kind,
+                    message = %message
+                );
+            }
         }
     } else if matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
         tracing::debug!(status = status.as_u16(), error_kind = %kind, message = %message);
