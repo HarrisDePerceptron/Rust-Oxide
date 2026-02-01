@@ -85,10 +85,7 @@ impl TodoService {
     }
 
     pub async fn delete_item(&self, list_id: &Uuid, item_id: &Uuid) -> Result<(), AppError> {
-        let deleted = self
-            .todo_dao
-            .delete_item(list_id, item_id)
-            .await?;
+        let deleted = self.todo_dao.delete_item(list_id, item_id).await?;
         if !deleted {
             return Err(AppError::not_found("Todo item not found"));
         }

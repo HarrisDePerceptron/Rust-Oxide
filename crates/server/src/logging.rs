@@ -7,7 +7,7 @@ pub fn init_tracing(log_level: &str) {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level));
     tracing_subscriber::registry()
         .with(filter)
-        .with(fmt::layer().with_target(false))
+        .with(fmt::layer().with_target(true))
         .with(ErrorLayer::default())
         .init();
     set_panic_hook();

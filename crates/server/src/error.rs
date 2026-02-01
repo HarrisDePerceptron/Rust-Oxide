@@ -98,6 +98,23 @@ impl std::error::Error for AppError {
     }
 }
 
+impl From<anyhow::Error> for AppError {
+    fn from(err: anyhow::Error) -> Self {
+        AppError::internal_with_source("internal server error", AnyhowSource(err))
+    }
+}
+
+#[derive(Debug)]
+struct AnyhowSource(anyhow::Error);
+
+impl std::fmt::Display for AnyhowSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for AnyhowSource {}
+
 impl From<crate::db::dao::DaoLayerError> for AppError {
     fn from(err: crate::db::dao::DaoLayerError) -> Self {
         match err {

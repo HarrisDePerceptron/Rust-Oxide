@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 axum = { version="0.8.7", features=["json", "ws"] }
-anyhow = "1.0.100"
+anyhow = { version = "1.0.100", features = ["std"] }
 argon2 = { version = "0.5", features = ["alloc"] }
 askama = "0.15.1"
 base_entity_derive = { path = "../base_entity_derive" }

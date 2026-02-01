@@ -1,6 +1,6 @@
 use sea_orm::DbErr;
-use uuid::Uuid;
 use std::fmt;
+use uuid::Uuid;
 
 #[derive(Debug)]
 pub enum DaoLayerError {
@@ -18,10 +18,9 @@ impl fmt::Display for DaoLayerError {
             DaoLayerError::NotFound { entity, id } => {
                 write!(f, "{entity} not found (id={id})")
             }
-            DaoLayerError::InvalidPagination { page, page_size } => write!(
-                f,
-                "Invalid pagination: page={page} page_size={page_size}"
-            ),
+            DaoLayerError::InvalidPagination { page, page_size } => {
+                write!(f, "Invalid pagination: page={page} page_size={page_size}")
+            }
         }
     }
 }
