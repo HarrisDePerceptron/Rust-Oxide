@@ -18,7 +18,7 @@ use rust_oxide::{
     },
     config::AppConfig,
     db::dao::DaoContext,
-    routes::router,
+    routes::{router, API_PREFIX},
     services::user_service,
     state::{AppState, JwtKeys},
 };
@@ -33,6 +33,10 @@ fn app() -> axum::Router {
     cfg.jwt_secret = String::from_utf8_lossy(secret).into_owned();
     let state = build_state(cfg, db);
     router(state)
+}
+
+fn api_path(path: &str) -> String {
+    format!("{API_PREFIX}{path}")
 }
 
 async fn app_with_db() -> std::sync::Arc<AppState> {
@@ -79,7 +83,7 @@ async fn public_route_works() {
     let res = app
         .oneshot(
             Request::builder()
-                .uri("/public")
+                .uri(api_path("/public"))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -112,7 +116,7 @@ async fn login_returns_token() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/login")
+                .uri(api_path("/login"))
                 .header("content-type", "application/json")
                 .body(Body::from(payload.to_string()))
                 .unwrap(),
@@ -132,7 +136,7 @@ async fn me_without_token_is_rejected() {
     let app = app();
 
     let res = app
-        .oneshot(Request::builder().uri("/me").body(Body::empty()).unwrap())
+        .oneshot(Request::builder().uri(api_path("/me")).body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -154,7 +158,7 @@ async fn me_with_token_succeeds() {
     let res = app
         .oneshot(
             Request::builder()
-                .uri("/me")
+                .uri(api_path("/me"))
                 .header("authorization", format!("Bearer {}", token))
                 .body(Body::empty())
                 .unwrap(),
@@ -180,7 +184,7 @@ async fn admin_requires_role() {
     let res = app
         .oneshot(
             Request::builder()
-                .uri("/admin/stats")
+                .uri(api_path("/admin/stats"))
                 .header("authorization", format!("Bearer {}", token))
                 .body(Body::empty())
                 .unwrap(),

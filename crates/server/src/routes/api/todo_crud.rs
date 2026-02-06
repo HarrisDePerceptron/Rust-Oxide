@@ -1,14 +1,11 @@
 use std::sync::Arc;
 
-use askama::Template;
 use axum::{
     Json, Router,
     extract::{Path, State},
     http::StatusCode,
-    response::Html,
     routing::{get, patch, post},
 };
-use chrono::Local;
 use sea_orm::prelude::DateTimeWithTimeZone;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -74,15 +71,6 @@ pub struct TodoListDetailResponse {
     pub items: Vec<TodoItemResponse>,
 }
 
-#[derive(Template)]
-#[template(path = "todo.html")]
-struct TodoUiTemplate {
-    now: String,
-    project_name: String,
-}
-
-type HtmlError = (StatusCode, Html<String>);
-
 pub fn router(state: Arc<AppState>) -> Router {
     let daos = DaoContext::new(&state.db);
     let service = todo_service::TodoService::new(daos.todo());
@@ -95,7 +83,6 @@ pub fn router(state: Arc<AppState>) -> Router {
     let item_count_route = get(item_count_handler);
 
     let todo_routes = Router::new()
-        .route("/todo/ui", get(todo_ui))
         .route("/todo", post(create_list).get(list_lists))
         .route(
             "/todo/{list_id}",
@@ -145,18 +132,6 @@ async fn item_count_handler(
     let service = todo_service::TodoService::new(daos.todo());
     let count = service.count_items_by_list(&id).await?;
     JsonApiResponse::ok(CountResponse { count })
-}
-
-async fn todo_ui() -> Result<Html<String>, HtmlError> {
-    let now = Local::now().to_rfc3339();
-    let project_name = crate::routes::public::project_name();
-    let rendered = TodoUiTemplate { now, project_name }.render().map_err(|_| {
-        html_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "failed to render todo ui",
-        )
-    })?;
-    Ok(Html(rendered))
 }
 
 async fn create_list(
@@ -308,8 +283,4 @@ impl From<todo_item::Model> for TodoItemResponse {
 fn todo_service_from_state(state: &AppState) -> todo_service::TodoService {
     let daos = DaoContext::new(&state.db);
     todo_service::TodoService::new(daos.todo())
-}
-
-fn html_error(status: StatusCode, message: &'static str) -> HtmlError {
-    (status, Html(message.to_string()))
 }

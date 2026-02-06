@@ -32,7 +32,7 @@ impl TodoService {
     }
 
     pub async fn count_lists(&self) -> Result<u64, AppError> {
-        Ok(self.todo_dao.count_lists().await?)
+        Ok(self.todo_dao.count_lists().await.unwrap())
     }
 
     pub async fn require_list(&self, list_id: &Uuid) -> Result<todo_list::Model, AppError> {

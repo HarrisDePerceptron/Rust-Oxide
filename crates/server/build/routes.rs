@@ -97,6 +97,7 @@ impl ExtractorKind {
 }
 
 const CURL_BASE_URL_PLACEHOLDER: &str = "{BASE_URL}";
+const API_PREFIX: &str = "/api/v1";
 
 impl TypeDoc {
     fn render_with<F>(&self, expand: F) -> String
@@ -124,6 +125,7 @@ struct RouteVisitor<'a> {
     source: String,
     handlers: &'a HashMap<String, HandlerInfo>,
     route_bindings: Option<&'a HashMap<String, Vec<RouteHandler>>>,
+    api_prefix: Option<&'a str>,
     routes: Vec<RouteEntry>,
 }
 
@@ -133,6 +135,10 @@ impl<'a, 'ast> Visit<'ast> for RouteVisitor<'a> {
         if method_name == "route" {
             let path = node.args.first().and_then(extract_string_literal);
             if let Some(path) = path {
+                let mut path = path;
+                if let Some(prefix) = self.api_prefix {
+                    path = apply_api_prefix(&path, prefix);
+                }
                 let mut handlers = node
                     .args
                     .iter()
@@ -212,6 +218,10 @@ impl<'a, 'ast> Visit<'ast> for RouteVisitor<'a> {
             }
         } else if method_name == "route_service" {
             if let Some(path) = node.args.first().and_then(extract_string_literal) {
+                let mut path = path;
+                if let Some(prefix) = self.api_prefix {
+                    path = apply_api_prefix(&path, prefix);
+                }
                 let curl = build_curl("SERVICE", &path, "N/A", false);
                 self.routes.push(RouteEntry {
                     method: "SERVICE".to_string(),
@@ -256,6 +266,7 @@ struct CrudRouterCall {
     service: Option<String>,
 }
 
+#[derive(Debug)]
 struct CrudRouterVisitor<'a> {
     consts: &'a HashMap<String, String>,
     locals: &'a HashMap<String, String>,
@@ -273,10 +284,7 @@ impl<'a, 'ast> Visit<'ast> for CrudRouterVisitor<'a> {
                         .args
                         .first()
                         .and_then(|expr| resolve_service_type(expr, self.locals));
-                    self.calls.push(CrudRouterCall {
-                        base_path: base,
-                        service,
-                    });
+                    self.calls.push(CrudRouterCall { base_path: base, service });
                 } else {
                     self.unresolved += 1;
                 }
@@ -1190,6 +1198,11 @@ pub(crate) fn parse_routes_file(
         .unwrap_or(path)
         .display()
         .to_string();
+    let api_prefix = if is_api_route_source(path, manifest_dir) {
+        Some(API_PREFIX)
+    } else {
+        None
+    };
     let mut routes = Vec::new();
     for item in &parsed.items {
         match item {
@@ -1199,6 +1212,7 @@ pub(crate) fn parse_routes_file(
                     source: source.clone(),
                     handlers: &handlers,
                     route_bindings: Some(&route_bindings),
+                    api_prefix,
                     routes: Vec::new(),
                 };
                 visitor.visit_block(&item_fn.block);
@@ -1214,6 +1228,7 @@ pub(crate) fn parse_routes_file(
                         source: source.clone(),
                         handlers: &handlers,
                         route_bindings: Some(&route_bindings),
+                        api_prefix,
                         routes: Vec::new(),
                     };
                     visitor.visit_block(&item_fn.block);
@@ -1349,6 +1364,7 @@ pub(crate) fn parse_crud_router_routes(
     let mut unresolved = 0;
     let mut calls = Vec::new();
 
+    let is_api = is_api_route_source(path, manifest_dir);
     for item in &parsed.items {
         let Item::Fn(item_fn) = item else {
             continue;
@@ -1375,9 +1391,14 @@ pub(crate) fn parse_crud_router_routes(
     let mut seen = HashSet::new();
     let mut routes = Vec::new();
     for call in calls {
-        if seen.insert(call.base_path.clone()) {
+        let base_path = if is_api {
+            apply_api_prefix(&call.base_path, API_PREFIX)
+        } else {
+            call.base_path.clone()
+        };
+        if seen.insert(base_path.clone()) {
             routes.extend(crud_route_entries(
-                &call.base_path,
+                &base_path,
                 &source,
                 call.service.as_deref(),
                 registry,
@@ -1386,6 +1407,22 @@ pub(crate) fn parse_crud_router_routes(
         }
     }
     routes
+}
+
+fn is_api_route_source(path: &Path, manifest_dir: &Path) -> bool {
+    let rel = path.strip_prefix(manifest_dir).unwrap_or(path);
+    let rel = rel.to_string_lossy();
+    rel.contains("src/routes/api/") || rel.contains("src\\routes\\api\\")
+}
+
+fn apply_api_prefix(path: &str, prefix: &str) -> String {
+    if path.starts_with(prefix) {
+        path.to_string()
+    } else if path.starts_with('/') {
+        format!("{prefix}{path}")
+    } else {
+        format!("{prefix}/{path}")
+    }
 }
 
 pub(crate) fn collect_route_files(routes_dir: &Path) -> Vec<PathBuf> {

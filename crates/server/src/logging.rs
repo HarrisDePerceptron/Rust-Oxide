@@ -1,6 +1,5 @@
 use std::backtrace::Backtrace;
 
-use tracing_error::ErrorLayer;
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 pub fn init_tracing(log_level: &str) {
@@ -8,8 +7,8 @@ pub fn init_tracing(log_level: &str) {
     tracing_subscriber::registry()
         .with(filter)
         .with(fmt::layer().with_target(true))
-        .with(ErrorLayer::default())
         .init();
+
     set_panic_hook();
 }
 

@@ -419,8 +419,10 @@
             }, 1800);
           };
 
+          const API_PREFIX = "/api/v1";
+
           const apiRequest = async (method, path, body) => {
-            const url = `${window.location.origin}${path}`;
+            const url = `${window.location.origin}${API_PREFIX}${path}`;
             try {
               const response = await fetch(url, {
                 method,

@@ -17,7 +17,7 @@ use rust_oxide::{
     },
     config::AppConfig,
     db::dao::DaoContext,
-    routes::router,
+    routes::{router, API_PREFIX},
     services::user_service,
     state::AppState,
     state::JwtKeys,
@@ -95,6 +95,10 @@ fn auth_header(state: &std::sync::Arc<AppState>) -> String {
     format!("Bearer {token}")
 }
 
+fn api_path(path: &str) -> String {
+    format!("{API_PREFIX}{path}")
+}
+
 async fn create_todo_list(
     state: &std::sync::Arc<AppState>,
     title: &str,
@@ -103,7 +107,7 @@ async fn create_todo_list(
         state,
         Request::builder()
             .method("POST")
-            .uri("/todo")
+            .uri(api_path("/todo"))
             .header("content-type", "application/json")
             .body(Body::from(json!({ "title": title }).to_string()))
             .unwrap(),
@@ -120,7 +124,7 @@ async fn create_todo_item(
         state,
         Request::builder()
             .method("POST")
-            .uri(format!("/todo/{}/items", list_id))
+            .uri(api_path(&format!("/todo/{}/items", list_id)))
             .header("content-type", "application/json")
             .body(Body::from(
                 json!({ "description": description }).to_string(),
@@ -139,7 +143,7 @@ async fn create_todo_crud_list(
         state,
         Request::builder()
             .method("POST")
-            .uri("/todo-crud")
+            .uri(api_path("/todo-crud"))
             .header("authorization", auth)
             .header("content-type", "application/json")
             .body(Body::from(json!({ "title": title }).to_string()))
@@ -174,7 +178,7 @@ async fn todo_list_lists() {
 
     let (status, lists) = json_response(
         &state,
-        Request::builder().uri("/todo").body(Body::empty()).unwrap(),
+        Request::builder().uri(api_path("/todo")).body(Body::empty()).unwrap(),
     )
     .await;
 
@@ -200,7 +204,7 @@ async fn todo_get_list() {
     let (status, response) = json_response(
         &state,
         Request::builder()
-            .uri(format!("/todo/{}", list_id))
+            .uri(api_path(&format!("/todo/{}", list_id)))
             .body(Body::empty())
             .unwrap(),
     )
@@ -228,7 +232,7 @@ async fn todo_update_list() {
         &state,
         Request::builder()
             .method("PATCH")
-            .uri(format!("/todo/{}", list_id))
+            .uri(api_path(&format!("/todo/{}", list_id)))
             .header("content-type", "application/json")
             .body(Body::from(
                 json!({ "title": new_title }).to_string(),
@@ -257,7 +261,7 @@ async fn todo_delete_list() {
         &state,
         Request::builder()
             .method("DELETE")
-            .uri(format!("/todo/{}", list_id))
+            .uri(api_path(&format!("/todo/{}", list_id)))
             .body(Body::empty())
             .unwrap(),
     )
@@ -302,7 +306,7 @@ async fn todo_list_items() {
     let (status, items) = json_response(
         &state,
         Request::builder()
-            .uri(format!("/todo/{}/items", list_id))
+            .uri(api_path(&format!("/todo/{}/items", list_id)))
             .body(Body::empty())
             .unwrap(),
     )
@@ -335,7 +339,7 @@ async fn todo_update_item() {
         &state,
         Request::builder()
             .method("PATCH")
-            .uri(format!("/todo/{}/items/{}", list_id, item_id))
+            .uri(api_path(&format!("/todo/{}/items/{}", list_id, item_id)))
             .header("content-type", "application/json")
             .body(Body::from(json!({ "done": true }).to_string()))
             .unwrap(),
@@ -365,7 +369,7 @@ async fn todo_delete_item() {
         &state,
         Request::builder()
             .method("DELETE")
-            .uri(format!("/todo/{}/items/{}", list_id, item_id))
+            .uri(api_path(&format!("/todo/{}/items/{}", list_id, item_id)))
             .body(Body::empty())
             .unwrap(),
     )
@@ -403,7 +407,7 @@ async fn todo_crud_list_lists() {
     let (status, response) = json_response(
         &state,
         Request::builder()
-            .uri("/todo-crud")
+            .uri(api_path("/todo-crud"))
             .header("authorization", auth)
             .body(Body::empty())
             .unwrap(),
@@ -433,7 +437,7 @@ async fn todo_crud_get_list() {
     let (status, response) = json_response(
         &state,
         Request::builder()
-            .uri(format!("/todo-crud/{}", list_id))
+            .uri(api_path(&format!("/todo-crud/{}", list_id)))
             .header("authorization", auth)
             .body(Body::empty())
             .unwrap(),
@@ -462,7 +466,7 @@ async fn todo_crud_update_list() {
         &state,
         Request::builder()
             .method("PATCH")
-            .uri(format!("/todo-crud/{}", list_id))
+            .uri(api_path(&format!("/todo-crud/{}", list_id)))
             .header("authorization", auth)
             .header("content-type", "application/json")
             .body(Body::from(
@@ -493,7 +497,7 @@ async fn todo_crud_delete_list() {
         &state,
         Request::builder()
             .method("DELETE")
-            .uri(format!("/todo-crud/{}", list_id))
+            .uri(api_path(&format!("/todo-crud/{}", list_id)))
             .header("authorization", auth)
             .body(Body::empty())
             .unwrap(),
@@ -512,7 +516,7 @@ async fn todo_crud_count_lists() {
     let (status, count_before) = json_response(
         &state,
         Request::builder()
-            .uri("/todo-crud/count")
+            .uri(api_path("/todo-crud/count"))
             .header("authorization", auth.clone())
             .body(Body::empty())
             .unwrap(),
@@ -528,7 +532,7 @@ async fn todo_crud_count_lists() {
     let (status, count_after) = json_response(
         &state,
         Request::builder()
-            .uri("/todo-crud/count")
+            .uri(api_path("/todo-crud/count"))
             .header("authorization", auth)
             .body(Body::empty())
             .unwrap(),
@@ -554,7 +558,7 @@ async fn todo_crud_count_items() {
     let (status, response) = json_response(
         &state,
         Request::builder()
-            .uri(format!("/todo-crud/{}/items/count", list_id))
+            .uri(api_path(&format!("/todo-crud/{}/items/count", list_id)))
             .header("authorization", auth)
             .body(Body::empty())
             .unwrap(),
@@ -574,7 +578,7 @@ async fn todo_create_list_requires_title() {
         &state,
         Request::builder()
             .method("POST")
-            .uri("/todo")
+            .uri(api_path("/todo"))
             .header("content-type", "application/json")
             .body(Body::from(json!({ "title": "   " }).to_string()))
             .unwrap(),
@@ -599,7 +603,7 @@ async fn todo_update_list_requires_title() {
         &state,
         Request::builder()
             .method("PATCH")
-            .uri(format!("/todo/{}", list_id))
+            .uri(api_path(&format!("/todo/{}", list_id)))
             .header("content-type", "application/json")
             .body(Body::from(json!({ "title": " " }).to_string()))
             .unwrap(),
@@ -624,7 +628,7 @@ async fn todo_create_item_requires_description() {
         &state,
         Request::builder()
             .method("POST")
-            .uri(format!("/todo/{}/items", list_id))
+            .uri(api_path(&format!("/todo/{}/items", list_id)))
             .header("content-type", "application/json")
             .body(Body::from(
                 json!({ "description": "   " }).to_string(),
@@ -655,7 +659,7 @@ async fn todo_update_item_requires_payload() {
         &state,
         Request::builder()
             .method("PATCH")
-            .uri(format!("/todo/{}/items/{}", list_id, item_id))
+            .uri(api_path(&format!("/todo/{}/items/{}", list_id, item_id)))
             .header("content-type", "application/json")
             .body(Body::from(json!({}).to_string()))
             .unwrap(),
@@ -678,7 +682,7 @@ async fn todo_get_list_not_found() {
     let (status, response) = json_response(
         &state,
         Request::builder()
-            .uri(format!("/todo/{}", missing_id))
+            .uri(api_path(&format!("/todo/{}", missing_id)))
             .body(Body::empty())
             .unwrap(),
     )
@@ -703,7 +707,7 @@ async fn todo_update_item_not_found() {
         &state,
         Request::builder()
             .method("PATCH")
-            .uri(format!("/todo/{}/items/{}", list_id, missing_item))
+            .uri(api_path(&format!("/todo/{}/items/{}", list_id, missing_item)))
             .header("content-type", "application/json")
             .body(Body::from(json!({ "done": true }).to_string()))
             .unwrap(),
@@ -729,7 +733,7 @@ async fn todo_delete_item_not_found() {
         &state,
         Request::builder()
             .method("DELETE")
-            .uri(format!("/todo/{}/items/{}", list_id, missing_item))
+            .uri(api_path(&format!("/todo/{}/items/{}", list_id, missing_item)))
             .body(Body::empty())
             .unwrap(),
     )

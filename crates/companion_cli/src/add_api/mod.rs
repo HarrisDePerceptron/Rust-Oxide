@@ -131,7 +131,7 @@ pub fn run(args: AddApiArgs) -> Result<()> {
     let entity_path = src_root.join("db/entities").join(format!("{entity}.rs"));
     let dao_path = src_root.join("db/dao").join(format!("{entity}_dao.rs"));
     let service_path = src_root.join("services").join(format!("{entity}_service.rs"));
-    let route_path = src_root.join("routes").join(format!("{entity}.rs"));
+    let route_path = src_root.join("routes/api").join(format!("{entity}.rs"));
 
     let new_files = [entity_path.clone(), dao_path.clone(), service_path.clone(), route_path.clone()];
     for path in &new_files {
@@ -143,7 +143,7 @@ pub fn run(args: AddApiArgs) -> Result<()> {
     let entities_mod_path = src_root.join("db/entities/mod.rs");
     let dao_mod_path = src_root.join("db/dao/mod.rs");
     let services_mod_path = src_root.join("services/mod.rs");
-    let routes_mod_path = src_root.join("routes/mod.rs");
+    let routes_mod_path = src_root.join("routes/api/mod.rs");
 
     let entities_mod = fs::read_to_string(&entities_mod_path)
         .with_context(|| format!("failed to read {}", entities_mod_path.display()))?;
@@ -722,22 +722,26 @@ fn update_routes_mod(contents: &str, route_module: &str) -> Result<(String, bool
 
     let merge_line = format!("        .merge({route_module}::router(state.clone()))");
     if !lines.iter().any(|line| line.trim() == merge_line.trim()) {
-        if let Some(idx) = lines
+        if insert_in_block(&mut lines, "fn router", merge_line.clone(), "        ").is_ok() {
+            changed = true;
+        } else if let Some(idx) = lines
             .iter()
             .position(|line| line.contains(".merge(todo_crud::router"))
         {
             lines.insert(idx + 1, merge_line);
+            changed = true;
         } else if let Some(idx) = lines
             .iter()
             .position(|line| line.contains(".merge(auth::router"))
         {
             lines.insert(idx + 1, merge_line);
+            changed = true;
         } else if let Some(idx) = lines.iter().position(|line| line.contains("Router::new()")) {
             lines.insert(idx + 1, merge_line);
+            changed = true;
         } else {
             bail!("failed to locate router merge chain");
         }
-        changed = true;
     }
 
     Ok((reconstruct(contents, &lines), changed))

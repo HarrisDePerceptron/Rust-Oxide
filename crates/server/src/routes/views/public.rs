@@ -5,8 +5,7 @@ use axum::{Router, http::StatusCode, response::Html, routing::get};
 use chrono::Local;
 use tower_http::services::ServeDir;
 
-use crate::routes::route_list::{RouteInfo, routes};
-use crate::response::{ApiResult, JsonApiResponse};
+use crate::routes::route_list::routes;
 use crate::db::entity_catalog::{self, EntityInfo};
 
 #[derive(Clone)]
@@ -62,21 +61,11 @@ type HtmlError = (StatusCode, Html<String>);
 pub fn router() -> Router {
     let public_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("public");
     Router::new()
-        .route_service("/{*file}", ServeDir::new(public_dir))
         .route("/", get(index))
-        .route("/public", get(handler))
         .route("/entities", get(entities_view))
         .route("/docs", get(docs_view))
         .route("/routes", get(routes_view))
-        .route("/routes.json", get(list_routes_json))
-}
-
-async fn handler() -> ApiResult<serde_json::Value> {
-    JsonApiResponse::ok(serde_json::json!({ "ok": true, "route": "public" }))
-}
-
-async fn list_routes_json() -> ApiResult<&'static [RouteInfo]> {
-    JsonApiResponse::ok(routes())
+        .route_service("/{*file}", ServeDir::new(public_dir))
 }
 
 async fn index() -> Result<Html<String>, HtmlError> {

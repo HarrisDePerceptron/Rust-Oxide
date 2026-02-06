@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, bail};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
+use rust_oxide::routes::API_PREFIX;
 
 #[derive(Debug, Serialize)]
 struct LoginRequest {
@@ -33,6 +34,7 @@ struct ApiResponse<T> {
 async fn main() -> Result<()> {
     // Defaults assume your axum server is running locally on :3000
     let base = std::env::var("BASE_URL").unwrap_or_else(|_| "http://127.0.0.1:3000".to_string());
+    let api_base = format!("{base}{API_PREFIX}");
     let user = std::env::var("USERNAME").unwrap_or_else(|_| "user@example.com".to_string());
     let pass = std::env::var("PASSWORD").unwrap_or_else(|_| "password123".to_string());
     let admin = std::env::var("ADMIN_EMAIL").unwrap_or_else(|_| "admin@example.com".to_string());
@@ -41,35 +43,35 @@ async fn main() -> Result<()> {
 
     let http = Client::new();
 
-    // 1) /public
-    call_get(&http, &format!("{base}/public"), None).await?;
+    // 1) /api/v1/public
+    call_get(&http, &format!("{api_base}/public"), None).await?;
 
-    // 2) /register (ignore 409)
-    let _ = register(&http, &format!("{base}/register"), &user, &pass).await;
+    // 2) /api/v1/register (ignore 409)
+    let _ = register(&http, &format!("{api_base}/register"), &user, &pass).await;
 
-    // 3) /login -> token pair
-    let tokens = login(&http, &format!("{base}/login"), &user, &pass).await?;
+    // 3) /api/v1/login -> token pair
+    let tokens = login(&http, &format!("{api_base}/login"), &user, &pass).await?;
     println!(
         "\nGot access token (first 24 chars): {}…",
         tokens.access_token.chars().take(24).collect::<String>()
     );
 
-    // 4) /me (JWT protected)
-    call_get(&http, &format!("{base}/me"), Some(&tokens.access_token)).await?;
+    // 4) /api/v1/me (JWT protected)
+    call_get(&http, &format!("{api_base}/me"), Some(&tokens.access_token)).await?;
 
-    // 5) /refresh -> new access token
-    let refreshed = refresh(&http, &format!("{base}/refresh"), &tokens.refresh_token).await?;
+    // 5) /api/v1/refresh -> new access token
+    let refreshed = refresh(&http, &format!("{api_base}/refresh"), &tokens.refresh_token).await?;
     println!(
         "Refreshed access token (first 24 chars): {}…",
         refreshed.access_token.chars().take(24).collect::<String>()
     );
 
-    // 6) Admin flow (login as seeded admin and hit admin route)
+    // 6) Admin flow (login as seeded admin and hit /api/v1/admin/stats)
     println!("\n==> Admin flow");
-    let admin_tokens = login(&http, &format!("{base}/login"), &admin, &admin_pass).await?;
+    let admin_tokens = login(&http, &format!("{api_base}/login"), &admin, &admin_pass).await?;
     call_get(
         &http,
-        &format!("{base}/admin/stats"),
+        &format!("{api_base}/admin/stats"),
         Some(&admin_tokens.access_token),
     )
     .await?;

@@ -4,20 +4,16 @@ use axum::Router;
 
 use crate::state::AppState;
 
-pub mod admin;
-pub mod auth;
+pub mod api;
 pub mod base_api_router;
 pub mod base_router;
-pub mod protected;
-pub mod public;
 pub mod route_list;
-pub mod todo_crud;
+pub mod views;
+
+pub const API_PREFIX: &str = "/api/v1";
 
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
-        .merge(public::router())
-        .merge(auth::router(state.clone()))
-        .merge(todo_crud::router(state.clone()))
-        .merge(protected::router(state.clone()))
-        .merge(admin::router(state))
+        .nest(API_PREFIX, api::router(state))
+        .merge(views::router())
 }

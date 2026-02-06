@@ -1,12 +1,9 @@
 use std::error::Error;
 
-use tracing_error::SpanTrace;
-
 #[derive(Debug)]
 pub struct InternalError {
     message: String,
     source: Option<Box<dyn Error + Send + Sync>>,
-    span_trace: SpanTrace,
 }
 
 #[derive(Debug)]
@@ -44,7 +41,6 @@ impl AppError {
         Self::Internal(InternalError {
             message: message.into(),
             source: None,
-            span_trace: SpanTrace::capture(),
         })
     }
 
@@ -55,7 +51,6 @@ impl AppError {
         Self::Internal(InternalError {
             message: message.into(),
             source: Some(Box::new(source)),
-            span_trace: SpanTrace::capture(),
         })
     }
 
@@ -77,12 +72,6 @@ impl AppError {
         }
     }
 
-    pub fn span_trace(&self) -> Option<&SpanTrace> {
-        match self {
-            Self::Internal(internal) => Some(&internal.span_trace),
-            _ => None,
-        }
-    }
 }
 
 impl std::fmt::Display for AppError {
