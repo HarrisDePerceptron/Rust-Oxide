@@ -1,4 +1,8 @@
-use axum::{http::StatusCode, response::{IntoResponse, Response}, Json};
+use axum::{
+    Json,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
 use serde::Serialize;
 
 use crate::error::AppError;
@@ -55,8 +59,7 @@ impl IntoResponse for AppError {
 
 impl<T: Serialize> IntoResponse for JsonApiResponse<T> {
     fn into_response(self) -> Response {
-        let status = StatusCode::from_u16(self.status)
-            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let status = StatusCode::from_u16(self.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         (status, Json(self)).into_response()
     }
 }

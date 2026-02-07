@@ -52,8 +52,8 @@ pub(crate) fn collect_rust_files(root: &Path) -> Vec<PathBuf> {
 }
 
 fn collect_rust_files_inner(dir: &Path, out: &mut Vec<PathBuf>) {
-    let entries = fs::read_dir(dir)
-        .unwrap_or_else(|err| panic!("failed to read {}: {}", dir.display(), err));
+    let entries =
+        fs::read_dir(dir).unwrap_or_else(|err| panic!("failed to read {}: {}", dir.display(), err));
     for entry in entries {
         let entry = entry.unwrap_or_else(|err| panic!("failed to read dir entry: {}", err));
         let path = entry.path();
@@ -214,7 +214,11 @@ pub(crate) fn entity_name_from_type(ty: &Type) -> Option<String> {
             if segments.is_empty() {
                 return None;
             }
-            if segments.last().map(|value| value == "Entity").unwrap_or(false) {
+            if segments
+                .last()
+                .map(|value| value == "Entity")
+                .unwrap_or(false)
+            {
                 if segments.len() >= 2 {
                     return Some(segments[segments.len() - 2].clone());
                 }

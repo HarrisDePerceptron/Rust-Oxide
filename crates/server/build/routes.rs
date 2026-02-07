@@ -4,44 +4,15 @@ use std::{
 };
 
 use syn::{
-    punctuated::Punctuated,
-    visit::Visit,
-    Attribute,
-    Block,
-    Expr,
-    ExprCall,
-    ExprLit,
-    ExprMethodCall,
-    ExprStruct,
-    File,
-    FnArg,
-    ImplItem,
-    Item,
-    ItemFn,
-    ItemImpl,
-    ItemStruct,
-    Lit,
-    Pat,
-    PatType,
-    Path as SynPath,
-    ReturnType,
-    Stmt,
-    Token,
-    Type,
+    Attribute, Block, Expr, ExprCall, ExprLit, ExprMethodCall, ExprStruct, File, FnArg, ImplItem,
+    Item, ItemFn, ItemImpl, ItemStruct, Lit, Pat, PatType, Path as SynPath, ReturnType, Stmt,
+    Token, Type, punctuated::Punctuated, visit::Visit,
 };
 
 use crate::utils::{
-    collect_rust_files,
-    entity_name_from_type,
-    escape_rust_string,
-    extract_generic_inner,
-    extract_generic_types,
-    is_unit_type,
-    module_path_for_file,
-    parse_rust_file,
-    to_pascal_case,
-    type_path_parts,
-    type_to_string,
+    collect_rust_files, entity_name_from_type, escape_rust_string, extract_generic_inner,
+    extract_generic_types, is_unit_type, module_path_for_file, parse_rust_file, to_pascal_case,
+    type_path_parts, type_to_string,
 };
 
 #[derive(Debug, Clone)]
@@ -284,7 +255,10 @@ impl<'a, 'ast> Visit<'ast> for CrudRouterVisitor<'a> {
                         .args
                         .first()
                         .and_then(|expr| resolve_service_type(expr, self.locals));
-                    self.calls.push(CrudRouterCall { base_path: base, service });
+                    self.calls.push(CrudRouterCall {
+                        base_path: base,
+                        service,
+                    });
                 } else {
                     self.unresolved += 1;
                 }
@@ -673,13 +647,11 @@ fn build_struct_doc(item_struct: &ItemStruct) -> TypeDoc {
     TypeDoc { fields }
 }
 
-fn register_type_doc(
-    registry: &mut TypeRegistry,
-    module_path: &str,
-    name: &str,
-    doc: TypeDoc,
-) {
-    registry.docs.entry(name.to_string()).or_insert_with(|| doc.clone());
+fn register_type_doc(registry: &mut TypeRegistry, module_path: &str, name: &str, doc: TypeDoc) {
+    registry
+        .docs
+        .entry(name.to_string())
+        .or_insert_with(|| doc.clone());
     if !module_path.is_empty() {
         let qualified = format!("{}::{}", module_path, name);
         registry.docs.entry(qualified).or_insert(doc);
@@ -826,10 +798,16 @@ fn describe_type(
         );
     }
     if let Some(inner) = extract_generic_inner(ty, "Vec") {
-        return format!("Vec<{}>", describe_type(inner, module_path, registry, context));
+        return format!(
+            "Vec<{}>",
+            describe_type(inner, module_path, registry, context)
+        );
     }
     if let Some(inner) = extract_generic_inner(ty, "Arc") {
-        return format!("Arc<{}>", describe_type(inner, module_path, registry, context));
+        return format!(
+            "Arc<{}>",
+            describe_type(inner, module_path, registry, context)
+        );
     }
     if let Some(doc) = resolve_type_doc(registry, ty, module_path) {
         return render_type_doc(doc, registry, context, 0);
@@ -1497,7 +1475,10 @@ fn impl_associated_type(item_impl: &ItemImpl, name: &str) -> Option<String> {
     None
 }
 
-pub(crate) fn collect_entity_model_map(entities_dir: &Path, src_dir: &Path) -> HashMap<String, String> {
+pub(crate) fn collect_entity_model_map(
+    entities_dir: &Path,
+    src_dir: &Path,
+) -> HashMap<String, String> {
     let mut out = HashMap::new();
     for file in collect_rust_files(entities_dir) {
         let stem = file

@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
 
 use crate::cli::AddApiArgs;
@@ -28,22 +28,25 @@ const ENTITY_TEMPLATE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/templates/entity.rs.tmpl"
 ));
-const DAO_TEMPLATE: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/dao.rs.tmpl"));
-const SERVICE_TEMPLATE: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/service.rs.tmpl"));
-const ROUTE_TEMPLATE: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/route.rs.tmpl"));
+const DAO_TEMPLATE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/dao.rs.tmpl"
+));
+const SERVICE_TEMPLATE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/service.rs.tmpl"
+));
+const ROUTE_TEMPLATE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/route.rs.tmpl"
+));
 
 pub fn run(args: AddApiArgs) -> Result<()> {
     let cwd = std::env::current_dir().context("failed to resolve current directory")?;
     let (project_root, server_root) = resolve_roots(&cwd)?;
     let src_root = server_root.join("src");
     if !src_root.exists() {
-        bail!(
-            "unable to locate server crate at {}",
-            server_root.display()
-        );
+        bail!("unable to locate server crate at {}", server_root.display());
     }
 
     let name = args.name.trim();
@@ -130,13 +133,23 @@ pub fn run(args: AddApiArgs) -> Result<()> {
 
     let entity_path = src_root.join("db/entities").join(format!("{entity}.rs"));
     let dao_path = src_root.join("db/dao").join(format!("{entity}_dao.rs"));
-    let service_path = src_root.join("services").join(format!("{entity}_service.rs"));
+    let service_path = src_root
+        .join("services")
+        .join(format!("{entity}_service.rs"));
     let route_path = src_root.join("routes/api").join(format!("{entity}.rs"));
 
-    let new_files = [entity_path.clone(), dao_path.clone(), service_path.clone(), route_path.clone()];
+    let new_files = [
+        entity_path.clone(),
+        dao_path.clone(),
+        service_path.clone(),
+        route_path.clone(),
+    ];
     for path in &new_files {
         if path.exists() && !args.force {
-            bail!("file already exists (use --force to overwrite): {}", path.display());
+            bail!(
+                "file already exists (use --force to overwrite): {}",
+                path.display()
+            );
         }
     }
 
@@ -152,8 +165,7 @@ pub fn run(args: AddApiArgs) -> Result<()> {
 
     let dao_mod = fs::read_to_string(&dao_mod_path)
         .with_context(|| format!("failed to read {}", dao_mod_path.display()))?;
-    let (dao_mod_updated, dao_mod_changed) =
-        update_dao_mod(&dao_mod, &entity, &dao)?;
+    let (dao_mod_updated, dao_mod_changed) = update_dao_mod(&dao_mod, &entity, &dao)?;
 
     let services_mod = fs::read_to_string(&services_mod_path)
         .with_context(|| format!("failed to read {}", services_mod_path.display()))?;
@@ -162,8 +174,7 @@ pub fn run(args: AddApiArgs) -> Result<()> {
 
     let routes_mod = fs::read_to_string(&routes_mod_path)
         .with_context(|| format!("failed to read {}", routes_mod_path.display()))?;
-    let (routes_mod_updated, routes_mod_changed) =
-        update_routes_mod(&routes_mod, &route_module)?;
+    let (routes_mod_updated, routes_mod_changed) = update_routes_mod(&routes_mod, &route_module)?;
 
     if args.dry_run {
         println!("Dry run: would create files:");
@@ -341,10 +352,7 @@ fn resolve_roots(cwd: &Path) -> Result<(PathBuf, PathBuf)> {
             return Ok((ancestor.to_path_buf(), ancestor.to_path_buf()));
         }
     }
-    bail!(
-        "unable to locate server root from {}",
-        cwd.display()
-    )
+    bail!("unable to locate server root from {}", cwd.display())
 }
 
 fn registry_path(server_root: &Path) -> PathBuf {
@@ -370,8 +378,8 @@ fn save_registry(path: &Path, registry: &Registry) -> Result<()> {
         fs::create_dir_all(parent)
             .with_context(|| format!("failed to create {}", parent.display()))?;
     }
-    let contents = serde_json::to_string_pretty(registry)
-        .context("failed to serialize registry")?;
+    let contents =
+        serde_json::to_string_pretty(registry).context("failed to serialize registry")?;
     fs::write(path, contents).with_context(|| format!("failed to write {}", path.display()))
 }
 
@@ -656,18 +664,17 @@ fn update_entities_mod(
     let mut changed = false;
     let prelude_line = format!("    pub use super::{entity}::Entity as {entity_pascal};");
     if !lines.iter().any(|line| line.trim() == prelude_line.trim()) {
-        insert_in_block(
-            &mut lines,
-            "pub mod prelude {",
-            prelude_line,
-            "    ",
-        )?;
+        insert_in_block(&mut lines, "pub mod prelude {", prelude_line, "    ")?;
         changed = true;
     }
 
     let mod_line = format!("pub mod {entity};");
     if !lines.iter().any(|line| line.trim() == mod_line.trim()) {
-        insert_after_last_match(&mut lines, |line| line.trim_start().starts_with("pub mod "), mod_line);
+        insert_after_last_match(
+            &mut lines,
+            |line| line.trim_start().starts_with("pub mod "),
+            mod_line,
+        );
         changed = true;
     }
 
@@ -680,13 +687,21 @@ fn update_dao_mod(contents: &str, entity: &str, dao: &str) -> Result<(String, bo
 
     let mod_line = format!("pub mod {entity}_dao;");
     if !lines.iter().any(|line| line.trim() == mod_line.trim()) {
-        insert_after_last_match(&mut lines, |line| line.trim_start().starts_with("pub mod "), mod_line);
+        insert_after_last_match(
+            &mut lines,
+            |line| line.trim_start().starts_with("pub mod "),
+            mod_line,
+        );
         changed = true;
     }
 
     let use_line = format!("pub use {entity}_dao::{dao};");
     if !lines.iter().any(|line| line.trim() == use_line.trim()) {
-        insert_after_last_match(&mut lines, |line| line.trim_start().starts_with("pub use "), use_line);
+        insert_after_last_match(
+            &mut lines,
+            |line| line.trim_start().starts_with("pub use "),
+            use_line,
+        );
         changed = true;
     }
 
@@ -704,7 +719,11 @@ fn update_services_mod(contents: &str, service_module: &str) -> Result<(String, 
     let mut changed = false;
     let mod_line = format!("pub mod {service_module};");
     if !lines.iter().any(|line| line.trim() == mod_line.trim()) {
-        insert_after_last_match(&mut lines, |line| line.trim_start().starts_with("pub mod "), mod_line);
+        insert_after_last_match(
+            &mut lines,
+            |line| line.trim_start().starts_with("pub mod "),
+            mod_line,
+        );
         changed = true;
     }
     Ok((reconstruct(contents, &lines), changed))
@@ -716,7 +735,11 @@ fn update_routes_mod(contents: &str, route_module: &str) -> Result<(String, bool
 
     let mod_line = format!("pub mod {route_module};");
     if !lines.iter().any(|line| line.trim() == mod_line.trim()) {
-        insert_after_last_match(&mut lines, |line| line.trim_start().starts_with("pub mod "), mod_line);
+        insert_after_last_match(
+            &mut lines,
+            |line| line.trim_start().starts_with("pub mod "),
+            mod_line,
+        );
         changed = true;
     }
 

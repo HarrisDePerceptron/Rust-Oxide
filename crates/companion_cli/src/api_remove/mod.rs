@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
 
 use crate::cli::RemoveApiArgs;
@@ -76,7 +76,10 @@ pub fn run(args: RemoveApiArgs) -> Result<()> {
         let contents = fs::read_to_string(&path)
             .with_context(|| format!("failed to read {}", path.display()))?;
         for line in lines {
-            if !contents.lines().any(|existing| existing.trim() == line.trim()) {
+            if !contents
+                .lines()
+                .any(|existing| existing.trim() == line.trim())
+            {
                 missing_mod_lines.push(path_str.clone());
                 break;
             }
@@ -172,8 +175,8 @@ fn save_registry(path: &Path, registry: &Registry) -> Result<()> {
         fs::create_dir_all(parent)
             .with_context(|| format!("failed to create {}", parent.display()))?;
     }
-    let contents = serde_json::to_string_pretty(registry)
-        .context("failed to serialize registry")?;
+    let contents =
+        serde_json::to_string_pretty(registry).context("failed to serialize registry")?;
     fs::write(path, contents).with_context(|| format!("failed to write {}", path.display()))
 }
 
@@ -198,10 +201,7 @@ fn resolve_roots(cwd: &Path) -> Result<(PathBuf, PathBuf)> {
             return Ok((ancestor.to_path_buf(), ancestor.to_path_buf()));
         }
     }
-    bail!(
-        "unable to locate server root from {}",
-        cwd.display()
-    )
+    bail!("unable to locate server root from {}", cwd.display())
 }
 
 fn hash_bytes(bytes: &[u8]) -> String {
@@ -220,7 +220,10 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
 }
 
 fn remove_lines(contents: &str, lines_to_remove: &[String]) -> (String, bool) {
-    let remove_set: Vec<String> = lines_to_remove.iter().map(|l| l.trim().to_string()).collect();
+    let remove_set: Vec<String> = lines_to_remove
+        .iter()
+        .map(|l| l.trim().to_string())
+        .collect();
     let mut changed = false;
     let mut out = Vec::new();
     for line in contents.lines() {

@@ -122,9 +122,7 @@ impl AuthProvider for LocalAuthProvider {
             .await?
             .ok_or_else(|| AppError::unauthorized("Invalid refresh token"))?;
 
-        self.refresh_token_dao
-            .revoke_token(refresh_token)
-            .await?;
+        self.refresh_token_dao.revoke_token(refresh_token).await?;
 
         self.issue_tokens(&user).await
     }

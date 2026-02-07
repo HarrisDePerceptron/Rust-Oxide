@@ -32,8 +32,7 @@ pub async fn jwt_auth(
         .unwrap_or("");
 
     let token = auth.strip_prefix("Bearer ").ok_or_else(|| {
-        AppError::unauthorized("Missing/invalid Authorization header")
-        .into_response()
+        AppError::unauthorized("Missing/invalid Authorization header").into_response()
     })?;
 
     let mut validation = Validation::new(Algorithm::HS256);
@@ -112,8 +111,10 @@ where
                 let token = match auth.strip_prefix("Bearer ") {
                     Some(token) => token,
                     None => {
-                        return Ok(AppError::unauthorized("Missing/invalid Authorization header")
-                            .into_response());
+                        return Ok(
+                            AppError::unauthorized("Missing/invalid Authorization header")
+                                .into_response(),
+                        );
                     }
                 };
 
@@ -123,10 +124,10 @@ where
                 let data = match decode::<Claims>(token, &state.jwt.dec, &validation) {
                     Ok(data) => data,
                     Err(err) => {
-                        return Ok(
-                            AppError::bad_request(format!("Invalid or expired token: {err}"))
-                                .into_response(),
-                        );
+                        return Ok(AppError::bad_request(format!(
+                            "Invalid or expired token: {err}"
+                        ))
+                        .into_response());
                     }
                 };
 

@@ -1,9 +1,6 @@
 use std::{marker::PhantomData, sync::Arc};
 
-use axum::{
-    extract::FromRequestParts,
-    http::header,
-};
+use axum::{extract::FromRequestParts, http::header};
 use jsonwebtoken::{Algorithm, Validation, decode};
 
 use crate::{

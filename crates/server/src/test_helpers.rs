@@ -19,11 +19,7 @@ pub fn test_router(secret: &[u8]) -> Router {
     let jwt = JwtKeys::from_secret(cfg.jwt_secret.as_bytes());
     let daos = DaoContext::new(&db);
     let user_service = user_service::UserService::new(daos.user());
-    let local_provider = LocalAuthProvider::new(
-        user_service,
-        daos.refresh_token(),
-        jwt.clone(),
-    );
+    let local_provider = LocalAuthProvider::new(user_service, daos.refresh_token(), jwt.clone());
     let mut providers = AuthProviders::new(cfg.auth_provider)
         .with_provider(std::sync::Arc::new(local_provider))
         .expect("create auth providers");

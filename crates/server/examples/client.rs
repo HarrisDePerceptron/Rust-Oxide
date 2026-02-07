@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use reqwest::{Client, StatusCode};
-use serde::{Deserialize, Serialize};
 use rust_oxide::routes::API_PREFIX;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
 struct LoginRequest {

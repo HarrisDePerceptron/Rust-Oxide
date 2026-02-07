@@ -1,18 +1,21 @@
 use axum::{Router, routing::get};
 
 use crate::response::{ApiResult, JsonApiResponse};
+#[cfg(debug_assertions)]
 use crate::routes::route_list::{RouteInfo, routes};
 
 pub fn router() -> Router {
-    Router::new()
-        .route("/public", get(handler))
-        .route("/routes.json", get(list_routes_json))
+    let router = Router::new().route("/public", get(handler));
+    #[cfg(debug_assertions)]
+    let router = router.route("/routes.json", get(list_routes_json));
+    router
 }
 
 async fn handler() -> ApiResult<serde_json::Value> {
     JsonApiResponse::ok(serde_json::json!({ "ok": true, "route": "public" }))
 }
 
+#[cfg(debug_assertions)]
 async fn list_routes_json() -> ApiResult<&'static [RouteInfo]> {
     JsonApiResponse::ok(routes())
 }

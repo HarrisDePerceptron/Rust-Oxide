@@ -1,13 +1,13 @@
 use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime};
-use sea_orm::{
-    ColumnTrait, EntityTrait, IdenStatic, IntoActiveModel, Iterable, Order, Select,
-};
 use sea_orm::sea_query::{ColumnType, Value as QueryValue};
+use sea_orm::{ColumnTrait, EntityTrait, IdenStatic, IntoActiveModel, Iterable, Order, Select};
 use serde_json::Value as JsonValue;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
-use crate::db::dao::{ColumnFilter, CompareOp, DaoBase, DaoLayerError, FilterOp, PaginatedResponse};
+use crate::db::dao::{
+    ColumnFilter, CompareOp, DaoBase, DaoLayerError, FilterOp, PaginatedResponse,
+};
 use crate::error::AppError;
 
 type CrudEntity<D> = <D as DaoBase>::Entity;
@@ -193,9 +193,7 @@ pub trait CrudService {
                     specs.iter().map(|spec| (spec.key, spec)).collect();
                 let mut parsed = Vec::with_capacity(filters.len());
                 for (key, value) in filters {
-                    let spec = spec_map
-                        .get(key.as_str())
-                        .ok_or_else(invalid_filter)?;
+                    let spec = spec_map.get(key.as_str()).ok_or_else(invalid_filter)?;
                     let parsed_op = (spec.parse)(&value)?;
                     parsed.push(ColumnFilter {
                         column: spec.column.clone(),
@@ -216,9 +214,7 @@ pub trait CrudService {
                     if deny_set.contains(key.as_str()) {
                         return Err(invalid_filter());
                     }
-                    let column = column_map
-                        .get(key.as_str())
-                        .ok_or_else(invalid_filter)?;
+                    let column = column_map.get(key.as_str()).ok_or_else(invalid_filter)?;
                     let column_def = column.def();
                     let column_type = column_def.get_column_type();
                     let parsed_op = match parse {
@@ -291,8 +287,7 @@ fn parse_float(raw: &str) -> Result<f64, AppError> {
 }
 
 fn parse_date(raw: &str) -> Result<NaiveDate, AppError> {
-    NaiveDate::parse_from_str(raw.trim(), "%Y-%m-%d")
-        .map_err(|err| invalid_filter_value_with(err))
+    NaiveDate::parse_from_str(raw.trim(), "%Y-%m-%d").map_err(|err| invalid_filter_value_with(err))
 }
 
 fn parse_time(raw: &str) -> Result<NaiveTime, AppError> {
@@ -521,8 +516,7 @@ fn parse_value_by_column_type(raw: &str, column_type: &ColumnType) -> Result<Que
             Ok(QueryValue::Json(Some(Box::new(parse_json(raw)?))))
         }
         ColumnType::Uuid => {
-            let uuid =
-                Uuid::parse_str(raw.trim()).map_err(|err| invalid_filter_value_with(err))?;
+            let uuid = Uuid::parse_str(raw.trim()).map_err(|err| invalid_filter_value_with(err))?;
             Ok(QueryValue::Uuid(Some(uuid)))
         }
         ColumnType::Enum { variants, .. } => {

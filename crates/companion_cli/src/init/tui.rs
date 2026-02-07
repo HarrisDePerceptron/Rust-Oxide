@@ -10,7 +10,7 @@ use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
     prelude::*,
@@ -18,7 +18,7 @@ use ratatui::{
 };
 use tempfile::TempDir;
 
-use crate::cli::{InitArgs, DEFAULT_PORT};
+use crate::cli::{DEFAULT_PORT, InitArgs};
 
 use super::default_db_url_for;
 
@@ -301,7 +301,8 @@ fn handle_choice_delta(state: &mut UiState, delta: isize) {
             if next != state.db_index {
                 state.db_index = next;
                 if matches!(state.db_url_source, DbUrlSource::Default) {
-                    state.db_url = default_db_url_for(&state.name, DB_OPTIONS[state.db_index].label);
+                    state.db_url =
+                        default_db_url_for(&state.name, DB_OPTIONS[state.db_index].label);
                 }
             }
         }
@@ -336,10 +337,7 @@ fn shift_index(current: usize, max: usize, delta: isize) -> usize {
 }
 
 fn first_enabled_index(options: &[ChoiceOption]) -> usize {
-    options
-        .iter()
-        .position(|opt| opt.enabled)
-        .unwrap_or(0)
+    options.iter().position(|opt| opt.enabled).unwrap_or(0)
 }
 
 fn apply_step(state: &mut UiState) -> Result<bool> {
@@ -353,9 +351,9 @@ fn apply_step(state: &mut UiState) -> Result<bool> {
                 if state.out_dir.trim().is_empty() {
                     state.out_dir = state.name.clone();
                 }
-                if matches!(state.db_url_source, DbUrlSource::Default) && !state.db_url.is_empty()
-                {
-                    state.db_url = default_db_url_for(&state.name, DB_OPTIONS[state.db_index].label);
+                if matches!(state.db_url_source, DbUrlSource::Default) && !state.db_url.is_empty() {
+                    state.db_url =
+                        default_db_url_for(&state.name, DB_OPTIONS[state.db_index].label);
                 }
                 state.step = state.step.next();
                 sync_input(state);
@@ -530,22 +528,26 @@ fn draw_ui(frame: &mut Frame<'_>, state: &UiState) {
             text_input_lines(title, &state.input, state.error.as_deref(), state.cursor)
         }
         Step::Auth => choice_lines("Auth", AUTH_OPTIONS, state.auth_index),
-        Step::OutputDir => {
-            text_input_lines(
-                "Output directory",
-                &state.input,
-                state.error.as_deref(),
-                state.cursor,
-            )
-        }
+        Step::OutputDir => text_input_lines(
+            "Output directory",
+            &state.input,
+            state.error.as_deref(),
+            state.cursor,
+        ),
         Step::Summary => Paragraph::new(vec![
             Line::from("Review"),
             Line::from(format!("Project name: {}", state.name)),
             Line::from(format!("Output dir:   {}", state.out_dir)),
             Line::from(format!("Port:         {}", state.port)),
-            Line::from(format!("Database:     {}", DB_OPTIONS[state.db_index].label)),
+            Line::from(format!(
+                "Database:     {}",
+                DB_OPTIONS[state.db_index].label
+            )),
             Line::from(format!("Database URL: {}", state.db_url)),
-            Line::from(format!("Auth:         {}", AUTH_OPTIONS[state.auth_index].label)),
+            Line::from(format!(
+                "Auth:         {}",
+                AUTH_OPTIONS[state.auth_index].label
+            )),
             Line::from(""),
             Line::from("Press Enter to generate."),
         ]),
@@ -613,11 +615,7 @@ fn text_input_lines<'a>(
     Paragraph::new(lines).wrap(Wrap { trim: true })
 }
 
-fn choice_lines<'a>(
-    title: &'a str,
-    options: &'a [ChoiceOption],
-    selected: usize,
-) -> Paragraph<'a> {
+fn choice_lines<'a>(title: &'a str, options: &'a [ChoiceOption], selected: usize) -> Paragraph<'a> {
     let mut lines = vec![Line::from(title)];
     for (idx, option) in options.iter().enumerate() {
         let marker = if idx == selected { "(*)" } else { "( )" };
@@ -797,11 +795,7 @@ fn request_cancel(state: &mut UiState) {
     }
 }
 
-fn clone_repo_with_cancel(
-    repo: &str,
-    dest: &Path,
-    cancel_rx: Receiver<()>,
-) -> Result<(), String> {
+fn clone_repo_with_cancel(repo: &str, dest: &Path, cancel_rx: Receiver<()>) -> Result<(), String> {
     let mut child = Command::new("git")
         .args([
             "clone",

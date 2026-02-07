@@ -1,13 +1,19 @@
+#[cfg(debug_assertions)]
 use std::collections::BTreeMap;
 
 use askama::Template;
+#[cfg(not(debug_assertions))]
+use axum::response::Redirect;
 use axum::{Router, http::StatusCode, response::Html, routing::get};
 use chrono::Local;
 use tower_http::services::ServeDir;
 
-use crate::routes::route_list::routes;
+#[cfg(debug_assertions)]
 use crate::db::entity_catalog::{self, EntityInfo};
+#[cfg(debug_assertions)]
+use crate::routes::route_list::routes;
 
+#[cfg(debug_assertions)]
 #[derive(Clone)]
 struct RouteItem {
     method: String,
@@ -18,6 +24,7 @@ struct RouteItem {
     curl: String,
 }
 
+#[cfg(debug_assertions)]
 #[derive(Clone)]
 struct RouteGroup {
     source: String,
@@ -32,6 +39,7 @@ struct IndexTemplate {
     project_name: String,
 }
 
+#[cfg(debug_assertions)]
 #[derive(Template)]
 #[template(path = "routes.html")]
 struct RoutesTemplate {
@@ -40,6 +48,7 @@ struct RoutesTemplate {
     project_name: String,
 }
 
+#[cfg(debug_assertions)]
 #[derive(Template)]
 #[template(path = "entities.html")]
 struct EntitiesTemplate {
@@ -49,9 +58,17 @@ struct EntitiesTemplate {
     project_name: String,
 }
 
+#[cfg(debug_assertions)]
 #[derive(Template)]
 #[template(path = "docs.html")]
 struct DocsTemplate {
+    now: String,
+    project_name: String,
+}
+
+#[derive(Template)]
+#[template(path = "not_available.html")]
+struct NotAvailableTemplate {
     now: String,
     project_name: String,
 }
@@ -60,26 +77,35 @@ type HtmlError = (StatusCode, Html<String>);
 
 pub fn router() -> Router {
     let public_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("public");
-    Router::new()
+    let router = Router::new()
         .route("/", get(index))
-        .route("/entities", get(entities_view))
+        .route("/not-available", get(not_available_view));
+
+    #[cfg(debug_assertions)]
+    let router = router
         .route("/docs", get(docs_view))
-        .route("/routes", get(routes_view))
-        .route_service("/{*file}", ServeDir::new(public_dir))
+        .route("/entities", get(entities_view))
+        .route("/routes", get(routes_view));
+
+    #[cfg(not(debug_assertions))]
+    let router = router
+        .route("/docs", get(not_available_redirect))
+        .route("/entities", get(not_available_redirect))
+        .route("/routes", get(not_available_redirect));
+
+    router.route_service("/{*file}", ServeDir::new(public_dir))
 }
 
 async fn index() -> Result<Html<String>, HtmlError> {
     let now = Local::now().to_rfc3339();
     let project_name = project_name();
-    let rendered = IndexTemplate {
-        now,
-        project_name,
-    }
+    let rendered = IndexTemplate { now, project_name }
         .render()
         .map_err(|_| html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render index"))?;
     Ok(Html(rendered))
 }
 
+#[cfg(debug_assertions)]
 async fn routes_view() -> Result<Html<String>, HtmlError> {
     let now = Local::now().to_rfc3339();
     let route_groups = build_route_groups();
@@ -89,11 +115,12 @@ async fn routes_view() -> Result<Html<String>, HtmlError> {
         route_groups,
         project_name,
     }
-        .render()
-        .map_err(|_| html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render routes"))?;
+    .render()
+    .map_err(|_| html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render routes"))?;
     Ok(Html(rendered))
 }
 
+#[cfg(debug_assertions)]
 async fn entities_view() -> Result<Html<String>, HtmlError> {
     let now = Local::now().to_rfc3339();
     let entities = entity_catalog::entities();
@@ -105,13 +132,17 @@ async fn entities_view() -> Result<Html<String>, HtmlError> {
         erd_mermaid,
         project_name,
     }
-        .render()
-        .map_err(|_| {
-            html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render entities")
-        })?;
+    .render()
+    .map_err(|_| {
+        html_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "failed to render entities",
+        )
+    })?;
     Ok(Html(rendered))
 }
 
+#[cfg(debug_assertions)]
 async fn docs_view() -> Result<Html<String>, HtmlError> {
     let now = Local::now().to_rfc3339();
     let project_name = project_name();
@@ -121,6 +152,26 @@ async fn docs_view() -> Result<Html<String>, HtmlError> {
     Ok(Html(rendered))
 }
 
+async fn not_available_view() -> Result<Html<String>, HtmlError> {
+    let now = Local::now().to_rfc3339();
+    let project_name = project_name();
+    let rendered = NotAvailableTemplate { now, project_name }
+        .render()
+        .map_err(|_| {
+            html_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to render availability page",
+            )
+        })?;
+    Ok(Html(rendered))
+}
+
+#[cfg(not(debug_assertions))]
+async fn not_available_redirect() -> Redirect {
+    Redirect::to("/not-available")
+}
+
+#[cfg(debug_assertions)]
 fn build_route_groups() -> Vec<RouteGroup> {
     let mut grouped: BTreeMap<String, Vec<RouteItem>> = BTreeMap::new();
     for route in routes() {

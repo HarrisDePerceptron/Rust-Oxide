@@ -1,7 +1,7 @@
 use axum::{
     Json, Router,
-    extract::{Path, Query, Request},
     extract::rejection::QueryRejection,
+    extract::{Path, Query, Request},
     http::StatusCode,
     response::Response,
     routing::{MethodRouter, Route, delete, get, patch, post},
@@ -17,9 +17,7 @@ use uuid::Uuid;
 
 use super::base_router::BaseRouter;
 use crate::{
-    db::dao::DaoBase,
-    error::AppError,
-    response::JsonApiResponse,
+    db::dao::DaoBase, error::AppError, response::JsonApiResponse,
     services::crud_service::CrudService,
 };
 
@@ -216,11 +214,7 @@ where
                 move |Json(payload)| async move {
                     let active = Self::build_create(payload)?;
                     let model: ModelOf<Self::Service> = service.create(active).await?;
-                    JsonApiResponse::with_status(
-                        StatusCode::CREATED,
-                        "created",
-                        model,
-                    )
+                    JsonApiResponse::with_status(StatusCode::CREATED, "created", model)
                 }
             });
             router = router.route(base, self.apply_method_middleware(Method::Create, route));
@@ -280,11 +274,7 @@ where
                 let service = self.service();
                 move |Path(id): Path<Uuid>| async move {
                     service.delete(id).await?;
-                    JsonApiResponse::with_status(
-                        StatusCode::NO_CONTENT,
-                        "deleted",
-                        Value::Null,
-                    )
+                    JsonApiResponse::with_status(StatusCode::NO_CONTENT, "deleted", Value::Null)
                 }
             });
             router = router.route(

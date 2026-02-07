@@ -46,7 +46,10 @@ impl UserService {
         password_hash: &str,
         role: &str,
     ) -> Result<user::Model, AppError> {
-        Ok(self.user_dao.create_user(email, password_hash, role).await?)
+        Ok(self
+            .user_dao
+            .create_user(email, password_hash, role)
+            .await?)
     }
 
     pub async fn set_last_login(

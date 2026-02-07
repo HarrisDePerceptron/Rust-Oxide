@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project_name }} | Not Available{% endblock %}
+{% block description %}This page is not available in production.{% endblock %}
+
+{% block content %}
+      <main class="px-6 pb-16 pt-10 sm:px-10">
+        <section class="mx-auto grid min-h-[62vh] max-w-3xl place-items-center">
+          <div class="w-full rounded-3xl border border-black/10 bg-white/95 p-10 text-center shadow-xl shadow-black/10">
+            <p class="text-xs uppercase tracking-[0.3em] text-black/45">
+              Restricted page
+            </p>
+            <h1 class="mt-4 text-3xl font-semibold text-[color:var(--pine)] sm:text-4xl">
+              No available in production
+            </h1>
+            <p class="mt-4 text-sm text-black/65">
+              This endpoint is enabled only in debug builds.
+            </p>
+            <a
+              class="mt-8 inline-block rounded-full bg-[color:var(--pine)] px-6 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-lg shadow-black/15 transition hover:-translate-y-0.5"
+              href="/"
+              >Back to home</a
+            >
+          </div>
+        </section>
+      </main>
+{% endblock %}

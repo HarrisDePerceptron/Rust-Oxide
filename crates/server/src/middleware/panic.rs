@@ -1,12 +1,14 @@
 use std::any::Any;
 
-use axum::{http::StatusCode, response::{IntoResponse, Response}};
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
 use tower_http::catch_panic::CatchPanicLayer;
 
 use crate::response::JsonApiResponse;
 
-pub fn catch_panic_layer(
-) -> CatchPanicLayer<fn(Box<dyn Any + Send + 'static>) -> Response> {
+pub fn catch_panic_layer() -> CatchPanicLayer<fn(Box<dyn Any + Send + 'static>) -> Response> {
     CatchPanicLayer::custom(panic_to_json)
 }
 

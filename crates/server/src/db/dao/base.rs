@@ -1,9 +1,9 @@
 use chrono::Utc;
+use sea_orm::sea_query::{Expr, ExprTrait, LikeExpr};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, FromQueryResult,
     IntoActiveModel, Order, PrimaryKeyTrait, QueryFilter, QueryOrder, QuerySelect, Select,
 };
-use sea_orm::sea_query::{Expr, ExprTrait, LikeExpr};
 use uuid::Uuid;
 
 use super::base_traits::{HasCreatedAtColumn, HasIdActiveModel, TimestampedActiveModel};
@@ -25,7 +25,10 @@ pub enum FilterOp {
         op: CompareOp,
         value: sea_orm::sea_query::Value,
     },
-    Like { pattern: String, escape: char },
+    Like {
+        pattern: String,
+        escape: char,
+    },
     Between {
         min: sea_orm::sea_query::Value,
         max: sea_orm::sea_query::Value,
@@ -194,28 +197,29 @@ where
 
         let base = Self::Entity::find();
         let filtered = apply(base);
-        let filtered = filters.iter().fold(filtered, |select, filter| match &filter.op {
-            FilterOp::Eq(value) => select.filter(filter.column.clone().eq(value.clone())),
-            FilterOp::Compare { op, value } => {
-                let expr = Expr::col(filter.column.clone());
-                let value = Expr::val(value.clone());
-                let expr = match op {
-                    CompareOp::Lt => expr.lt(value),
-                    CompareOp::Lte => expr.lte(value),
-                    CompareOp::Gt => expr.gt(value),
-                    CompareOp::Gte => expr.gte(value),
-                };
-                select.filter(expr)
-            }
-            FilterOp::Like { pattern, escape } => select.filter(
-                Expr::col(filter.column.clone())
-                    .like(LikeExpr::new(pattern).escape(*escape)),
-            ),
-            FilterOp::Between { min, max } => select.filter(
-                Expr::col(filter.column.clone())
-                    .between(Expr::val(min.clone()), Expr::val(max.clone())),
-            ),
-        });
+        let filtered = filters
+            .iter()
+            .fold(filtered, |select, filter| match &filter.op {
+                FilterOp::Eq(value) => select.filter(filter.column.clone().eq(value.clone())),
+                FilterOp::Compare { op, value } => {
+                    let expr = Expr::col(filter.column.clone());
+                    let value = Expr::val(value.clone());
+                    let expr = match op {
+                        CompareOp::Lt => expr.lt(value),
+                        CompareOp::Lte => expr.lte(value),
+                        CompareOp::Gt => expr.gt(value),
+                        CompareOp::Gte => expr.gte(value),
+                    };
+                    select.filter(expr)
+                }
+                FilterOp::Like { pattern, escape } => select.filter(
+                    Expr::col(filter.column.clone()).like(LikeExpr::new(pattern).escape(*escape)),
+                ),
+                FilterOp::Between { min, max } => select.filter(
+                    Expr::col(filter.column.clone())
+                        .between(Expr::val(min.clone()), Expr::val(max.clone())),
+                ),
+            });
         let ordered = match order {
             Some((column, order)) => filtered.order_by(column, order),
             None => filtered.order_by_desc(Self::Entity::created_at_column()),

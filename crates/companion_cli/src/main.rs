@@ -1,6 +1,6 @@
-mod cli;
 mod add_api;
 mod api_remove;
+mod cli;
 mod init;
 
 use anyhow::Result;

@@ -71,7 +71,6 @@ impl AppError {
             _ => None,
         }
     }
-
 }
 
 impl std::fmt::Display for AppError {

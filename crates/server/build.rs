@@ -1,15 +1,11 @@
-use std::{
-    collections::HashSet,
-    env,
-    path::Path,
-};
+use std::{collections::HashSet, env, path::Path};
 
-#[path = "build/utils.rs"]
-mod utils;
 #[path = "build/entities.rs"]
 mod entities;
 #[path = "build/routes.rs"]
 mod routes;
+#[path = "build/utils.rs"]
+mod utils;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
@@ -71,8 +67,10 @@ fn main() {
         entities::collect_entity_relations(&parsed.items, &module_path, &mut relations);
     }
 
-    let entity_names: HashSet<String> =
-        entities_list.iter().map(|entity| entity.entity.clone()).collect();
+    let entity_names: HashSet<String> = entities_list
+        .iter()
+        .map(|entity| entity.entity.clone())
+        .collect();
     relations.retain(|relation| {
         entity_names.contains(&relation.from) && entity_names.contains(&relation.to)
     });

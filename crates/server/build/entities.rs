@@ -1,20 +1,10 @@
-use std::{
-    collections::HashSet,
-    fs,
-    path::Path,
-};
+use std::{collections::HashSet, fs, path::Path};
 
 use syn::{Attribute, Fields, Item, ItemEnum, ItemStruct, LitStr, Type};
 
 use crate::utils::{
-    add_attribute,
-    entity_name_from_type,
-    escape_rust_string,
-    extract_generic_inner,
-    is_option_type,
-    normalize_field_name,
-    to_pascal_case,
-    type_to_string,
+    add_attribute, entity_name_from_type, escape_rust_string, extract_generic_inner,
+    is_option_type, normalize_field_name, to_pascal_case, type_to_string,
 };
 
 #[derive(Debug, Clone)]
@@ -83,14 +73,17 @@ impl Default for BaseEntityDefaults {
     }
 }
 
-pub(crate) fn collect_entity_entries(items: &[Item], module_path: &str, out: &mut Vec<EntityEntry>) {
+pub(crate) fn collect_entity_entries(
+    items: &[Item],
+    module_path: &str,
+    out: &mut Vec<EntityEntry>,
+) {
     let fk_columns = collect_fk_columns(items);
     for item in items {
         match item {
             Item::Struct(item_struct) => {
                 if has_derive_entity_model(&item_struct.attrs) {
-                    if let Some(entity) =
-                        build_entity_entry(item_struct, module_path, &fk_columns)
+                    if let Some(entity) = build_entity_entry(item_struct, module_path, &fk_columns)
                     {
                         out.push(entity);
                     }
@@ -226,13 +219,8 @@ pub(crate) fn write_entities(
         escape_rust_string(&mermaid)
     ));
 
-    fs::write(&entity_out_path, entity_output).unwrap_or_else(|err| {
-        panic!(
-            "failed to write {}: {}",
-            entity_out_path.display(),
-            err
-        )
-    });
+    fs::write(&entity_out_path, entity_output)
+        .unwrap_or_else(|err| panic!("failed to write {}: {}", entity_out_path.display(), err));
 }
 
 fn has_derive_entity_model(attrs: &[Attribute]) -> bool {
@@ -384,8 +372,8 @@ fn is_relation_type(ty: &Type) -> bool {
             return true;
         }
     }
-    if let Some(inner) = extract_generic_inner(ty, "Option")
-        .or_else(|| extract_generic_inner(ty, "Vec"))
+    if let Some(inner) =
+        extract_generic_inner(ty, "Option").or_else(|| extract_generic_inner(ty, "Vec"))
     {
         let (_, last) = crate::utils::type_path_parts(inner);
         return matches!(last.as_deref(), Some("Entity"));
@@ -406,13 +394,7 @@ fn parse_fk_column_variants(value: &str) -> Vec<String> {
     parts
         .into_iter()
         .filter(|part| !part.is_empty())
-        .map(|part| {
-            part.rsplit("::")
-                .next()
-                .unwrap_or(part)
-                .trim()
-                .to_string()
-        })
+        .map(|part| part.rsplit("::").next().unwrap_or(part).trim().to_string())
         .collect()
 }
 
@@ -534,10 +516,21 @@ fn build_entity_columns(
     let mut existing_fields: HashSet<String> = named
         .named
         .iter()
-        .filter_map(|field| field.ident.as_ref().map(|ident| normalize_field_name(&ident.to_string())))
+        .filter_map(|field| {
+            field
+                .ident
+                .as_ref()
+                .map(|ident| normalize_field_name(&ident.to_string()))
+        })
         .collect();
     if let Some(defaults) = base_entity_defaults {
-        push_base_entity_column(&mut columns, &mut existing_fields, &defaults.id, "uuid::Uuid", true);
+        push_base_entity_column(
+            &mut columns,
+            &mut existing_fields,
+            &defaults.id,
+            "uuid::Uuid",
+            true,
+        );
         push_base_entity_column(
             &mut columns,
             &mut existing_fields,
@@ -596,10 +589,7 @@ fn build_entity_columns(
     columns
 }
 
-fn build_entity_relations(
-    item_struct: &ItemStruct,
-    module_path: &str,
-) -> Vec<EntityRelationEntry> {
+fn build_entity_relations(item_struct: &ItemStruct, module_path: &str) -> Vec<EntityRelationEntry> {
     let mut relations = Vec::new();
     let Some(entity) = entity_name_from_module_path(module_path) else {
         return relations;
@@ -611,8 +601,8 @@ fn build_entity_relations(
         if !field_has_relation_attr(&field.attrs) && !is_relation_type(&field.ty) {
             continue;
         }
-        let kind = relation_kind_from_attrs(&field.attrs)
-            .or_else(|| relation_kind_from_type(&field.ty));
+        let kind =
+            relation_kind_from_attrs(&field.attrs).or_else(|| relation_kind_from_type(&field.ty));
         let Some(kind) = kind else {
             continue;
         };

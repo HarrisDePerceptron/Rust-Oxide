@@ -8,12 +8,12 @@ use std::{
     process::Command,
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use tempfile::TempDir;
 use walkdir::WalkDir;
 
-use crate::cli::{InitArgs, DEFAULT_DB, DEFAULT_PORT};
-use self::tui::{run_tui, TuiOutcome};
+use self::tui::{TuiOutcome, run_tui};
+use crate::cli::{DEFAULT_DB, DEFAULT_PORT, InitArgs};
 
 const DEFAULT_REPLACE_FROM: &str = "rust_oxide";
 const DEFAULT_TEMPLATE_REPO: &str = "https://github.com/HarrisDePerceptron/Rust-Oxide.git";
@@ -316,8 +316,8 @@ fn derive_crate_name(input: &str) -> String {
 }
 
 fn append_or_replace_env(path: &Path, key: &str, value: &str) -> Result<()> {
-    let file = fs::File::open(path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let file =
+        fs::File::open(path).with_context(|| format!("failed to read {}", path.display()))?;
     let mut values: HashMap<String, String> = HashMap::new();
     let mut order: Vec<String> = Vec::new();
 

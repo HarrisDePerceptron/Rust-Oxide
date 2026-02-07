@@ -2,8 +2,8 @@ use sea_orm::{ColumnTrait, DatabaseConnection, QueryFilter, Set};
 use uuid::Uuid;
 
 use super::{DaoBase, DaoResult};
-use crate::db::entities::{prelude::User, user};
 use crate::db::entities::user as entity;
+use crate::db::entities::{prelude::User, user};
 
 #[derive(Clone)]
 pub struct UserDao {

@@ -18,7 +18,7 @@ use rust_oxide::{
     },
     config::AppConfig,
     db::dao::DaoContext,
-    routes::{router, API_PREFIX},
+    routes::{API_PREFIX, router},
     services::user_service,
     state::{AppState, JwtKeys},
 };
@@ -62,11 +62,7 @@ fn build_state(cfg: AppConfig, db: DatabaseConnection) -> std::sync::Arc<AppStat
     let jwt = JwtKeys::from_secret(cfg.jwt_secret.as_bytes());
     let daos = DaoContext::new(&db);
     let user_service = user_service::UserService::new(daos.user());
-    let local_provider = LocalAuthProvider::new(
-        user_service,
-        daos.refresh_token(),
-        jwt.clone(),
-    );
+    let local_provider = LocalAuthProvider::new(user_service, daos.refresh_token(), jwt.clone());
     let mut providers = AuthProviders::new(cfg.auth_provider)
         .with_provider(std::sync::Arc::new(local_provider))
         .expect("create auth providers");
@@ -136,7 +132,12 @@ async fn me_without_token_is_rejected() {
     let app = app();
 
     let res = app
-        .oneshot(Request::builder().uri(api_path("/me")).body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri(api_path("/me"))
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
