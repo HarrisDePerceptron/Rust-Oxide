@@ -1,10 +1,5 @@
 # Server Template Guidelines (`src/` scope)
 
-## Scope
-- Applies to files under `crates/server/src/`.
-- Treat this crate as the template source of truth for generated projects.
-- In examples, prefer `src/...` paths (template-consumer perspective).
-
 ## Architecture Contract
 - Boot flow in `src/main.rs`: config -> logging -> DB connect/schema sync -> auth provider init -> `AppState` -> router + middleware.
 - `AppState` carries `config`, `jwt`, `db`, and `auth_providers`.
