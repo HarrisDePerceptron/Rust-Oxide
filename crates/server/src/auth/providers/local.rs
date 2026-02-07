@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use crate::{
     auth::{
         Claims, Role, TokenBundle,
-        jwt::{encode_token, make_access_claims},
+        jwt::{JwtKeys, encode_token, make_access_claims},
         password::{hash_password, verify_password},
     },
     config::AppConfig,
@@ -11,7 +11,6 @@ use crate::{
     db::entities,
     error::AppError,
     services::user_service::UserService,
-    state::JwtKeys,
 };
 
 use super::{AuthProvider, AuthProviderId};

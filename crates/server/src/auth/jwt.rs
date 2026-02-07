@@ -1,9 +1,24 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use jsonwebtoken::{Algorithm, Header, encode};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, encode};
 
 use super::{Claims, Role};
-use crate::{error::AppError, state::JwtKeys};
+use crate::error::AppError;
+
+#[derive(Clone)]
+pub struct JwtKeys {
+    pub enc: EncodingKey,
+    pub dec: DecodingKey,
+}
+
+impl JwtKeys {
+    pub fn from_secret(secret: &[u8]) -> Self {
+        Self {
+            enc: EncodingKey::from_secret(secret),
+            dec: DecodingKey::from_secret(secret),
+        }
+    }
+}
 
 pub fn now_unix() -> usize {
     SystemTime::now()

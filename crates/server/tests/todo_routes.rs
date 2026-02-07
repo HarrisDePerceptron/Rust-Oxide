@@ -12,15 +12,13 @@ use uuid::Uuid;
 use rust_oxide::{
     auth::{
         Role,
-        jwt::{encode_token, make_access_claims},
-        providers::{AuthProviders, LocalAuthProvider},
+        bootstrap::build_providers,
+        jwt::{JwtKeys, encode_token, make_access_claims},
     },
     config::AppConfig,
-    db::dao::DaoContext,
     routes::{API_PREFIX, router},
-    services::user_service,
+    services::ServiceContext,
     state::AppState,
-    state::JwtKeys,
 };
 
 async fn app_state() -> std::sync::Arc<AppState> {
@@ -43,17 +41,9 @@ async fn app_state() -> std::sync::Arc<AppState> {
 }
 
 fn build_state(cfg: AppConfig, db: DatabaseConnection) -> std::sync::Arc<AppState> {
-    let jwt = JwtKeys::from_secret(cfg.jwt_secret.as_bytes());
-    let daos = DaoContext::new(&db);
-    let user_service = user_service::UserService::new(daos.user());
-    let local_provider = LocalAuthProvider::new(user_service, daos.refresh_token(), jwt.clone());
-    let mut providers = AuthProviders::new(cfg.auth_provider)
-        .with_provider(std::sync::Arc::new(local_provider))
-        .expect("create auth providers");
-    providers
-        .set_active(cfg.auth_provider)
-        .expect("set active auth provider");
-    AppState::new(cfg, db, jwt, providers)
+    let services = ServiceContext::new(&db);
+    let providers = build_providers(&cfg, &services).expect("create auth providers");
+    AppState::new(cfg, db, providers)
 }
 
 async fn send(
@@ -89,7 +79,8 @@ fn json_message<'a>(json: &'a serde_json::Value) -> Option<&'a str> {
 fn auth_header(state: &std::sync::Arc<AppState>) -> String {
     let user_id = Uuid::new_v4();
     let claims = make_access_claims(&user_id, vec![Role::User], 3600);
-    let token = encode_token(&state.jwt, &claims).expect("encode token");
+    let jwt = JwtKeys::from_secret(state.config.jwt_secret.as_bytes());
+    let token = encode_token(&jwt, &claims).expect("encode token");
     format!("Bearer {token}")
 }
 

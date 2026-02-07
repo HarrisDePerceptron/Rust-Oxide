@@ -1,7 +1,6 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use axum::{extract::FromRequestParts, http::header};
-use jsonwebtoken::{Algorithm, Validation, decode};
 
 use crate::{
     auth::{Claims, RequiredRole},
@@ -31,13 +30,9 @@ impl FromRequestParts<Arc<AppState>> for Claims {
             .strip_prefix("Bearer ")
             .ok_or_else(|| AppError::unauthorized("Missing/invalid Authorization header"))?;
 
-        let mut validation = Validation::new(Algorithm::HS256);
-        validation.validate_exp = true;
-
-        let data = decode::<Claims>(token, &state.jwt.dec, &validation)?;
-
-        parts.extensions.insert(data.claims.clone());
-        Ok(data.claims)
+        let claims = state.auth_providers.active()?.verify(token).await?;
+        parts.extensions.insert(claims.clone());
+        Ok(claims)
     }
 }
 

@@ -4,7 +4,7 @@ use axum::{Router, middleware};
 use tower_http::trace::TraceLayer;
 
 use rust_oxide::{
-    auth::providers::{AuthProviders, LocalAuthProvider},
+    auth::bootstrap::init_providers,
     config::AppConfig,
     db::connection,
     logging::init_tracing,
@@ -26,13 +26,12 @@ async fn run() -> anyhow::Result<()> {
     let cfg = AppConfig::from_env().expect("failed to load config");
     init_tracing(&cfg.log_level);
 
-    let jwt = rust_oxide::state::JwtKeys::from_secret(cfg.jwt_secret.as_bytes());
     let db = connection::connect(&cfg).await?;
     let services = ServiceContext::new(&db);
 
-    let providers = init_auth(&cfg, &services, &jwt).await?;
+    let providers = init_providers(&cfg, &services).await?;
 
-    let state = AppState::new(cfg, db, jwt, providers);
+    let state = AppState::new(cfg, db, providers);
 
     let app = Router::new()
         .merge(router(Arc::clone(&state)))
@@ -48,22 +47,4 @@ async fn run() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
-}
-
-async fn init_auth(
-    cfg: &AppConfig,
-    services: &ServiceContext,
-    jwt: &rust_oxide::state::JwtKeys,
-) -> anyhow::Result<AuthProviders> {
-    let user_service = services.user();
-    let local_provider =
-        LocalAuthProvider::new(user_service, services.refresh_token_dao(), jwt.clone());
-    let mut providers =
-        AuthProviders::new(cfg.auth_provider).with_provider(std::sync::Arc::new(local_provider))?;
-    providers.set_active(cfg.auth_provider)?;
-
-    let auth_service = services.auth(&providers);
-    auth_service.seed_admin(cfg).await?;
-
-    Ok(providers)
 }

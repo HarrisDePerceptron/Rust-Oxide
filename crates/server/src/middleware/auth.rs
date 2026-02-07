@@ -11,7 +11,6 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use futures_util::future::BoxFuture;
-use jsonwebtoken::{Algorithm, Validation, decode};
 use tower::{Layer, Service};
 
 use crate::{
@@ -35,14 +34,15 @@ pub async fn jwt_auth(
         AppError::unauthorized("Missing/invalid Authorization header").into_response()
     })?;
 
-    let mut validation = Validation::new(Algorithm::HS256);
-    validation.validate_exp = true;
+    let claims = state
+        .auth_providers
+        .active()
+        .map_err(IntoResponse::into_response)?
+        .verify(token)
+        .await
+        .map_err(IntoResponse::into_response)?;
 
-    let data = decode::<Claims>(token, &state.jwt.dec, &validation).map_err(|err| {
-        AppError::bad_request(format!("Invalid or expired token: {err}")).into_response()
-    })?;
-
-    req.extensions_mut().insert(data.claims);
+    req.extensions_mut().insert(claims);
 
     Ok(next.run(req).await)
 }
@@ -118,20 +118,13 @@ where
                     }
                 };
 
-                let mut validation = Validation::new(Algorithm::HS256);
-                validation.validate_exp = true;
-
-                let data = match decode::<Claims>(token, &state.jwt.dec, &validation) {
-                    Ok(data) => data,
-                    Err(err) => {
-                        return Ok(AppError::bad_request(format!(
-                            "Invalid or expired token: {err}"
-                        ))
-                        .into_response());
-                    }
-                };
-
-                data.claims
+                match state.auth_providers.active() {
+                    Ok(provider) => match provider.verify(token).await {
+                        Ok(claims) => claims,
+                        Err(err) => return Ok(err.into_response()),
+                    },
+                    Err(err) => return Ok(err.into_response()),
+                }
             };
 
             req.extensions_mut().insert(claims.clone());

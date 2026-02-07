@@ -10,17 +10,12 @@ use tower::ServiceExt; // for `oneshot`
 use uuid::Uuid;
 
 use rust_oxide::{
-    auth::{
-        Claims, Role,
-        jwt::now_unix,
-        password,
-        providers::{AuthProviders, LocalAuthProvider},
-    },
+    auth::{Claims, Role, bootstrap::build_providers, jwt::now_unix, password},
     config::AppConfig,
     db::dao::DaoContext,
     routes::{API_PREFIX, router},
-    services::user_service,
-    state::{AppState, JwtKeys},
+    services::ServiceContext,
+    state::AppState,
 };
 
 use jsonwebtoken::{Algorithm, Header, encode};
@@ -59,17 +54,9 @@ async fn app_with_db() -> std::sync::Arc<AppState> {
 }
 
 fn build_state(cfg: AppConfig, db: DatabaseConnection) -> std::sync::Arc<AppState> {
-    let jwt = JwtKeys::from_secret(cfg.jwt_secret.as_bytes());
-    let daos = DaoContext::new(&db);
-    let user_service = user_service::UserService::new(daos.user());
-    let local_provider = LocalAuthProvider::new(user_service, daos.refresh_token(), jwt.clone());
-    let mut providers = AuthProviders::new(cfg.auth_provider)
-        .with_provider(std::sync::Arc::new(local_provider))
-        .expect("create auth providers");
-    providers
-        .set_active(cfg.auth_provider)
-        .expect("set active auth provider");
-    AppState::new(cfg, db, jwt, providers)
+    let services = ServiceContext::new(&db);
+    let providers = build_providers(&cfg, &services).expect("create auth providers");
+    AppState::new(cfg, db, providers)
 }
 
 #[tokio::test]
