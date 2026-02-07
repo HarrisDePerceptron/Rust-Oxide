@@ -6,7 +6,7 @@ use serde::Deserialize;
 use crate::{
     auth::TokenBundle,
     response::{ApiResult, JsonApiResponse},
-    services::auth_service,
+    services::ServiceContext,
     state::AppState,
 };
 
@@ -47,7 +47,8 @@ async fn register(
     State(state): State<Arc<AppState>>,
     Json(body): Json<RegisterRequest>,
 ) -> ApiResult<TokenResponse> {
-    let service = auth_service::AuthService::new(&state.auth_providers);
+    let services = ServiceContext::from_state(state.as_ref());
+    let service = services.auth(&state.auth_providers);
     let tokens = service.register(&body.email, &body.password).await?;
     JsonApiResponse::ok(tokens.into())
 }
@@ -56,7 +57,8 @@ async fn login(
     State(state): State<Arc<AppState>>,
     Json(body): Json<LoginRequest>,
 ) -> ApiResult<TokenResponse> {
-    let service = auth_service::AuthService::new(&state.auth_providers);
+    let services = ServiceContext::from_state(state.as_ref());
+    let service = services.auth(&state.auth_providers);
     let tokens = service.login(&body.email, &body.password).await?;
     JsonApiResponse::ok(tokens.into())
 }
@@ -65,7 +67,8 @@ async fn refresh(
     State(state): State<Arc<AppState>>,
     Json(body): Json<RefreshRequest>,
 ) -> ApiResult<TokenResponse> {
-    let service = auth_service::AuthService::new(&state.auth_providers);
+    let services = ServiceContext::from_state(state.as_ref());
+    let service = services.auth(&state.auth_providers);
     let tokens = service.refresh(&body.refresh_token).await?;
     JsonApiResponse::ok(tokens.into())
 }

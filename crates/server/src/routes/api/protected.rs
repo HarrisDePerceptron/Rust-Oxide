@@ -3,10 +3,9 @@ use std::sync::Arc;
 use axum::{Router, extract::State, routing::get};
 
 use crate::{
-    db::dao::DaoContext,
     middleware::AuthGuard,
     response::{ApiResult, JsonApiResponse},
-    services::user_service,
+    services::{ServiceContext, user_service},
     state::AppState,
 };
 
@@ -40,6 +39,5 @@ async fn me(State(state): State<Arc<AppState>>, claims: AuthGuard) -> ApiResult<
 }
 
 fn user_service_from_state(state: &AppState) -> user_service::UserService {
-    let daos = DaoContext::new(&state.db);
-    user_service::UserService::new(daos.user())
+    ServiceContext::from_state(state).user()
 }

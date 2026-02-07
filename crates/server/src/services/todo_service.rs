@@ -13,6 +13,14 @@ pub struct TodoService {
     todo_dao: TodoDao,
 }
 
+impl CrudService for TodoService {
+    type Dao = TodoDao;
+
+    fn dao(&self) -> &Self::Dao {
+        &self.todo_dao
+    }
+}
+
 impl TodoService {
     pub fn new(todo_dao: TodoDao) -> Self {
         Self { todo_dao }
@@ -90,13 +98,5 @@ impl TodoService {
             return Err(AppError::not_found("Todo item not found"));
         }
         Ok(())
-    }
-}
-
-impl CrudService for TodoService {
-    type Dao = TodoDao;
-
-    fn dao(&self) -> &Self::Dao {
-        &self.todo_dao
     }
 }

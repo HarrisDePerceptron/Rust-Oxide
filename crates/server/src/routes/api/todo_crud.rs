@@ -12,15 +12,12 @@ use uuid::Uuid;
 
 use crate::{
     auth::Role,
-    db::{
-        dao::DaoContext,
-        entities::{todo_item, todo_list},
-    },
+    db::entities::{todo_item, todo_list},
     error::AppError,
     middleware::{AuthGuard, AuthRolGuardLayer},
     response::{ApiResult, JsonApiResponse},
     routes::base_api_router::{CrudApiRouter, Method},
-    services::todo_service,
+    services::{ServiceContext, todo_service},
     state::AppState,
 };
 
@@ -72,8 +69,7 @@ pub struct TodoListDetailResponse {
 }
 
 pub fn router(state: Arc<AppState>) -> Router {
-    let daos = DaoContext::new(&state.db);
-    let service = todo_service::TodoService::new(daos.todo());
+    let service = ServiceContext::from_state(state.as_ref()).todo();
     let crud_router = CrudApiRouter::new(service.clone(), BASE_PATH).set_method_middleware(
         Method::Create,
         AuthRolGuardLayer::new(state.clone(), Role::User),
@@ -117,8 +113,7 @@ async fn list_count_handler(
     State(state): State<Arc<AppState>>,
     _auth: AuthGuard,
 ) -> ApiResult<CountResponse> {
-    let daos = DaoContext::new(&state.db);
-    let service = todo_service::TodoService::new(daos.todo());
+    let service = ServiceContext::from_state(state.as_ref()).todo();
     let count = service.count_lists().await?;
     JsonApiResponse::ok(CountResponse { count })
 }
@@ -128,8 +123,7 @@ async fn item_count_handler(
     Path(id): Path<Uuid>,
     _auth: AuthGuard,
 ) -> ApiResult<CountResponse> {
-    let daos = DaoContext::new(&state.db);
-    let service = todo_service::TodoService::new(daos.todo());
+    let service = ServiceContext::from_state(state.as_ref()).todo();
     let count = service.count_items_by_list(&id).await?;
     JsonApiResponse::ok(CountResponse { count })
 }
@@ -281,6 +275,5 @@ impl From<todo_item::Model> for TodoItemResponse {
 }
 
 fn todo_service_from_state(state: &AppState) -> todo_service::TodoService {
-    let daos = DaoContext::new(&state.db);
-    todo_service::TodoService::new(daos.todo())
+    ServiceContext::from_state(state).todo()
 }

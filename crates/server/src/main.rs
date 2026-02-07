@@ -7,12 +7,10 @@ use rust_oxide::{
     auth::providers::{AuthProviders, LocalAuthProvider},
     config::AppConfig,
     db::connection,
-    db::dao::DaoContext,
     logging::init_tracing,
     middleware::{catch_panic_layer, json_error_middleware},
     routes::router,
-    services::auth_service,
-    services::user_service,
+    services::ServiceContext,
     state::AppState,
 };
 
@@ -30,9 +28,9 @@ async fn run() -> anyhow::Result<()> {
 
     let jwt = rust_oxide::state::JwtKeys::from_secret(cfg.jwt_secret.as_bytes());
     let db = connection::connect(&cfg).await?;
-    let daos = DaoContext::new(&db);
+    let services = ServiceContext::new(&db);
 
-    let providers = init_auth(&cfg, &daos, &jwt).await?;
+    let providers = init_auth(&cfg, &services, &jwt).await?;
 
     let state = AppState::new(cfg, db, jwt, providers);
 
@@ -54,16 +52,17 @@ async fn run() -> anyhow::Result<()> {
 
 async fn init_auth(
     cfg: &AppConfig,
-    daos: &DaoContext,
+    services: &ServiceContext,
     jwt: &rust_oxide::state::JwtKeys,
 ) -> anyhow::Result<AuthProviders> {
-    let user_service = user_service::UserService::new(daos.user());
-    let local_provider = LocalAuthProvider::new(user_service, daos.refresh_token(), jwt.clone());
+    let user_service = services.user();
+    let local_provider =
+        LocalAuthProvider::new(user_service, services.refresh_token_dao(), jwt.clone());
     let mut providers =
         AuthProviders::new(cfg.auth_provider).with_provider(std::sync::Arc::new(local_provider))?;
     providers.set_active(cfg.auth_provider)?;
 
-    let auth_service = auth_service::AuthService::new(&providers);
+    let auth_service = services.auth(&providers);
     auth_service.seed_admin(cfg).await?;
 
     Ok(providers)
