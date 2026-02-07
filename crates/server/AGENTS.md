@@ -20,6 +20,11 @@
 - `src/routes/base_api_router.rs`: generic CRUD router builder.
 - `src/routes/route_list.rs` and `src/db/entity_catalog.rs`: generated catalogs used by docs/views.
 
+## Module Index Files
+- `mod.rs` files should only contain module declarations and re-exports (plus optional module docs).
+- Do not keep executable logic, type definitions, trait definitions, or impl blocks in `mod.rs`.
+- Prefer moving module logic into a single sibling file first (for example `providers.rs`) before considering further splits.
+
 ## Extension Workflow (Entity -> DAO -> Service -> Router)
 - Add/modify entity in `src/db/entities/`.
 - Implement DAO in `src/db/dao/` via `DaoBase`.

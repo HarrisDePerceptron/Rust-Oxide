@@ -1,8 +1,5 @@
-use axum::Router;
-
 pub mod public;
+mod router;
 pub mod todo;
 
-pub fn router() -> Router {
-    Router::new().merge(public::router()).merge(todo::router())
-}
+pub use router::router;
