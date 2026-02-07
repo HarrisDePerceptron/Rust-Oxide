@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.0](https://github.com/HarrisDePerceptron/Rust-Oxide/compare/v0.3.4...v0.4.0) (2026-02-07)
+
+
+### Features
+
+* gated links for safe production ([115ade1](https://github.com/HarrisDePerceptron/Rust-Oxide/commit/115ade12c8f378e3d8f3067999ce6d070263f849))
+* seperated apis and views ([04a0248](https://github.com/HarrisDePerceptron/Rust-Oxide/commit/04a0248f2b32cfa648a0b0fe0f301d71688b1f52))
+* updated curl for auth headers ([9962f32](https://github.com/HarrisDePerceptron/Rust-Oxide/commit/9962f32115f79d8d4d1a4f723f4b88444750ed39))
+
 ## [0.3.4](https://github.com/HarrisDePerceptron/Rust-Oxide/compare/v0.3.3...v0.3.4) (2026-01-25)
 
 
