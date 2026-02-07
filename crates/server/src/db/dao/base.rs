@@ -108,11 +108,7 @@ where
     type Entity: EntityTrait + Send + Sync;
     const MAX_PAGE_SIZE: u64 = 100;
 
-    fn from_db(db: DatabaseConnection) -> Self;
-
-    fn new(db: &DatabaseConnection) -> Self {
-        Self::from_db(db.clone())
-    }
+    fn new(db: &DatabaseConnection) -> Self;
 
     fn db(&self) -> &DatabaseConnection;
 

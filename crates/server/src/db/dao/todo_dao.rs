@@ -13,8 +13,8 @@ pub struct TodoDao {
 impl DaoBase for TodoDao {
     type Entity = TodoList;
 
-    fn from_db(db: DatabaseConnection) -> Self {
-        Self { db }
+    fn new(db: &DatabaseConnection) -> Self {
+        Self { db: db.clone() }
     }
 
     fn db(&self) -> &DatabaseConnection {
@@ -30,8 +30,8 @@ struct TodoItemDao {
 impl DaoBase for TodoItemDao {
     type Entity = TodoItem;
 
-    fn from_db(db: DatabaseConnection) -> Self {
-        Self { db }
+    fn new(db: &DatabaseConnection) -> Self {
+        Self { db: db.clone() }
     }
 
     fn db(&self) -> &DatabaseConnection {

@@ -13,8 +13,8 @@ pub struct UserDao {
 impl DaoBase for UserDao {
     type Entity = User;
 
-    fn from_db(db: DatabaseConnection) -> Self {
-        Self { db }
+    fn new(db: &DatabaseConnection) -> Self {
+        Self { db: db.clone() }
     }
 
     fn db(&self) -> &DatabaseConnection {

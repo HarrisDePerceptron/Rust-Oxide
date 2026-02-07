@@ -15,8 +15,8 @@ pub struct RefreshTokenDao {
 impl DaoBase for RefreshTokenDao {
     type Entity = RefreshToken;
 
-    fn from_db(db: DatabaseConnection) -> Self {
-        Self { db }
+    fn new(db: &DatabaseConnection) -> Self {
+        Self { db: db.clone() }
     }
 
     fn db(&self) -> &DatabaseConnection {
