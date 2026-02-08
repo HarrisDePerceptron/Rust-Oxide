@@ -25,6 +25,11 @@
 - Do not keep executable logic, type definitions, trait definitions, or impl blocks in `mod.rs`.
 - Prefer moving module logic into a single sibling file first (for example `providers.rs`) before considering further splits.
 
+## Rust Rules
+- Prefer single-responsibility functions and types: one function should do one coherent job.
+- Keep handlers thin; move reusable business/data logic into `services/` or `db/dao/`.
+
+
 ## Extension Workflow (Entity -> DAO -> Service -> Router)
 - Add/modify entity in `src/db/entities/`.
 - Implement DAO in `src/db/dao/` via `DaoBase`.
@@ -82,8 +87,18 @@
 - DB-backed integration tests may be `#[ignore]` with explicit reason.
 - Keep test names behavior-oriented (for example: `rejects_missing_auth`, `applies_filter_range`).
 
+
+## View JavaScript Rules (`views/*.html`)
+- Keep high-level flow in concrete named functions (for example `initDocsPage`, `initNavigation`, `syncFromLocation`).
+- Anonymous callbacks are allowed only for small local leaf behavior (for example short event handlers or timers).
+- If a JavaScript routine is reusable across functions, extract it into a separate named function.
+
+
 ## Commands (workspace root)
 - `cargo run -p rust_oxide`
 - `cargo test -p rust_oxide`
 - `cargo clippy --all-targets --all-features`
 - `cargo fmt`
+
+
+

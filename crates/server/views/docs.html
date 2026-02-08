@@ -33,15 +33,44 @@
             </div>
           </aside>
 
-          <div class="fade-3">
-            {{ sections_html|safe }}
+          <div class="fade-3 space-y-6">
+            <div
+              data-doc-pager
+              class="flex items-center justify-between"
+            >
+              <button
+                type="button"
+                data-doc-prev
+                class="rounded-full border border-black/10 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--pine)] transition hover:-translate-y-0.5"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                data-doc-next
+                class="rounded-full border border-black/10 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--pine)] transition hover:-translate-y-0.5"
+              >
+                Next
+              </button>
+            </div>
+            <div data-doc-sections>
+              {{ sections_html|safe }}
+            </div>
           </div>
         </div>
       </main>
 
       <script>
         (() => {
-          const copyWithClipboard = async (text) => {
+          let docsState = null;
+
+          function setManualScrollRestoration() {
+            if ("scrollRestoration" in history) {
+              history.scrollRestoration = "manual";
+            }
+          }
+
+          async function copyWithClipboard(text) {
             if (!navigator.clipboard || !navigator.clipboard.writeText) {
               return false;
             }
@@ -51,9 +80,9 @@
             } catch {
               return false;
             }
-          };
+          }
 
-          const copyWithFallback = (text) => {
+          function copyWithFallback(text) {
             const input = document.createElement("textarea");
             input.value = text;
             input.setAttribute("readonly", "true");
@@ -69,9 +98,13 @@
             }
             document.body.removeChild(input);
             return ok;
-          };
+          }
 
-          const showCopied = (button) => {
+          async function copyText(text) {
+            return (await copyWithClipboard(text)) || copyWithFallback(text);
+          }
+
+          function showCopied(button) {
             const original = button.textContent;
             button.textContent = "Copied";
             button.disabled = true;
@@ -79,66 +112,76 @@
               button.textContent = original;
               button.disabled = false;
             }, 1200);
-          };
+          }
 
-          const attachCopyHandler = (button, getText) => {
+          function attachCopyHandler(button, getText) {
             button.addEventListener("click", async () => {
               const text = getText().trim();
               if (!text) {
                 return;
               }
-              const copied =
-                (await copyWithClipboard(text)) || copyWithFallback(text);
-              if (copied) {
+              if (await copyText(text)) {
                 showCopied(button);
               }
             });
-          };
+          }
 
-          const terminalButtons = document.querySelectorAll("[data-copy-target]");
-          terminalButtons.forEach((button) => {
-            const targetId = button.dataset.copyTarget;
-            const target = targetId ? document.getElementById(targetId) : null;
-            if (!target) {
-              return;
+          function initTerminalCopyButtons() {
+            const terminalButtons = document.querySelectorAll("[data-copy-target]");
+            for (const button of terminalButtons) {
+              const targetId = button.dataset.copyTarget;
+              const target = targetId ? document.getElementById(targetId) : null;
+              if (!target) {
+                continue;
+              }
+              attachCopyHandler(button, () => target.textContent);
             }
-            attachCopyHandler(button, () => target.textContent);
-          });
+          }
 
-          const codeBlocks = document.querySelectorAll("pre > code");
-          codeBlocks.forEach((code) => {
-            const pre = code.parentElement;
-            if (!pre || pre.closest("[data-terminal]")) {
-              return;
-            }
-            if (pre.querySelector("[data-copy-inline]")) {
-              return;
-            }
-            pre.classList.add("relative");
-            pre.style.paddingTop = "2.5rem";
-
+          function createInlineCopyButton() {
             const button = document.createElement("button");
             button.type = "button";
             button.textContent = "Copy";
             button.dataset.copyInline = "true";
             button.className =
               "absolute right-3 top-3 rounded-full border border-black/10 bg-white/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] shadow-sm transition hover:-translate-y-0.5";
-            pre.appendChild(button);
-            attachCopyHandler(button, () => code.textContent);
-          });
+            return button;
+          }
 
-          const desktopNavContainer = document.querySelector("[data-doc-nav-desktop]");
-          const mobileNavContainer = document.querySelector("[data-doc-nav-mobile]");
-          const sections = Array.from(document.querySelectorAll(".doc-section[id]"));
+          function initInlineCodeCopyButtons() {
+            const codeBlocks = document.querySelectorAll("pre > code");
+            for (const code of codeBlocks) {
+              const pre = code.parentElement;
+              if (!pre || pre.closest("[data-terminal]")) {
+                continue;
+              }
+              if (pre.querySelector("[data-copy-inline]")) {
+                continue;
+              }
 
-          const toTitleCase = (raw) =>
-            raw
+              pre.classList.add("relative");
+              pre.style.paddingTop = "2.5rem";
+
+              const button = createInlineCopyButton();
+              pre.appendChild(button);
+              attachCopyHandler(button, () => code.textContent);
+            }
+          }
+
+          function initCopyButtons() {
+            initTerminalCopyButtons();
+            initInlineCodeCopyButtons();
+          }
+
+          function toTitleCase(raw) {
+            return raw
               .split("-")
               .filter(Boolean)
               .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
               .join(" ");
+          }
 
-          const sectionTitle = (section) => {
+          function getSectionTitle(section) {
             const configured = (section.dataset.navTitle || "").trim();
             if (configured) {
               return configured;
@@ -148,14 +191,14 @@
               return heading.textContent.trim();
             }
             return toTitleCase(section.id);
-          };
+          }
 
-          const createNavLink = (section, variant) => {
+          function createNavLink(section, variant) {
             const link = document.createElement("a");
             link.href = `#${section.id}`;
             link.dataset.docNav = "true";
             link.dataset.navVariant = variant;
-            link.textContent = sectionTitle(section);
+            link.textContent = getSectionTitle(section);
             if (variant === "desktop") {
               link.className =
                 "doc-nav-link block rounded-lg px-3 py-2 text-black/70 transition hover:bg-[color:var(--mist)] hover:text-[color:var(--pine)]";
@@ -164,23 +207,26 @@
                 "doc-nav-link whitespace-nowrap rounded-full border border-black/10 bg-white/90 px-3 py-2 font-semibold uppercase tracking-[0.2em] text-[color:var(--pine)] transition";
             }
             return link;
-          };
-
-          if (desktopNavContainer) {
-            sections.forEach((section) => {
-              desktopNavContainer.appendChild(createNavLink(section, "desktop"));
-            });
-          }
-          if (mobileNavContainer) {
-            sections.forEach((section) => {
-              mobileNavContainer.appendChild(createNavLink(section, "mobile"));
-            });
           }
 
-          const navLinks = Array.from(document.querySelectorAll("[data-doc-nav]"));
+          function appendNavLinksForVariant(state, container, variant) {
+            if (!container) {
+              return;
+            }
+            for (const section of state.sections) {
+              const link = createNavLink(section, variant);
+              container.appendChild(link);
+              state.navLinks.push(link);
+            }
+          }
 
-          const setActiveSection = (id) => {
-            navLinks.forEach((link) => {
+          function renderNavLinks(state) {
+            appendNavLinksForVariant(state, state.desktopNavContainer, "desktop");
+            appendNavLinksForVariant(state, state.mobileNavContainer, "mobile");
+          }
+
+          function setActiveNavState(state, id) {
+            for (const link of state.navLinks) {
               const href = link.getAttribute("href") || "";
               const isActive = href === `#${id}`;
               const variant = link.dataset.navVariant || "desktop";
@@ -202,68 +248,239 @@
                   link.classList.remove("font-semibold");
                 }
               }
-            });
-          };
-
-          const hashId = window.location.hash.replace("#", "");
-          if (hashId) {
-            setActiveSection(hashId);
-          } else if (sections.length > 0) {
-            setActiveSection(sections[0].id);
+            }
           }
 
-          const findActiveSection = () => {
-            if (sections.length === 0) {
-              return null;
-            }
+          function forceWindowTop() {
+            window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+            requestAnimationFrame(() => {
+              window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+              requestAnimationFrame(() => {
+                window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+              });
+            });
+            setTimeout(() => {
+              window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+            }, 80);
+          }
 
-            const marker = 160;
-            const atBottom =
-              window.innerHeight + window.scrollY >=
-              document.documentElement.scrollHeight - 2;
-            if (atBottom) {
-              return sections[sections.length - 1].id;
-            }
-
-            let activeId = sections[0].id;
-            for (const section of sections) {
-              const top = section.getBoundingClientRect().top;
-              if (top <= marker) {
-                activeId = section.id;
-              } else {
-                break;
-              }
-            }
-            return activeId;
-          };
-
-          let scrollTicking = false;
-          const syncNavToScroll = () => {
-            if (scrollTicking) {
+          function setButtonDisabled(button, disabled) {
+            if (!button) {
               return;
             }
-            scrollTicking = true;
-            requestAnimationFrame(() => {
-              const activeId = findActiveSection();
-              if (activeId) {
-                setActiveSection(activeId);
-              }
-              scrollTicking = false;
-            });
-          };
+            button.disabled = disabled;
+            button.setAttribute("aria-disabled", disabled ? "true" : "false");
+            button.classList.toggle("opacity-40", disabled);
+            button.classList.toggle("cursor-not-allowed", disabled);
+          }
 
-          window.addEventListener("scroll", syncNavToScroll, { passive: true });
-          window.addEventListener("resize", syncNavToScroll);
-          syncNavToScroll();
-
-          window.addEventListener("hashchange", () => {
-            const id = window.location.hash.replace("#", "");
-            if (id) {
-              setActiveSection(id);
-            } else {
-              syncNavToScroll();
+          function updatePagerState(state) {
+            if (state.sections.length === 0 || state.activeIndex < 0) {
+              setButtonDisabled(state.prevButton, true);
+              setButtonDisabled(state.nextButton, true);
+              return;
             }
-          });
+            setButtonDisabled(state.prevButton, state.activeIndex <= 0);
+            setButtonDisabled(
+              state.nextButton,
+              state.activeIndex >= state.sections.length - 1
+            );
+          }
+
+          function setSectionVisibility(state, activeIndex) {
+            for (let i = 0; i < state.sections.length; i += 1) {
+              const section = state.sections[i];
+              const isActive = i === activeIndex;
+              section.classList.toggle("hidden", !isActive);
+              section.setAttribute("aria-hidden", isActive ? "false" : "true");
+            }
+          }
+
+          function findSectionIndexById(state, id) {
+            return state.sections.findIndex((section) => section.id === id);
+          }
+
+          function updateHistoryHash(id, replaceHistory) {
+            const targetHash = `#${id}`;
+            if (window.location.hash === targetHash) {
+              return;
+            }
+            if (replaceHistory) {
+              history.replaceState(null, "", targetHash);
+            } else {
+              history.pushState(null, "", targetHash);
+            }
+          }
+
+          function activateSection(state, nextIndex, options = {}) {
+            const { scroll = true } = options;
+            if (
+              state.sections.length === 0 ||
+              nextIndex < 0 ||
+              nextIndex >= state.sections.length
+            ) {
+              return;
+            }
+
+            state.activeIndex = nextIndex;
+            setSectionVisibility(state, state.activeIndex);
+
+            const activeSection = state.sections[state.activeIndex];
+            setActiveNavState(state, activeSection.id);
+            updatePagerState(state);
+
+            if (scroll) {
+              forceWindowTop();
+            }
+          }
+
+          function goToSection(state, id, options = {}) {
+            const {
+              scroll = true,
+              updateHistory = true,
+              replaceHistory = false,
+            } = options;
+            const targetIndex = findSectionIndexById(state, id);
+            if (targetIndex < 0) {
+              return;
+            }
+            if (updateHistory) {
+              updateHistoryHash(id, replaceHistory);
+            }
+            activateSection(state, targetIndex, { scroll });
+          }
+
+          function goRelative(state, offset) {
+            const targetIndex = state.activeIndex + offset;
+            if (targetIndex < 0 || targetIndex >= state.sections.length) {
+              return;
+            }
+            goToSection(state, state.sections[targetIndex].id);
+          }
+
+          function getHashId() {
+            return window.location.hash.replace("#", "");
+          }
+
+          function syncFromLocation(state, options = {}) {
+            const { scroll = true } = options;
+            if (state.sections.length === 0) {
+              updatePagerState(state);
+              return;
+            }
+            const hashId = getHashId();
+            const hashIndex = hashId ? findSectionIndexById(state, hashId) : -1;
+            if (hashIndex >= 0) {
+              activateSection(state, hashIndex, { scroll });
+              return;
+            }
+            goToSection(state, state.sections[0].id, {
+              scroll,
+              updateHistory: true,
+              replaceHistory: true,
+            });
+            forceWindowTop();
+          }
+
+          function hidePagerWhenNotNeeded(state) {
+            if (state.pager && state.sections.length <= 1) {
+              state.pager.classList.add("hidden");
+            }
+          }
+
+          function handleNavLinkClick(event) {
+            event.preventDefault();
+            if (!docsState) {
+              return;
+            }
+            const target = event.currentTarget;
+            if (!(target instanceof HTMLAnchorElement)) {
+              return;
+            }
+            const href = target.getAttribute("href") || "";
+            const id = href.replace(/^#/, "");
+            if (id) {
+              goToSection(docsState, id);
+            }
+          }
+
+          function handlePrevButtonClick() {
+            if (!docsState) {
+              return;
+            }
+            goRelative(docsState, -1);
+          }
+
+          function handleNextButtonClick() {
+            if (!docsState) {
+              return;
+            }
+            goRelative(docsState, 1);
+          }
+
+          function handleLocationChanged() {
+            if (!docsState) {
+              return;
+            }
+            syncFromLocation(docsState, { scroll: true });
+          }
+
+          function bindNavEvents(state) {
+            for (const link of state.navLinks) {
+              link.addEventListener("click", handleNavLinkClick);
+            }
+          }
+
+          function bindPagerEvents(state) {
+            if (state.prevButton) {
+              state.prevButton.addEventListener("click", handlePrevButtonClick);
+            }
+            if (state.nextButton) {
+              state.nextButton.addEventListener("click", handleNextButtonClick);
+            }
+          }
+
+          function bindLocationEvents() {
+            window.addEventListener("hashchange", handleLocationChanged);
+            window.addEventListener("popstate", handleLocationChanged);
+          }
+
+          function createDocsState() {
+            return {
+              desktopNavContainer: document.querySelector("[data-doc-nav-desktop]"),
+              mobileNavContainer: document.querySelector("[data-doc-nav-mobile]"),
+              pager: document.querySelector("[data-doc-pager]"),
+              prevButton: document.querySelector("[data-doc-prev]"),
+              nextButton: document.querySelector("[data-doc-next]"),
+              sections: Array.from(document.querySelectorAll(".doc-section[id]")),
+              navLinks: [],
+              activeIndex: -1,
+            };
+          }
+
+          function initDocsNavigation() {
+            docsState = createDocsState();
+            renderNavLinks(docsState);
+            bindNavEvents(docsState);
+            bindPagerEvents(docsState);
+            hidePagerWhenNotNeeded(docsState);
+
+            if (docsState.sections.length > 0) {
+              syncFromLocation(docsState, { scroll: false });
+            } else {
+              updatePagerState(docsState);
+            }
+
+            bindLocationEvents();
+          }
+
+          function initDocsPage() {
+            setManualScrollRestoration();
+            initCopyButtons();
+            initDocsNavigation();
+          }
+
+          initDocsPage();
         })();
       </script>
 {% endblock %}
