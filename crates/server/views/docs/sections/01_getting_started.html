@@ -1,0 +1,116 @@
+        <section id="getting-started" data-nav-title="Getting started" class="doc-section fade-2 mx-auto mt-14 max-w-3xl space-y-4">
+          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
+            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
+            Getting started
+          </p>
+          <h2 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">From entity to API in four steps.</h2>
+          <p class="text-sm text-black/70">
+            The minimum path is: define your SeaORM entity, add a DAO, implement a service,
+            then mount a CRUD router. Provider wiring is centralized in
+            <span class="font-semibold">src/auth/bootstrap.rs</span>, so
+            <span class="font-semibold">main.rs</span> only orchestrates startup.
+          </p>
+          <div class="rounded-2xl border border-black/10 bg-white/90 p-4 text-sm text-black/70">
+            <ol class="list-decimal list-inside space-y-1">
+              <li>Define entity in <span class="font-semibold">src/db/entities/</span></li>
+              <li>Add DAO in <span class="font-semibold">src/db/dao/</span></li>
+              <li>Implement <span class="font-semibold">CrudService</span> in <span class="font-semibold">src/services/</span></li>
+              <li>Mount <span class="font-semibold">CrudApiRouter</span> in <span class="font-semibold">src/routes/api/</span></li>
+            </ol>
+          </div>
+          <div class="rounded-2xl border border-black/10 bg-white/90 p-4 text-xs text-black/70">
+            <p class="font-semibold text-[color:var(--pine)]">Step 1: Entity</p>
+            <pre class="mt-3 overflow-x-auto rounded-xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>// src/db/entities/todo_list.rs
+use base_entity_derive::base_entity;
+use sea_orm::entity::prelude::*;
+
+#[base_entity]
+#[sea_orm::model]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, DeriveEntityModel)]
+#[sea_orm(table_name = "todo_lists")]
+pub struct Model {
+    pub title: String,
+    #[sea_orm(default_value = 0)]
+    pub score: i32,
+    #[sea_orm(has_many)]
+    pub items: HasMany<super::todo_item::Entity>,
+}
+
+impl ActiveModelBehavior for ActiveModel {}</code></pre>
+          </div>
+          <div class="rounded-2xl border border-black/10 bg-white/90 p-4 text-xs text-black/70">
+            <p class="font-semibold text-[color:var(--pine)]">Step 2: DAO</p>
+            <pre class="mt-3 overflow-x-auto rounded-xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>// src/db/dao/todo_dao.rs
+use sea_orm::DatabaseConnection;
+use crate::db::dao::DaoBase;
+use crate::db::entities::prelude::TodoList;
+
+#[derive(Clone)]
+pub struct TodoDao {
+    db: DatabaseConnection,
+}
+
+impl DaoBase for TodoDao {
+    type Entity = TodoList;
+
+    fn new(db: &DatabaseConnection) -> Self {
+        Self { db: db.clone() }
+    }
+
+    fn db(&self) -> &DatabaseConnection {
+        &self.db
+    }
+}</code></pre>
+          </div>
+          <div class="rounded-2xl border border-black/10 bg-white/90 p-4 text-xs text-black/70">
+            <p class="font-semibold text-[color:var(--pine)]">Step 3: Service</p>
+            <pre class="mt-3 overflow-x-auto rounded-xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>// src/services/todo_service.rs
+use crate::db::dao::TodoDao;
+use crate::services::crud_service::CrudService;
+
+#[derive(Clone)]
+pub struct TodoService {
+    todo_dao: TodoDao,
+}
+
+impl TodoService {
+    pub fn new(todo_dao: TodoDao) -> Self {
+        Self { todo_dao }
+    }
+}
+
+impl CrudService for TodoService {
+    type Dao = TodoDao;
+
+    fn dao(&self) -> &Self::Dao {
+        &self.todo_dao
+    }
+}</code></pre>
+          </div>
+          <div class="rounded-2xl border border-black/10 bg-white/90 p-4 text-xs text-black/70">
+            <p class="font-semibold text-[color:var(--pine)]">Step 4: Router</p>
+            <pre class="mt-3 overflow-x-auto rounded-xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>// src/routes/api/todo_crud.rs
+use std::sync::Arc;
+use axum::Router;
+use crate::{
+    auth::Role,
+    middleware::AuthRolGuardLayer,
+    routes::base_api_router::{CrudApiRouter, Method},
+    services::ServiceContext,
+    state::AppState,
+};
+
+const BASE_PATH: &str = "/todo-crud";
+
+pub fn router(state: Arc<AppState>) -> Router {
+    let service = ServiceContext::from_state(state.as_ref()).todo();
+    CrudApiRouter::new(service, BASE_PATH)
+        .set_method_middleware(
+            Method::Create,
+            AuthRolGuardLayer::new(state.clone(), Role::User),
+        )
+        .router()
+        .with_state(state)
+}</code></pre>
+          </div>
+        </section>

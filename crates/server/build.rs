@@ -1,5 +1,7 @@
 use std::{collections::HashSet, env, path::Path};
 
+#[path = "build/docs.rs"]
+mod docs;
 #[path = "build/entities.rs"]
 mod entities;
 #[path = "build/routes.rs"]
@@ -87,4 +89,5 @@ fn main() {
     let out_path = Path::new(&out_dir);
     routes::write_routes(out_path, &routes_list);
     entities::write_entities(out_path, &entities_list, &relations);
+    docs::write_docs_sections(manifest_path, out_path);
 }

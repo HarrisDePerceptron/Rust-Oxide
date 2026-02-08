@@ -1,0 +1,120 @@
+        <section id="cli" data-nav-title="CLI" class="doc-section fade-2 mx-auto mt-14 max-w-3xl space-y-4">
+          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
+            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
+            CLI
+          </p>
+          <h2 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">Scaffold projects and APIs fast.</h2>
+          <p class="text-sm text-black/70">
+            The companion CLI is named <span class="font-semibold">oxide</span>. Install it once, then initialize
+            a fresh project and add or remove CRUD APIs from your project root.
+          </p>
+          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
+            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Install the CLI</p>
+            <div
+              class="mt-4 rounded-2xl border border-black/10 shadow-inner"
+              data-terminal="true"
+              style="background-color: var(--pine); color: var(--mist);"
+            >
+              <div class="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/70">
+                <span>Terminal</span>
+                <button
+                  class="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/40 hover:text-white"
+                  data-copy-target="terminal-cli-install"
+                  type="button"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-cli-install"># with Rust installed (crates.io)
+cargo install rust-oxide-cli
+
+# no Rust required (macOS/Linux)
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh | sh</code></pre>
+            </div>
+            <div
+              class="mt-3 rounded-2xl border border-black/10 shadow-inner"
+              data-terminal="true"
+              style="background-color: var(--pine); color: var(--mist);"
+            >
+              <div class="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/70">
+                <span>Terminal</span>
+                <button
+                  class="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/40 hover:text-white"
+                  data-copy-target="terminal-cli-update"
+                  type="button"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-cli-update"># update to the latest version
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh | sh -s -- --update
+
+# uninstall
+curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh | sh -s -- --uninstall</code></pre>
+            </div>
+          </div>
+          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
+            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Init a new project</p>
+            <div
+              class="mt-4 rounded-2xl border border-black/10 shadow-inner"
+              data-terminal="true"
+              style="background-color: var(--pine); color: var(--mist);"
+            >
+              <div class="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/70">
+                <span>Terminal</span>
+                <button
+                  class="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/40 hover:text-white"
+                  data-copy-target="terminal-cli-init"
+                  type="button"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-cli-init"># installed via cargo or installer
+oxide init my_app
+
+# from this repo
+cargo run -p rust-oxide-cli -- init my_app</code></pre>
+            </div>
+            <p class="mt-2 text-xs text-black/50">
+              Add <span class="font-semibold">--non-interactive</span> or
+              <span class="font-semibold">--force</span> when you want to skip prompts.
+            </p>
+          </div>
+          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
+            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Add or remove an API</p>
+            <p class="mt-2 text-sm text-black/60">
+              Run these commands from your project root (the directory with <span class="font-semibold">Cargo.toml</span>).
+            </p>
+            <div
+              class="mt-4 rounded-2xl border border-black/10 shadow-inner"
+              data-terminal="true"
+              style="background-color: var(--pine); color: var(--mist);"
+            >
+              <div class="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/70">
+                <span>Terminal</span>
+                <button
+                  class="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/40 hover:text-white"
+                  data-copy-target="terminal-cli-api"
+                  type="button"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-cli-api"># add a CRUD API
+oxide api add todo_item --fields "title:string,done:bool"
+
+# remove a CRUD API
+oxide api remove todo_item
+
+# preview changes
+oxide api add todo_item --dry-run</code></pre>
+            </div>
+            <p class="mt-2 text-xs text-black/50">
+              Use <span class="font-semibold">--no-auth</span> to skip auth middleware and
+              <span class="font-semibold">--force</span> to overwrite or prune when needed.
+              For local dev, prefix with <span class="font-semibold">cargo run -p rust-oxide-cli --</span>.
+            </p>
+            <p class="mt-2 text-xs text-black/50">Run <span class="font-semibold">oxide --help</span> for full flags.</p>
+          </div>
+        </section>

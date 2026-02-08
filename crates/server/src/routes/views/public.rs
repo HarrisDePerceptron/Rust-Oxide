@@ -12,6 +12,8 @@ use tower_http::services::ServeDir;
 use crate::db::entity_catalog::{self, EntityInfo};
 #[cfg(debug_assertions)]
 use crate::routes::route_list::routes;
+#[cfg(debug_assertions)]
+include!(concat!(env!("OUT_DIR"), "/docs_sections_generated.rs"));
 
 #[cfg(debug_assertions)]
 #[derive(Clone)]
@@ -64,6 +66,7 @@ struct EntitiesTemplate {
 struct DocsTemplate {
     now: String,
     project_name: String,
+    sections_html: String,
 }
 
 #[derive(Template)]
@@ -146,9 +149,14 @@ async fn entities_view() -> Result<Html<String>, HtmlError> {
 async fn docs_view() -> Result<Html<String>, HtmlError> {
     let now = Local::now().to_rfc3339();
     let project_name = project_name();
-    let rendered = DocsTemplate { now, project_name }
-        .render()
-        .map_err(|_| html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render docs"))?;
+    let sections_html = DOCS_SECTIONS_HTML.to_string();
+    let rendered = DocsTemplate {
+        now,
+        project_name,
+        sections_html,
+    }
+    .render()
+    .map_err(|_| html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render docs"))?;
     Ok(Html(rendered))
 }
 

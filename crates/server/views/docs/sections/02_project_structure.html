@@ -1,0 +1,41 @@
+        <section id="project-structure" data-nav-title="Project structure" class="doc-section fade-2 mx-auto mt-14 max-w-3xl space-y-4">
+          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
+            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
+            Project structure
+          </p>
+          <h2 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">Know where to look first.</h2>
+          <p class="text-sm text-black/70">
+            This tree highlights the core modules you will touch most when extending the template.
+          </p>
+          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code># repo root (key modules)
+src/
+  main.rs                 # config -> logging -> DB -> auth init -> state -> router
+  config.rs               # env-driven settings
+  state.rs                # shared AppState (config, db, auth providers)
+  auth/
+    bootstrap.rs          # provider registration + active provider selection
+    providers/            # auth provider implementations
+  routes/                 # API + HTML routes
+    base_api_router.rs    # CRUD router builder
+    base_router.rs        # router helper trait
+    route_list.rs         # generated route list
+    api/
+      public.rs           # /api/v1/public + /api/v1/routes.json
+      auth.rs             # /api/v1 register/login/refresh
+      protected.rs        # /api/v1/me route
+      admin.rs            # /api/v1/admin stats
+      todo_crud.rs        # /api/v1 todo CRUD
+    views/
+      public.rs           # landing + docs + routes views
+      todo.rs             # /todo/ui
+  services/               # business logic layer
+    crud_service.rs       # filter parsing + list helpers
+  db/
+    entities/             # SeaORM entities (schema)
+    dao/                  # data access objects
+views/
+  base.html               # shared layout
+  docs.html               # docs page</code></pre>
+          </div>
+        </section>

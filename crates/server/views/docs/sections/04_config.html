@@ -1,0 +1,45 @@
+        <section id="config" data-nav-title="Application config" class="doc-section fade-2 mx-auto mt-14 max-w-3xl space-y-4">
+          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
+            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
+            Application config
+          </p>
+          <h2 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">Extend AppConfig, then use it anywhere.</h2>
+          <p class="text-sm text-black/70">
+            Configuration lives in <span class="font-semibold">src/config.rs</span> and is loaded once
+            at startup. The config is stored on <span class="font-semibold">AppState</span>, so routes
+            and services can access it via the shared state.
+          </p>
+          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
+            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Step 1: add a field</p>
+            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/config.rs
+#[derive(Debug, Clone)]
+pub struct AppConfig {
+    // ...
+    pub app_name: String,
+}
+
+impl AppConfig {
+    pub fn from_env() -> Result<Self> {
+        // ...
+        let app_name = std::env::var("APP_NAME")
+            .unwrap_or_else(|_| "Sample Server".to_string());
+        Ok(Self {
+            // ...
+            app_name,
+        })
+    }
+}</code></pre>
+          </div>
+          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
+            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Step 2: read in routes</p>
+            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/routes/api/public.rs
+use axum::extract::State;
+use std::sync::Arc;
+use crate::state::AppState;
+
+async fn handler(State(state): State<Arc<AppState>>) {
+    let name = &state.config.app_name;
+    // use name in your response
+}</code></pre>
+          </div>
+        </section>

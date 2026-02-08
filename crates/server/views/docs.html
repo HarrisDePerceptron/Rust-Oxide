@@ -5,7 +5,7 @@
 
 {% block content %}
       <main class="px-6 pb-16 pt-10 sm:px-10">
-        <section class="fade-1 mx-auto max-w-3xl space-y-6">
+        <section class="fade-1 mx-auto max-w-6xl space-y-6">
           <div
             class="inline-flex items-center gap-3 rounded-full border border-black/10 bg-white/80 px-4 py-2 text-xs uppercase tracking-[0.3em] text-black/60 shadow-sm"
           >
@@ -15,712 +15,28 @@
           <h1 class="font-display text-4xl leading-tight text-[color:var(--pine)] sm:text-5xl">
             {{ project_name }} Template Documentation
           </h1>
-          <p class="text-base text-black/70 sm:text-lg">
-            Use this page as your quick reference for wiring CRUD APIs, tuning
-            filters, and knowing where to extend the core building blocks.
+          <p class="max-w-3xl text-base text-black/70 sm:text-lg">
+            Single-page docs with section-based rendering. Use the sidebar to jump between
+            setup, architecture, auth, CRUD, filters, and CLI workflows.
           </p>
-          <div class="flex flex-wrap items-center gap-3 text-xs">
-            <a
-              class="rounded-full border border-black/10 bg-white/80 px-4 py-2 font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] transition hover:-translate-y-0.5"
-              href="#getting-started"
-            >
-              Getting started
-            </a>
-            <a
-              class="rounded-full border border-black/10 bg-white/80 px-4 py-2 font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] transition hover:-translate-y-0.5"
-              href="#cli"
-            >
-              CLI
-            </a>
-            <a
-              class="rounded-full border border-black/10 bg-white/80 px-4 py-2 font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] transition hover:-translate-y-0.5"
-              href="#config"
-            >
-              Config
-            </a>
-            <a
-              class="rounded-full border border-black/10 bg-white/80 px-4 py-2 font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] transition hover:-translate-y-0.5"
-              href="#crud-router"
-            >
-              CRUD router
-            </a>
-            <a
-              class="rounded-full border border-black/10 bg-white/80 px-4 py-2 font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] transition hover:-translate-y-0.5"
-              href="#filters"
-            >
-              Filters
-            </a>
-          </div>
         </section>
 
-        <section id="getting-started" class="fade-2 mx-auto mt-14 max-w-3xl space-y-4">
-          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
-            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
-            Getting started
-          </p>
-          <h2 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">From entity to API in four steps.</h2>
-          <p class="text-sm text-black/70">
-            The minimum path is: define your SeaORM entity, add a DAO, implement a service,
-            then mount a CRUD router. Provider wiring is centralized in
-            <span class="font-semibold">src/auth/bootstrap.rs</span>, so
-            <span class="font-semibold">main.rs</span> only orchestrates startup.
-          </p>
-          <div class="rounded-2xl border border-black/10 bg-white/90 p-4 text-sm text-black/70">
-            <ol class="list-decimal list-inside space-y-1">
-              <li>Define entity in <span class="font-semibold">src/db/entities/</span></li>
-              <li>Add DAO in <span class="font-semibold">src/db/dao/</span></li>
-              <li>Implement <span class="font-semibold">CrudService</span> in <span class="font-semibold">src/services/</span></li>
-              <li>Mount <span class="font-semibold">CrudApiRouter</span> in <span class="font-semibold">src/routes/api/</span></li>
-            </ol>
-          </div>
-          <div class="rounded-2xl border border-black/10 bg-white/90 p-4 text-xs text-black/70">
-            <p class="font-semibold text-[color:var(--pine)]">Step 1: Entity</p>
-            <pre class="mt-3 overflow-x-auto rounded-xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>// src/db/entities/todo_list.rs
-use base_entity_derive::base_entity;
-use sea_orm::entity::prelude::*;
+        <div class="mx-auto mt-10 grid max-w-6xl gap-8 lg:grid-cols-[240px_1fr]">
+          <aside class="fade-2">
+            <nav class="sticky top-24 hidden rounded-3xl border border-black/10 bg-white/90 p-5 shadow-lg shadow-black/5 lg:block">
+              <p class="text-xs font-semibold uppercase tracking-[0.28em] text-black/50">On this page</p>
+              <div data-doc-nav-desktop class="mt-4 space-y-1 text-sm"></div>
+            </nav>
 
-#[base_entity]
-#[sea_orm::model]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, DeriveEntityModel)]
-#[sea_orm(table_name = "todo_lists")]
-pub struct Model {
-    pub title: String,
-    #[sea_orm(default_value = 0)]
-    pub score: i32,
-    #[sea_orm(has_many)]
-    pub items: HasMany<super::todo_item::Entity>,
-}
-
-impl ActiveModelBehavior for ActiveModel {}</code></pre>
-          </div>
-          <div class="rounded-2xl border border-black/10 bg-white/90 p-4 text-xs text-black/70">
-            <p class="font-semibold text-[color:var(--pine)]">Step 2: DAO</p>
-            <pre class="mt-3 overflow-x-auto rounded-xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>// src/db/dao/todo_dao.rs
-use sea_orm::DatabaseConnection;
-use crate::db::dao::DaoBase;
-use crate::db::entities::prelude::TodoList;
-
-#[derive(Clone)]
-pub struct TodoDao {
-    db: DatabaseConnection,
-}
-
-impl DaoBase for TodoDao {
-    type Entity = TodoList;
-
-    fn new(db: &DatabaseConnection) -> Self {
-        Self { db: db.clone() }
-    }
-
-    fn db(&self) -> &DatabaseConnection {
-        &self.db
-    }
-}</code></pre>
-          </div>
-          <div class="rounded-2xl border border-black/10 bg-white/90 p-4 text-xs text-black/70">
-            <p class="font-semibold text-[color:var(--pine)]">Step 3: Service</p>
-            <pre class="mt-3 overflow-x-auto rounded-xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>// src/services/todo_service.rs
-use crate::db::dao::TodoDao;
-use crate::services::crud_service::CrudService;
-
-#[derive(Clone)]
-pub struct TodoService {
-    todo_dao: TodoDao,
-}
-
-impl TodoService {
-    pub fn new(todo_dao: TodoDao) -> Self {
-        Self { todo_dao }
-    }
-}
-
-impl CrudService for TodoService {
-    type Dao = TodoDao;
-
-    fn dao(&self) -> &Self::Dao {
-        &self.todo_dao
-    }
-}</code></pre>
-          </div>
-          <div class="rounded-2xl border border-black/10 bg-white/90 p-4 text-xs text-black/70">
-            <p class="font-semibold text-[color:var(--pine)]">Step 4: Router</p>
-            <pre class="mt-3 overflow-x-auto rounded-xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>// src/routes/api/todo_crud.rs
-use std::sync::Arc;
-use axum::Router;
-use crate::{
-    auth::Role,
-    middleware::AuthRolGuardLayer,
-    routes::base_api_router::{CrudApiRouter, Method},
-    services::ServiceContext,
-    state::AppState,
-};
-
-const BASE_PATH: &str = "/todo-crud";
-
-pub fn router(state: Arc<AppState>) -> Router {
-    let service = ServiceContext::from_state(state.as_ref()).todo();
-    CrudApiRouter::new(service, BASE_PATH)
-        .set_method_middleware(
-            Method::Create,
-            AuthRolGuardLayer::new(state.clone(), Role::User),
-        )
-        .router()
-        .with_state(state)
-}</code></pre>
-          </div>
-        </section>
-
-        <section id="project-structure" class="fade-2 mx-auto mt-14 max-w-3xl space-y-4">
-          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
-            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
-            Project structure
-          </p>
-          <h2 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">Know where to look first.</h2>
-          <p class="text-sm text-black/70">
-            This tree highlights the core modules you will touch most when extending the template.
-          </p>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code># repo root (key modules)
-src/
-  main.rs                 # config -> logging -> DB -> auth init -> state -> router
-  config.rs               # env-driven settings
-  state.rs                # shared AppState (config, db, auth providers)
-  auth/
-    bootstrap.rs          # provider registration + active provider selection
-    providers/            # auth provider implementations
-  routes/                 # API + HTML routes
-    base_api_router.rs    # CRUD router builder
-    base_router.rs        # router helper trait
-    route_list.rs         # generated route list
-    api/
-      public.rs           # /api/v1/public + /api/v1/routes.json
-      auth.rs             # /api/v1 register/login/refresh
-      protected.rs        # /api/v1/me route
-      admin.rs            # /api/v1/admin stats
-      todo_crud.rs        # /api/v1 todo CRUD
-    views/
-      public.rs           # landing + docs + routes views
-      todo.rs             # /todo/ui
-  services/               # business logic layer
-    crud_service.rs       # filter parsing + list helpers
-  db/
-    entities/             # SeaORM entities (schema)
-    dao/                  # data access objects
-views/
-  base.html               # shared layout
-  docs.html               # docs page</code></pre>
-          </div>
-        </section>
-
-        <section id="auth" class="fade-2 mx-auto mt-14 max-w-3xl space-y-4">
-          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
-            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
-            JWT auth
-          </p>
-          <h2 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">Register, get a token, protect routes.</h2>
-          <p class="text-sm text-black/70">
-            The auth router provides <span class="font-semibold">/api/v1/register</span>,
-            <span class="font-semibold">/api/v1/login</span>, and <span class="font-semibold">/api/v1/refresh</span>.
-            Use the access token as a Bearer token to call protected endpoints.
-          </p>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Get tokens</p>
-            <div
-              class="mt-4 rounded-2xl border border-black/10 shadow-inner"
-              data-terminal="true"
-              style="background-color: var(--pine); color: var(--mist);"
-            >
-              <div class="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/70">
-                <span>Terminal</span>
-                <button
-                  class="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/40 hover:text-white"
-                  data-copy-target="terminal-auth-tokens"
-                  type="button"
-                >
-                  Copy
-                </button>
-              </div>
-              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-auth-tokens"># register
-curl -X POST http://localhost:3000/api/v1/register \\
-  -H "Content-Type: application/json" \\
-  -d '{"email":"you@example.com","password":"password123"}'
-
-# login
-curl -X POST http://localhost:3000/api/v1/login \\
-  -H "Content-Type: application/json" \\
-  -d '{"email":"you@example.com","password":"password123"}'</code></pre>
+            <div class="mt-4 overflow-x-auto pb-1 lg:hidden">
+              <div data-doc-nav-mobile class="flex min-w-max gap-2 text-xs"></div>
             </div>
+          </aside>
+
+          <div class="fade-3">
+            {{ sections_html|safe }}
           </div>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Call a protected route</p>
-            <div
-              class="mt-4 rounded-2xl border border-black/10 shadow-inner"
-              data-terminal="true"
-              style="background-color: var(--pine); color: var(--mist);"
-            >
-              <div class="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/70">
-                <span>Terminal</span>
-                <button
-                  class="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/40 hover:text-white"
-                  data-copy-target="terminal-protected-route"
-                  type="button"
-                >
-                  Copy
-                </button>
-              </div>
-              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-protected-route"># /api/v1/me is protected
-curl http://localhost:3000/api/v1/me \\
-  -H "Authorization: Bearer $ACCESS_TOKEN"</code></pre>
-            </div>
-          </div>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Minimal route protection</p>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/routes/api/protected.rs
-use axum::{Router, routing::get};
-use std::sync::Arc;
-use crate::middleware::AuthGuard;
-use crate::state::AppState;
-
-pub fn router(state: Arc<AppState>) -> Router {
-    Router::new()
-        .route("/me", get(me))
-        .with_state(state)
-}
-
-async fn me(_auth: AuthGuard) {
-    // ...
-}</code></pre>
-          </div>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Role-based protection</p>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/routes/api/admin.rs
-use axum::{Router, routing::get};
-use std::sync::Arc;
-use crate::middleware::{AdminRole, AuthRoleGuard};
-use crate::state::AppState;
-
-pub fn router(state: Arc<AppState>) -> Router {
-    Router::new()
-        .route("/admin/stats", get(admin_stats))
-        .with_state(state)
-}
-
-async fn admin_stats(AuthRoleGuard { .. }: AuthRoleGuard<AdminRole>) {
-    // ...
-}</code></pre>
-          </div>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Role per route</p>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/routes/api/protected.rs
-use axum::{Router, routing::get};
-use std::sync::Arc;
-use crate::middleware::{AdminRole, AuthRoleGuard, UserRole};
-use crate::state::AppState;
-
-pub fn router(state: Arc<AppState>) -> Router {
-    Router::new()
-        .route("/reports", get(reports))
-        .route("/admin/stats", get(admin_stats))
-        .with_state(state)
-}
-
-async fn reports(_auth: AuthRoleGuard<UserRole>) {
-    // ...
-}
-
-async fn admin_stats(_auth: AuthRoleGuard<AdminRole>) {
-    // ...
-}</code></pre>
-          </div>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Auth providers</p>
-            <p class="mt-3 text-sm text-black/70">
-              Auth is provider-driven. The active provider is selected by <span class="font-semibold">AUTH_PROVIDER</span>
-              and registered in <span class="font-semibold">src/auth/bootstrap.rs</span>.
-              Route handlers use the auth service, and auth guards verify tokens through the active provider.
-            </p>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/auth/providers/your_provider.rs
-use async_trait::async_trait;
-use crate::auth::{Claims, TokenBundle};
-use crate::auth::providers::{AuthProvider, AuthProviderId};
-
-pub struct YourProvider;
-
-#[async_trait]
-impl AuthProvider for YourProvider {
-    fn id(&self) -> AuthProviderId { /* ... */ }
-    async fn register(&self, email: &str, password: &str) -> Result<TokenBundle, AppError> { /* ... */ }
-    async fn login(&self, email: &str, password: &str) -> Result<TokenBundle, AppError> { /* ... */ }
-    async fn refresh(&self, refresh_token: &str) -> Result<TokenBundle, AppError> { /* ... */ }
-    async fn verify(&self, access_token: &str) -> Result<Claims, AppError> { /* ... */ }
-}</code></pre>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/auth/bootstrap.rs
-let mut providers = AuthProviders::new(cfg.auth_provider)
-    .with_provider(std::sync::Arc::new(YourProvider::new(/* deps */)))?;
-providers.set_active(cfg.auth_provider)?;</code></pre>
-            <p class="mt-3 text-xs text-black/60">
-              Add provider-specific env vars, then set <span class="font-semibold">AUTH_PROVIDER</span> to switch.
-            </p>
-          </div>
-        </section>
-
-        <section id="config" class="fade-2 mx-auto mt-14 max-w-3xl space-y-4">
-          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
-            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
-            Application config
-          </p>
-          <h2 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">Extend AppConfig, then use it anywhere.</h2>
-          <p class="text-sm text-black/70">
-            Configuration lives in <span class="font-semibold">src/config.rs</span> and is loaded once
-            at startup. The config is stored on <span class="font-semibold">AppState</span>, so routes
-            and services can access it via the shared state.
-          </p>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Step 1: add a field</p>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/config.rs
-#[derive(Debug, Clone)]
-pub struct AppConfig {
-    // ...
-    pub app_name: String,
-}
-
-impl AppConfig {
-    pub fn from_env() -> Result<Self> {
-        // ...
-        let app_name = std::env::var("APP_NAME")
-            .unwrap_or_else(|_| "Sample Server".to_string());
-        Ok(Self {
-            // ...
-            app_name,
-        })
-    }
-}</code></pre>
-          </div>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Step 2: read in routes</p>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/routes/api/public.rs
-use axum::extract::State;
-use std::sync::Arc;
-use crate::state::AppState;
-
-async fn handler(State(state): State<Arc<AppState>>) {
-    let name = &state.config.app_name;
-    // use name in your response
-}</code></pre>
-          </div>
-        </section>
-
-        <section id="crud-router" class="fade-2 mx-auto mt-14 max-w-3xl space-y-4">
-          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
-            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
-            CRUD router
-          </p>
-          <h2 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">Wrap a service, expose CRUD JSON.</h2>
-          <p class="text-sm text-black/70">
-            The file <span class="font-semibold">src/routes/base_api_router.rs</span> provides
-            <span class="font-semibold">CrudApiRouter</span>. Hand it a service that implements
-            <span class="font-semibold">CrudService</span> and a base path, and you get five
-            JSON endpoints by default.
-          </p>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Quick setup</p>
-            <pre
-              class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"
-            ><code>// src/routes/api/todo_crud.rs
-use crate::auth::Role;
-use crate::middleware::AuthRolGuardLayer;
-use crate::routes::base_api_router::{CrudApiRouter, Method};
-use crate::services::ServiceContext;
-
-let service = ServiceContext::from_state(state.as_ref()).todo();
-let router = CrudApiRouter::new(service, "/todo-crud")
-    .set_method_middleware(
-        Method::Create,
-        AuthRolGuardLayer::new(state.clone(), Role::User),
-    )
-    .router();</code></pre>
-            <p class="mt-4 text-sm text-black/60">
-              Keep handlers thin. Customize list ordering and filtering through the service
-              and override list hooks in the router if needed.
-            </p>
-          </div>
-          <div class="rounded-2xl border border-black/10 bg-white/90 p-4 text-xs text-black/70">
-            <p class="font-semibold text-[color:var(--pine)]">Default endpoints</p>
-            <pre class="mt-3 overflow-x-auto rounded-xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code># http
-POST /base
-GET /base
-GET /base/{id}
-PATCH /base/{id}
-DELETE /base/{id}</code></pre>
-            <p class="mt-2 text-black/50">IDs are UUIDs in this template.</p>
-          </div>
-          <div class="rounded-2xl border border-black/10 bg-[color:var(--mist)]/60 p-4 text-xs text-black/70">
-            <p class="font-semibold text-[color:var(--pine)]">Pagination defaults</p>
-            <pre class="mt-3 overflow-x-auto rounded-xl bg-white/80 p-3 text-xs text-[color:var(--pine)]"><code># query params
-?page=1&page_size=25</code></pre>
-            <p class="mt-2 text-black/50">Max page_size is 100.</p>
-          </div>
-          <div class="rounded-2xl border border-black/10 bg-white/90 p-4 text-xs text-black/70">
-            <p class="font-semibold text-[color:var(--pine)]">Extension points</p>
-            <pre class="mt-3 overflow-x-auto rounded-xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>// src/routes/api/your_router.rs
-use axum::routing::{get, post};
-use sea_orm::{ColumnTrait, Order, QueryFilter};
-use crate::middleware::AuthGuard;
-use crate::routes::base_api_router::{CrudApiRouter, Method, ListQuery};
-
-async fn create_todo(_auth: AuthGuard) {
-    // ...
-}
-
-let router = CrudApiRouter::new(service, "/todos")
-    .set_allowed_methods(&[Method::Create, Method::List, Method::Get])
-    .router()
-    .route("/todos", post(create_todo))
-    .route("/todos", get(list_todos));
-
-fn list_order() -> Option<(Column, Order)> {
-    Some((Column::CreatedAt, Order::Desc))
-}
-
-fn list_apply(query: &ListQuery, select: Select<Entity>) -> Select<Entity> {
-    if let Some(owner_id) = query.filters.get("owner_id") {
-        select.filter(Column::OwnerId.eq(owner_id.as_str()))
-    } else {
-        select
-    }
-}</code></pre>
-          </div>
-        </section>
-
-        <section id="filters" class="fade-3 mx-auto mt-14 max-w-3xl space-y-4">
-          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
-            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
-            Filters
-          </p>
-          <h3 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">Flexible filtering with clear syntax.</h3>
-          <p class="text-sm text-black/70">
-            List endpoints accept query params and can turn them into SQL filters.
-            The default mode allows all columns and parses by column type. You can
-            switch to an allowlist or deny specific columns in your service.
-          </p>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Strings</p>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code># query
-title=acme
-title=acme*
-title=*acme
-title=*acme*</code></pre>
-            <div
-              class="mt-3 rounded-2xl border border-black/10 shadow-inner"
-              data-terminal="true"
-              style="background-color: var(--pine); color: var(--mist);"
-            >
-              <div class="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/70">
-                <span>Terminal</span>
-                <button
-                  class="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/40 hover:text-white"
-                  data-copy-target="terminal-strings"
-                  type="button"
-                >
-                  Copy
-                </button>
-              </div>
-              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-strings">curl -G http://localhost:3000/api/v1/todo-crud \\
-  --data-urlencode "title=*acme*"</code></pre>
-            </div>
-            <p class="mt-2 text-xs text-black/50">Wildcards are only allowed at the ends.</p>
-          </div>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Numbers</p>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code># query
-score=>=10
-score=<10
-score=10..25</code></pre>
-            <div
-              class="mt-3 rounded-2xl border border-black/10 shadow-inner"
-              data-terminal="true"
-              style="background-color: var(--pine); color: var(--mist);"
-            >
-              <div class="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/70">
-                <span>Terminal</span>
-                <button
-                  class="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/40 hover:text-white"
-                  data-copy-target="terminal-numbers"
-                  type="button"
-                >
-                  Copy
-                </button>
-              </div>
-              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-numbers">curl -G http://localhost:3000/api/v1/todo-crud \\
-  --data-urlencode "score=10..25"</code></pre>
-            </div>
-            <p class="mt-2 text-xs text-black/50">Ranges require both ends.</p>
-          </div>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Dates</p>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code># query
-created_at=2025-01-10T08:30:00Z
-updated_at=>=2025-01-01T00:00:00Z
-created_at=2025-01-01T00:00:00Z..2025-01-31T23:59:59Z</code></pre>
-            <div
-              class="mt-3 rounded-2xl border border-black/10 shadow-inner"
-              data-terminal="true"
-              style="background-color: var(--pine); color: var(--mist);"
-            >
-              <div class="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/70">
-                <span>Terminal</span>
-                <button
-                  class="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/40 hover:text-white"
-                  data-copy-target="terminal-dates"
-                  type="button"
-                >
-                  Copy
-                </button>
-              </div>
-              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-dates">curl -G http://localhost:3000/api/v1/todo-crud \\
-  --data-urlencode "created_at=2025-01-10T08:30:00Z"</code></pre>
-            </div>
-          </div>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Other types</p>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code># query
-active=true
-id=550e8400-e29b-41d4-a716-446655440000
-meta={"tier":"pro"}</code></pre>
-          </div>
-          <div class="rounded-2xl border border-black/10 bg-white/90 p-4 text-xs text-black/70">
-            <p class="font-semibold text-[color:var(--pine)]">Filter modes</p>
-            <pre class="mt-3 overflow-x-auto rounded-xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>// src/services/your_service.rs
-fn list_filter_mode() -> FilterMode {
-    FilterMode::Allowlist(...)
-    // or
-    FilterMode::AllColumns { deny: &["internal"], parse: ByColumnType }
-}</code></pre>
-            <p class="mt-2 text-black/50">Unknown columns return 400. Non-string filters reject wildcards.</p>
-          </div>
-        </section>
-
-        <section id="cli" class="fade-2 mx-auto mt-14 max-w-3xl space-y-4">
-          <p class="inline-flex items-center gap-2 text-lg font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] sm:text-xl">
-            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
-            CLI
-          </p>
-          <h2 class="font-display text-2xl leading-tight text-[color:var(--pine)] sm:text-3xl">Scaffold projects and APIs fast.</h2>
-          <p class="text-sm text-black/70">
-            The companion CLI is named <span class="font-semibold">oxide</span>. Install it once, then initialize
-            a fresh project and add or remove CRUD APIs from your project root.
-          </p>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Install the CLI</p>
-            <div
-              class="mt-4 rounded-2xl border border-black/10 shadow-inner"
-              data-terminal="true"
-              style="background-color: var(--pine); color: var(--mist);"
-            >
-              <div class="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/70">
-                <span>Terminal</span>
-                <button
-                  class="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/40 hover:text-white"
-                  data-copy-target="terminal-cli-install"
-                  type="button"
-                >
-                  Copy
-                </button>
-              </div>
-              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-cli-install"># with Rust installed (crates.io)
-cargo install rust-oxide-cli
-
-# no Rust required (macOS/Linux)
-curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh | sh</code></pre>
-            </div>
-            <div
-              class="mt-3 rounded-2xl border border-black/10 shadow-inner"
-              data-terminal="true"
-              style="background-color: var(--pine); color: var(--mist);"
-            >
-              <div class="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/70">
-                <span>Terminal</span>
-                <button
-                  class="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/40 hover:text-white"
-                  data-copy-target="terminal-cli-update"
-                  type="button"
-                >
-                  Copy
-                </button>
-              </div>
-              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-cli-update"># update to the latest version
-curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh | sh -s -- --update
-
-# uninstall
-curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh | sh -s -- --uninstall</code></pre>
-            </div>
-          </div>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Init a new project</p>
-            <div
-              class="mt-4 rounded-2xl border border-black/10 shadow-inner"
-              data-terminal="true"
-              style="background-color: var(--pine); color: var(--mist);"
-            >
-              <div class="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/70">
-                <span>Terminal</span>
-                <button
-                  class="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/40 hover:text-white"
-                  data-copy-target="terminal-cli-init"
-                  type="button"
-                >
-                  Copy
-                </button>
-              </div>
-              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-cli-init"># installed via cargo or installer
-oxide init my_app
-
-# from this repo
-cargo run -p rust-oxide-cli -- init my_app</code></pre>
-            </div>
-            <p class="mt-2 text-xs text-black/50">
-              Add <span class="font-semibold">--non-interactive</span> or
-              <span class="font-semibold">--force</span> when you want to skip prompts.
-            </p>
-          </div>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Add or remove an API</p>
-            <p class="mt-2 text-sm text-black/60">
-              Run these commands from your project root (the directory with <span class="font-semibold">Cargo.toml</span>).
-            </p>
-            <div
-              class="mt-4 rounded-2xl border border-black/10 shadow-inner"
-              data-terminal="true"
-              style="background-color: var(--pine); color: var(--mist);"
-            >
-              <div class="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/70">
-                <span>Terminal</span>
-                <button
-                  class="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/40 hover:text-white"
-                  data-copy-target="terminal-cli-api"
-                  type="button"
-                >
-                  Copy
-                </button>
-              </div>
-              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-cli-api"># add a CRUD API
-oxide api add todo_item --fields "title:string,done:bool"
-
-# remove a CRUD API
-oxide api remove todo_item
-
-# preview changes
-oxide api add todo_item --dry-run</code></pre>
-            </div>
-            <p class="mt-2 text-xs text-black/50">
-              Use <span class="font-semibold">--no-auth</span> to skip auth middleware and
-              <span class="font-semibold">--force</span> to overwrite or prune when needed.
-              For local dev, prefix with <span class="font-semibold">cargo run -p rust-oxide-cli --</span>.
-            </p>
-            <p class="mt-2 text-xs text-black/50">Run <span class="font-semibold">oxide --help</span> for full flags.</p>
-          </div>
-        </section>
-
+        </div>
       </main>
 
       <script>
@@ -809,6 +125,144 @@ oxide api add todo_item --dry-run</code></pre>
               "absolute right-3 top-3 rounded-full border border-black/10 bg-white/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] shadow-sm transition hover:-translate-y-0.5";
             pre.appendChild(button);
             attachCopyHandler(button, () => code.textContent);
+          });
+
+          const desktopNavContainer = document.querySelector("[data-doc-nav-desktop]");
+          const mobileNavContainer = document.querySelector("[data-doc-nav-mobile]");
+          const sections = Array.from(document.querySelectorAll(".doc-section[id]"));
+
+          const toTitleCase = (raw) =>
+            raw
+              .split("-")
+              .filter(Boolean)
+              .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+              .join(" ");
+
+          const sectionTitle = (section) => {
+            const configured = (section.dataset.navTitle || "").trim();
+            if (configured) {
+              return configured;
+            }
+            const heading = section.querySelector("h1, h2, h3");
+            if (heading && heading.textContent) {
+              return heading.textContent.trim();
+            }
+            return toTitleCase(section.id);
+          };
+
+          const createNavLink = (section, variant) => {
+            const link = document.createElement("a");
+            link.href = `#${section.id}`;
+            link.dataset.docNav = "true";
+            link.dataset.navVariant = variant;
+            link.textContent = sectionTitle(section);
+            if (variant === "desktop") {
+              link.className =
+                "doc-nav-link block rounded-lg px-3 py-2 text-black/70 transition hover:bg-[color:var(--mist)] hover:text-[color:var(--pine)]";
+            } else {
+              link.className =
+                "doc-nav-link whitespace-nowrap rounded-full border border-black/10 bg-white/90 px-3 py-2 font-semibold uppercase tracking-[0.2em] text-[color:var(--pine)] transition";
+            }
+            return link;
+          };
+
+          if (desktopNavContainer) {
+            sections.forEach((section) => {
+              desktopNavContainer.appendChild(createNavLink(section, "desktop"));
+            });
+          }
+          if (mobileNavContainer) {
+            sections.forEach((section) => {
+              mobileNavContainer.appendChild(createNavLink(section, "mobile"));
+            });
+          }
+
+          const navLinks = Array.from(document.querySelectorAll("[data-doc-nav]"));
+
+          const setActiveSection = (id) => {
+            navLinks.forEach((link) => {
+              const href = link.getAttribute("href") || "";
+              const isActive = href === `#${id}`;
+              const variant = link.dataset.navVariant || "desktop";
+              link.setAttribute("aria-current", isActive ? "true" : "false");
+              if (variant === "mobile") {
+                link.classList.toggle("bg-[color:var(--pine)]", isActive);
+                link.classList.toggle("text-white", isActive);
+                link.classList.toggle("border-[color:var(--pine)]", isActive);
+                if (!isActive) {
+                  link.classList.remove("bg-[color:var(--pine)]");
+                  link.classList.remove("text-white");
+                  link.classList.remove("border-[color:var(--pine)]");
+                }
+              } else {
+                link.classList.toggle("bg-[color:var(--mist)]", isActive);
+                link.classList.toggle("text-[color:var(--pine)]", isActive);
+                link.classList.toggle("font-semibold", isActive);
+                if (!isActive) {
+                  link.classList.remove("font-semibold");
+                }
+              }
+            });
+          };
+
+          const hashId = window.location.hash.replace("#", "");
+          if (hashId) {
+            setActiveSection(hashId);
+          } else if (sections.length > 0) {
+            setActiveSection(sections[0].id);
+          }
+
+          const findActiveSection = () => {
+            if (sections.length === 0) {
+              return null;
+            }
+
+            const marker = 160;
+            const atBottom =
+              window.innerHeight + window.scrollY >=
+              document.documentElement.scrollHeight - 2;
+            if (atBottom) {
+              return sections[sections.length - 1].id;
+            }
+
+            let activeId = sections[0].id;
+            for (const section of sections) {
+              const top = section.getBoundingClientRect().top;
+              if (top <= marker) {
+                activeId = section.id;
+              } else {
+                break;
+              }
+            }
+            return activeId;
+          };
+
+          let scrollTicking = false;
+          const syncNavToScroll = () => {
+            if (scrollTicking) {
+              return;
+            }
+            scrollTicking = true;
+            requestAnimationFrame(() => {
+              const activeId = findActiveSection();
+              if (activeId) {
+                setActiveSection(activeId);
+              }
+              scrollTicking = false;
+            });
+          };
+
+          window.addEventListener("scroll", syncNavToScroll, { passive: true });
+          window.addEventListener("resize", syncNavToScroll);
+          syncNavToScroll();
+
+          window.addEventListener("hashchange", () => {
+            const id = window.location.hash.replace("#", "");
+            if (id) {
+              setActiveSection(id);
+            } else {
+              syncNavToScroll();
+            }
           });
         })();
       </script>
