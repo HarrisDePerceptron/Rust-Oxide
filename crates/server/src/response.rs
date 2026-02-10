@@ -111,3 +111,50 @@ fn error_kind(err: &AppError) -> &'static str {
         AppError::Internal(_) => "internal",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use axum::{
+        body::to_bytes,
+        http::StatusCode,
+        response::IntoResponse,
+    };
+    use serde_json::Value;
+
+    use super::JsonApiResponse;
+    use crate::error::AppError;
+
+    #[tokio::test]
+    async fn app_error_into_response_uses_expected_status_and_message() {
+        let response = AppError::forbidden("missing role").into_response();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should read");
+        let json: Value = serde_json::from_slice(&body).expect("body should be json");
+        assert_eq!(json["status"], StatusCode::FORBIDDEN.as_u16());
+        assert_eq!(json["message"], "missing role");
+        assert!(json["data"].is_null());
+    }
+
+    #[tokio::test]
+    async fn json_api_response_into_response_respects_status_code() {
+        let response = JsonApiResponse::with_status(
+            StatusCode::CREATED,
+            "created",
+            serde_json::json!({ "id": 1 }),
+        )
+        .expect("response should build")
+        .into_response();
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should read");
+        let json: Value = serde_json::from_slice(&body).expect("body should be json");
+        assert_eq!(json["status"], StatusCode::CREATED.as_u16());
+        assert_eq!(json["message"], "created");
+        assert_eq!(json["data"]["id"], 1);
+    }
+}

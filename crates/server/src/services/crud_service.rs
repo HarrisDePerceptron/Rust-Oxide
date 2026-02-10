@@ -100,9 +100,8 @@ pub trait CrudService {
                 let message = format!("{context}. Please check the logs for more details");
                 AppError::internal_with_source(message, db_err)
             }
-            DaoLayerError::NotFound { .. } | DaoLayerError::InvalidPagination { .. } => {
-                AppError::bad_request(err.to_string())
-            }
+            DaoLayerError::NotFound { .. } => AppError::not_found(errors.not_found),
+            DaoLayerError::InvalidPagination { .. } => AppError::bad_request(err.to_string()),
         }
     }
 
@@ -542,5 +541,206 @@ fn parse_value_by_column_type(raw: &str, column_type: &ColumnType) -> Result<Que
         | ColumnType::LTree
         | ColumnType::Custom(_) => Err(invalid_filter()),
         _ => Err(invalid_filter()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use sea_orm::{DatabaseBackend, DbErr, MockDatabase};
+
+    use crate::db::{
+        dao::{DaoBase, TodoDao},
+        entities::todo_list,
+    };
+
+    use super::{
+        CompareOp, CrudErrors, CrudOp, CrudService, DaoLayerError, FilterMode, FilterOp,
+        FilterParseStrategy, parse_non_string_filter, parse_string_filter,
+    };
+
+    #[derive(Clone)]
+    struct TestCrudService {
+        dao: TodoDao,
+        parse: FilterParseStrategy,
+        deny: &'static [&'static str],
+        errors: CrudErrors,
+    }
+
+    impl TestCrudService {
+        fn new(parse: FilterParseStrategy, deny: &'static [&'static str]) -> Self {
+            let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
+            Self {
+                dao: TodoDao::new(&db),
+                parse,
+                deny,
+                errors: CrudErrors::default(),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl CrudService for TestCrudService {
+        type Dao = TodoDao;
+
+        fn dao(&self) -> &Self::Dao {
+            &self.dao
+        }
+
+        fn list_filter_mode(&self) -> FilterMode<todo_list::Column> {
+            FilterMode::AllColumns {
+                deny: self.deny,
+                parse: self.parse,
+            }
+        }
+
+        fn errors(&self) -> CrudErrors {
+            self.errors
+        }
+    }
+
+    #[test]
+    fn parse_string_filter_supports_exact_and_edge_wildcards() {
+        match parse_string_filter("hello").expect("exact value should parse") {
+            FilterOp::Eq(value) => {
+                assert_eq!(
+                    value,
+                    sea_orm::sea_query::Value::String(Some("hello".to_string()))
+                );
+            }
+            other => panic!("expected Eq, got {other:?}"),
+        }
+
+        match parse_string_filter("*hello*").expect("contains wildcard should parse") {
+            FilterOp::Like { pattern, escape } => {
+                assert_eq!(pattern, "%hello%");
+                assert_eq!(escape, '\\');
+            }
+            other => panic!("expected Like, got {other:?}"),
+        }
+
+        match parse_string_filter("hello*").expect("prefix wildcard should parse") {
+            FilterOp::Like { pattern, .. } => assert_eq!(pattern, "hello%"),
+            other => panic!("expected Like, got {other:?}"),
+        }
+
+        match parse_string_filter("*hello").expect("suffix wildcard should parse") {
+            FilterOp::Like { pattern, .. } => assert_eq!(pattern, "%hello"),
+            other => panic!("expected Like, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_string_filter_rejects_invalid_forms() {
+        assert!(parse_string_filter("").is_err());
+        assert!(parse_string_filter("*").is_err());
+        assert!(parse_string_filter("a*b").is_err());
+        assert!(parse_string_filter("**").is_err());
+    }
+
+    #[test]
+    fn parse_non_string_filter_supports_compare_and_range() {
+        match parse_non_string_filter(">10", &sea_orm::sea_query::ColumnType::Integer)
+            .expect("comparison should parse")
+        {
+            FilterOp::Compare { op, value } => {
+                assert!(matches!(op, CompareOp::Gt));
+                assert_eq!(value, sea_orm::sea_query::Value::Int(Some(10)));
+            }
+            other => panic!("expected Compare, got {other:?}"),
+        }
+
+        match parse_non_string_filter("1..9", &sea_orm::sea_query::ColumnType::Integer)
+            .expect("range should parse")
+        {
+            FilterOp::Between { min, max } => {
+                assert_eq!(min, sea_orm::sea_query::Value::Int(Some(1)));
+                assert_eq!(max, sea_orm::sea_query::Value::Int(Some(9)));
+            }
+            other => panic!("expected Between, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_non_string_filter_rejects_invalid_ops_for_column_type() {
+        let err = parse_non_string_filter(">true", &sea_orm::sea_query::ColumnType::Boolean)
+            .expect_err("boolean comparison should fail");
+        assert_eq!(err.message(), "Invalid filter");
+    }
+
+    #[test]
+    fn build_column_filters_rejects_unknown_or_denied_columns() {
+        let service = TestCrudService::new(FilterParseStrategy::ByColumnType, &["title"]);
+
+        let mut unknown = HashMap::new();
+        unknown.insert("unknown".to_string(), "1".to_string());
+        let unknown_err = service
+            .build_column_filters(unknown)
+            .expect_err("unknown column should fail");
+        assert_eq!(unknown_err.message(), "Invalid filter");
+
+        let mut denied = HashMap::new();
+        denied.insert("title".to_string(), "todo*".to_string());
+        let denied_err = service
+            .build_column_filters(denied)
+            .expect_err("denied column should fail");
+        assert_eq!(denied_err.message(), "Invalid filter");
+    }
+
+    #[test]
+    fn build_column_filters_parses_by_column_type_and_strings_only_modes() {
+        let by_type = TestCrudService::new(FilterParseStrategy::ByColumnType, &[]);
+        let mut numeric = HashMap::new();
+        numeric.insert("score".to_string(), ">=7".to_string());
+        let filters = by_type
+            .build_column_filters(numeric)
+            .expect("numeric score filter should parse");
+        assert_eq!(filters.len(), 1);
+
+        match &filters[0].op {
+            FilterOp::Compare { op, value } => {
+                assert!(matches!(op, CompareOp::Gte));
+                assert_eq!(*value, sea_orm::sea_query::Value::Int(Some(7)));
+            }
+            other => panic!("expected Compare, got {other:?}"),
+        }
+
+        let strings_only = TestCrudService::new(FilterParseStrategy::StringsOnly, &[]);
+        let mut non_string = HashMap::new();
+        non_string.insert("score".to_string(), "1".to_string());
+        let err = strings_only
+            .build_column_filters(non_string)
+            .expect_err("non-string column should be rejected in StringsOnly mode");
+        assert_eq!(err.message(), "Invalid filter");
+    }
+
+    #[test]
+    fn map_error_distinguishes_database_and_validation_paths() {
+        let service = TestCrudService::new(FilterParseStrategy::ByColumnType, &[]);
+
+        let create_db = service.map_error(CrudOp::Create, DaoLayerError::Db(DbErr::Custom("boom".into())));
+        assert_eq!(
+            create_db.message(),
+            "Create failed. Please check the logs for more details"
+        );
+
+        let not_found = service.map_error(
+            CrudOp::Find,
+            DaoLayerError::NotFound {
+                entity: "todo_list",
+                id: uuid::Uuid::nil(),
+            },
+        );
+        assert_eq!(not_found.message(), "Resource not found");
+
+        let invalid_page = service.map_error(
+            CrudOp::List,
+            DaoLayerError::InvalidPagination {
+                page: 0,
+                page_size: 25,
+            },
+        );
+        assert_eq!(invalid_page.message(), "Invalid pagination: page=0 page_size=25");
     }
 }

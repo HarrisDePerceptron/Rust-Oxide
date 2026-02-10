@@ -164,3 +164,98 @@ impl TodoDao {
             .map_err(DaoLayerError::Db)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use chrono::{FixedOffset, TimeZone};
+    use sea_orm::{DatabaseBackend, DbErr, MockDatabase};
+    use uuid::Uuid;
+
+    use crate::db::entities::todo_item;
+
+    use super::TodoDao;
+    use crate::db::dao::{DaoBase, DaoLayerError};
+
+    fn ts() -> chrono::DateTime<chrono::FixedOffset> {
+        FixedOffset::east_opt(0)
+            .expect("offset should be valid")
+            .with_ymd_and_hms(2026, 1, 1, 0, 0, 0)
+            .single()
+            .expect("timestamp should be valid")
+    }
+
+    fn item_model(id: Uuid, list_id: Uuid, description: &str, done: bool) -> todo_item::Model {
+        let now = ts();
+        todo_item::Model {
+            id,
+            created_at: now,
+            updated_at: now,
+            list_id,
+            description: description.to_string(),
+            done,
+        }
+    }
+
+    #[tokio::test]
+    async fn update_item_returns_none_when_item_is_missing() {
+        let list_id = Uuid::new_v4();
+        let item_id = Uuid::new_v4();
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([Vec::<todo_item::Model>::new()])
+            .into_connection();
+        let dao = TodoDao::new(&db);
+
+        let result = dao
+            .update_item(&list_id, &item_id, Some("new".to_string()), Some(true))
+            .await
+            .expect("query should succeed");
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn delete_item_returns_false_when_item_is_missing() {
+        let list_id = Uuid::new_v4();
+        let item_id = Uuid::new_v4();
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([Vec::<todo_item::Model>::new()])
+            .into_connection();
+        let dao = TodoDao::new(&db);
+
+        let deleted = dao
+            .delete_item(&list_id, &item_id)
+            .await
+            .expect("query should succeed");
+        assert!(!deleted);
+    }
+
+    #[tokio::test]
+    async fn find_item_by_id_returns_item_when_present() {
+        let list_id = Uuid::new_v4();
+        let item_id = Uuid::new_v4();
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([[item_model(item_id, list_id, "item", false)]])
+            .into_connection();
+        let dao = TodoDao::new(&db);
+
+        let result = dao
+            .find_item_by_id(&list_id, &item_id)
+            .await
+            .expect("query should succeed");
+        assert_eq!(result.map(|item| item.id), Some(item_id));
+    }
+
+    #[tokio::test]
+    async fn count_items_by_list_maps_database_errors() {
+        let list_id = Uuid::new_v4();
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_errors([DbErr::Custom("count failed".to_string())])
+            .into_connection();
+        let dao = TodoDao::new(&db);
+
+        let err = dao
+            .count_items_by_list(&list_id)
+            .await
+            .expect_err("count should fail");
+        assert!(matches!(err, DaoLayerError::Db(_)));
+    }
+}

@@ -300,3 +300,187 @@ where
         Ok(id)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use chrono::{FixedOffset, TimeZone};
+    use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult};
+    use uuid::Uuid;
+
+    use crate::db::entities::todo_list;
+
+    use super::{ColumnFilter, DaoBase, DaoLayerError, FilterOp};
+    use crate::db::dao::TodoDao;
+
+    fn ts() -> chrono::DateTime<chrono::FixedOffset> {
+        FixedOffset::east_opt(0)
+            .expect("offset should be valid")
+            .with_ymd_and_hms(2026, 1, 1, 0, 0, 0)
+            .single()
+            .expect("timestamp should be valid")
+    }
+
+    fn list_model(id: Uuid, title: &str, score: i32) -> todo_list::Model {
+        let now = ts();
+        todo_list::Model {
+            id,
+            created_at: now,
+            updated_at: now,
+            title: title.to_string(),
+            score,
+        }
+    }
+
+    #[tokio::test]
+    async fn find_rejects_invalid_pagination() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
+        let dao = TodoDao::new(&db);
+
+        let err = dao
+            .find(0, 25, None, |query| query)
+            .await
+            .expect_err("page=0 should fail");
+        assert!(matches!(
+            err,
+            DaoLayerError::InvalidPagination {
+                page: 0,
+                page_size: 25
+            }
+        ));
+
+        let err = dao
+            .find(1, 0, None, |query| query)
+            .await
+            .expect_err("page_size=0 should fail");
+        assert!(matches!(
+            err,
+            DaoLayerError::InvalidPagination {
+                page: 1,
+                page_size: 0
+            }
+        ));
+
+        let err = dao
+            .find(1, TodoDao::MAX_PAGE_SIZE + 1, None, |query| query)
+            .await
+            .expect_err("page_size over max should fail");
+        assert!(matches!(
+            err,
+            DaoLayerError::InvalidPagination {
+                page: 1,
+                page_size: v
+            } if v == TodoDao::MAX_PAGE_SIZE + 1
+        ));
+    }
+
+    #[tokio::test]
+    async fn find_with_filters_rejects_invalid_pagination() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
+        let dao = TodoDao::new(&db);
+        let filters = vec![ColumnFilter {
+            column: todo_list::Column::Title,
+            op: FilterOp::Eq(sea_orm::sea_query::Value::String(Some(
+                "hello".to_string(),
+            ))),
+        }];
+
+        let err = dao
+            .find_with_filters(0, 1, None, &filters, |query| query)
+            .await
+            .expect_err("invalid pagination should fail");
+        assert!(matches!(
+            err,
+            DaoLayerError::InvalidPagination {
+                page: 0,
+                page_size: 1
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn find_sets_has_next_and_truncates_to_page_size() {
+        let id1 = Uuid::new_v4();
+        let id2 = Uuid::new_v4();
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([[
+                list_model(id1, "first", 1),
+                list_model(id2, "second", 2),
+            ]])
+            .into_connection();
+        let dao = TodoDao::new(&db);
+
+        let result = dao
+            .find(1, 1, None, |query| query)
+            .await
+            .expect("find should succeed");
+
+        assert_eq!(result.page, 1);
+        assert_eq!(result.page_size, 1);
+        assert!(result.has_next);
+        assert_eq!(result.data.len(), 1);
+        assert_eq!(result.data[0].id, id1);
+    }
+
+    #[tokio::test]
+    async fn pager_stops_after_last_page() {
+        let id1 = Uuid::new_v4();
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([[list_model(id1, "only", 1)]])
+            .into_connection();
+        let dao = TodoDao::new(&db);
+
+        let mut pager = dao.find_iter(Some(1), None, |query| query);
+        let first = pager
+            .next_page()
+            .await
+            .expect("first page should succeed")
+            .expect("first page should be present");
+        assert_eq!(first.data.len(), 1);
+        assert!(!first.has_next);
+
+        let second = pager.next_page().await.expect("second call should succeed");
+        assert!(second.is_none(), "pager should stop after last page");
+    }
+
+    #[tokio::test]
+    async fn update_returns_not_found_when_record_missing() {
+        let id = Uuid::new_v4();
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([Vec::<todo_list::Model>::new()])
+            .into_connection();
+        let dao = TodoDao::new(&db);
+
+        let err = dao
+            .update(id, |_active| {})
+            .await
+            .expect_err("update should fail");
+        assert!(matches!(err, DaoLayerError::NotFound { id: missing, .. } if missing == id));
+    }
+
+    #[tokio::test]
+    async fn delete_returns_not_found_when_no_rows_affected() {
+        let id = Uuid::new_v4();
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_exec_results([MockExecResult {
+                last_insert_id: 0,
+                rows_affected: 0,
+            }])
+            .into_connection();
+        let dao = TodoDao::new(&db);
+
+        let err = dao.delete(id).await.expect_err("delete should fail");
+        assert!(matches!(err, DaoLayerError::NotFound { id: missing, .. } if missing == id));
+    }
+
+    #[tokio::test]
+    async fn find_by_id_returns_not_found_when_record_missing() {
+        let id = Uuid::new_v4();
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([Vec::<todo_list::Model>::new()])
+            .into_connection();
+        let dao = TodoDao::new(&db);
+
+        let err = dao.find_by_id(id).await.expect_err("find_by_id should fail");
+        assert!(matches!(err, DaoLayerError::NotFound { id: missing, .. } if missing == id));
+    }
+}

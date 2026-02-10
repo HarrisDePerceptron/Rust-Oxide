@@ -109,3 +109,94 @@ impl AuthProviders {
         self.providers.get(&id)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+
+    use crate::{
+        auth::{Claims, TokenBundle},
+        error::AppError,
+    };
+
+    use super::{AuthProvider, AuthProviderId, AuthProviders};
+
+    #[derive(Clone)]
+    struct TestProvider {
+        id: AuthProviderId,
+    }
+
+    #[async_trait]
+    impl AuthProvider for TestProvider {
+        fn id(&self) -> AuthProviderId {
+            self.id
+        }
+
+        async fn register(&self, _email: &str, _password: &str) -> Result<TokenBundle, AppError> {
+            Err(AppError::unauthorized("not used"))
+        }
+
+        async fn login(&self, _email: &str, _password: &str) -> Result<TokenBundle, AppError> {
+            Err(AppError::unauthorized("not used"))
+        }
+
+        async fn refresh(&self, _refresh_token: &str) -> Result<TokenBundle, AppError> {
+            Err(AppError::unauthorized("not used"))
+        }
+
+        async fn verify(&self, _access_token: &str) -> Result<Claims, AppError> {
+            Err(AppError::unauthorized("not used"))
+        }
+    }
+
+    #[test]
+    fn provider_id_parser_is_case_insensitive_for_supported_provider() {
+        assert_eq!("local".parse::<AuthProviderId>(), Ok(AuthProviderId::Local));
+        assert_eq!("LOCAL".parse::<AuthProviderId>(), Ok(AuthProviderId::Local));
+        assert!("oauth".parse::<AuthProviderId>().is_err());
+    }
+
+    #[test]
+    fn duplicate_provider_registration_is_rejected() {
+        let provider = Arc::new(TestProvider {
+            id: AuthProviderId::Local,
+        });
+        let mut providers = AuthProviders::new(AuthProviderId::Local);
+        providers
+            .add(provider.clone())
+            .expect("first registration should succeed");
+
+        let err = providers
+            .add(provider)
+            .expect_err("duplicate registration should fail");
+        assert_eq!(err.message(), "Auth provider already registered: local");
+    }
+
+    #[test]
+    fn active_provider_must_be_configured() {
+        let providers = AuthProviders::new(AuthProviderId::Local);
+        let err = match providers.active() {
+            Ok(_) => panic!("missing provider should fail"),
+            Err(err) => err,
+        };
+        assert_eq!(err.message(), "Auth provider not configured: local");
+    }
+
+    #[test]
+    fn set_active_requires_existing_provider() {
+        let mut providers = AuthProviders::new(AuthProviderId::Local);
+        let provider = Arc::new(TestProvider {
+            id: AuthProviderId::Local,
+        });
+        providers.add(provider).expect("registration should succeed");
+
+        providers
+            .set_active(AuthProviderId::Local)
+            .expect("active provider should be set");
+
+        assert_eq!(providers.active_id(), AuthProviderId::Local);
+        assert!(providers.get(AuthProviderId::Local).is_some());
+    }
+}

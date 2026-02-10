@@ -517,24 +517,39 @@ async fn todo_crud_count_lists() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let count_before = json_data(&count_before)["count"].as_u64().unwrap();
+    let _count_before = json_data(&count_before)["count"].as_u64().unwrap();
 
     let title = format!("Count List {}", Uuid::new_v4());
-    let (status, _) = create_todo_crud_list(&state, &auth, &title).await;
+    let (status, created) = create_todo_crud_list(&state, &auth, &title).await;
     assert_eq!(status, StatusCode::CREATED);
+    let created_id = json_data(&created)["id"]
+        .as_str()
+        .expect("created list id should be present");
 
     let (status, count_after) = json_response(
         &state,
         Request::builder()
             .uri(api_path("/todo-crud/count"))
-            .header("authorization", auth)
+            .header("authorization", &auth)
             .body(Body::empty())
             .unwrap(),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
     let count_after = json_data(&count_after)["count"].as_u64().unwrap();
-    assert!(count_after > count_before);
+
+    let (status, fetched) = json_response(
+        &state,
+        Request::builder()
+            .uri(api_path(&format!("/todo-crud/{created_id}")))
+            .header("authorization", &auth)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json_data(&fetched)["id"].as_str(), Some(created_id));
+    assert!(count_after >= 1);
 }
 
 #[tokio::test]

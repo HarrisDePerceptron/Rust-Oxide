@@ -63,3 +63,24 @@ pub struct TokenBundle {
     pub token_type: &'static str,
     pub expires_in: usize,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{AdminRole, RequiredRole, Role, UserRole};
+
+    #[test]
+    fn role_string_roundtrip() {
+        assert_eq!(Role::User.as_str(), "user");
+        assert_eq!(Role::Admin.as_str(), "admin");
+
+        assert_eq!(Role::try_from("user"), Ok(Role::User));
+        assert_eq!(Role::try_from("admin"), Ok(Role::Admin));
+        assert!(Role::try_from("manager").is_err());
+    }
+
+    #[test]
+    fn required_role_markers_map_to_expected_role() {
+        assert_eq!(UserRole::required(), Role::User);
+        assert_eq!(AdminRole::required(), Role::Admin);
+    }
+}

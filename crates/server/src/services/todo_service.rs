@@ -100,3 +100,44 @@ impl TodoService {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use sea_orm::{DatabaseBackend, MockDatabase};
+    use uuid::Uuid;
+
+    use super::TodoService;
+    use crate::db::dao::{DaoBase, TodoDao};
+
+    #[tokio::test]
+    async fn update_item_returns_not_found_when_missing() {
+        let list_id = Uuid::new_v4();
+        let item_id = Uuid::new_v4();
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([Vec::<crate::db::entities::todo_item::Model>::new()])
+            .into_connection();
+        let service = TodoService::new(TodoDao::new(&db));
+
+        let err = service
+            .update_item(&list_id, &item_id, Some("changed".to_string()), Some(true))
+            .await
+            .expect_err("missing item should fail");
+        assert_eq!(err.message(), "Todo item not found");
+    }
+
+    #[tokio::test]
+    async fn delete_item_returns_not_found_when_missing() {
+        let list_id = Uuid::new_v4();
+        let item_id = Uuid::new_v4();
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([Vec::<crate::db::entities::todo_item::Model>::new()])
+            .into_connection();
+        let service = TodoService::new(TodoDao::new(&db));
+
+        let err = service
+            .delete_item(&list_id, &item_id)
+            .await
+            .expect_err("missing item should fail");
+        assert_eq!(err.message(), "Todo item not found");
+    }
+}

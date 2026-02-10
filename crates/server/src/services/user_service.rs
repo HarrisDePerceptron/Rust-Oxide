@@ -60,3 +60,60 @@ impl UserService {
         Ok(self.user_dao.set_last_login(user_id, last_login).await?)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use sea_orm::{DatabaseBackend, DbErr, MockDatabase};
+    use uuid::Uuid;
+
+    use super::UserService;
+    use crate::db::dao::{DaoBase, UserDao};
+
+    #[tokio::test]
+    async fn find_by_id_returns_none_for_not_found() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([Vec::<crate::db::entities::user::Model>::new()])
+            .into_connection();
+        let service = UserService::new(UserDao::new(&db));
+
+        let result = service
+            .find_by_id(&Uuid::new_v4())
+            .await
+            .expect("query should succeed");
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn find_by_id_maps_db_error_to_internal() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_errors([DbErr::Custom("query failed".to_string())])
+            .into_connection();
+        let service = UserService::new(UserDao::new(&db));
+
+        let err = service
+            .find_by_id(&Uuid::new_v4())
+            .await
+            .expect_err("query should fail");
+        assert_eq!(
+            err.message(),
+            "database operation failed. Please check the logs for more details"
+        );
+    }
+
+    #[tokio::test]
+    async fn find_by_email_maps_db_error_to_internal() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_errors([DbErr::Custom("query failed".to_string())])
+            .into_connection();
+        let service = UserService::new(UserDao::new(&db));
+
+        let err = service
+            .find_by_email("alice@example.com")
+            .await
+            .expect_err("query should fail");
+        assert_eq!(
+            err.message(),
+            "database operation failed. Please check the logs for more details"
+        );
+    }
+}

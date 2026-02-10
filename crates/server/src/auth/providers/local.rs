@@ -155,3 +155,83 @@ impl AuthProvider for LocalAuthProvider {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use sea_orm::{DatabaseBackend, MockDatabase};
+    use uuid::Uuid;
+
+    use crate::{
+        auth::{
+            Role,
+            jwt::{encode_token, make_access_claims},
+            providers::AuthProvider,
+        },
+        services::ServiceContext,
+    };
+
+    use super::{AuthProviderId, LocalAuthProvider};
+
+    fn test_provider(secret: &[u8]) -> LocalAuthProvider {
+        let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
+        let services = ServiceContext::new(&db);
+        LocalAuthProvider::new(
+            services.user(),
+            services.refresh_token_dao(),
+            crate::auth::jwt::JwtKeys::from_secret(secret),
+        )
+    }
+
+    #[tokio::test]
+    async fn provider_id_is_local() {
+        let provider = test_provider(b"provider-id-secret");
+        assert_eq!(provider.id(), AuthProviderId::Local);
+    }
+
+    #[tokio::test]
+    async fn verify_accepts_valid_token() {
+        let provider = test_provider(b"verify-secret");
+        let claims = make_access_claims(&Uuid::new_v4(), vec![Role::User], 300);
+        let token = encode_token(&crate::auth::jwt::JwtKeys::from_secret(b"verify-secret"), &claims)
+            .expect("token should encode");
+
+        let verified = provider.verify(&token).await.expect("verify should succeed");
+        assert_eq!(verified.sub, claims.sub);
+        assert_eq!(verified.roles, claims.roles);
+    }
+
+    #[tokio::test]
+    async fn verify_rejects_invalid_token() {
+        let provider = test_provider(b"verify-secret");
+        let err = provider
+            .verify("not-a-jwt")
+            .await
+            .expect_err("verify should fail");
+        assert!(
+            err.message().starts_with("Invalid or expired token:"),
+            "unexpected message: {}",
+            err.message()
+        );
+    }
+
+    #[tokio::test]
+    async fn verify_rejects_token_signed_with_different_secret() {
+        let provider = test_provider(b"provider-secret-a");
+        let claims = make_access_claims(&Uuid::new_v4(), vec![Role::User], 300);
+        let token = encode_token(
+            &crate::auth::jwt::JwtKeys::from_secret(b"provider-secret-b"),
+            &claims,
+        )
+        .expect("token should encode");
+
+        let err = provider
+            .verify(&token)
+            .await
+            .expect_err("verify should fail for mismatched secret");
+        assert!(
+            err.message().starts_with("Invalid or expired token:"),
+            "unexpected message: {}",
+            err.message()
+        );
+    }
+}
