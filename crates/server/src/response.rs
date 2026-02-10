@@ -114,11 +114,7 @@ fn error_kind(err: &AppError) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use axum::{
-        body::to_bytes,
-        http::StatusCode,
-        response::IntoResponse,
-    };
+    use axum::{body::to_bytes, http::StatusCode, response::IntoResponse};
     use serde_json::Value;
 
     use super::JsonApiResponse;

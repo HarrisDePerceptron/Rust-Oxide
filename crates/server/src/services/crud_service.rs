@@ -719,7 +719,10 @@ mod tests {
     fn map_error_distinguishes_database_and_validation_paths() {
         let service = TestCrudService::new(FilterParseStrategy::ByColumnType, &[]);
 
-        let create_db = service.map_error(CrudOp::Create, DaoLayerError::Db(DbErr::Custom("boom".into())));
+        let create_db = service.map_error(
+            CrudOp::Create,
+            DaoLayerError::Db(DbErr::Custom("boom".into())),
+        );
         assert_eq!(
             create_db.message(),
             "Create failed. Please check the logs for more details"
@@ -741,6 +744,9 @@ mod tests {
                 page_size: 25,
             },
         );
-        assert_eq!(invalid_page.message(), "Invalid pagination: page=0 page_size=25");
+        assert_eq!(
+            invalid_page.message(),
+            "Invalid pagination: page=0 page_size=25"
+        );
     }
 }

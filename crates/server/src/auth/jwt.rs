@@ -79,7 +79,8 @@ mod tests {
 
         let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = false;
-        let decoded = decode::<Claims>(&token, &keys.dec, &validation).expect("token should decode");
+        let decoded =
+            decode::<Claims>(&token, &keys.dec, &validation).expect("token should decode");
 
         assert_eq!(decoded.claims.sub, claims.sub);
         assert_eq!(decoded.claims.roles, claims.roles);

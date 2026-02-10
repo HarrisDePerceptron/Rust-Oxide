@@ -190,7 +190,9 @@ mod tests {
         let provider = Arc::new(TestProvider {
             id: AuthProviderId::Local,
         });
-        providers.add(provider).expect("registration should succeed");
+        providers
+            .add(provider)
+            .expect("registration should succeed");
 
         providers
             .set_active(AuthProviderId::Local)

@@ -82,10 +82,17 @@
 - Never commit secrets; use `.env` locally (gitignored) or a secrets manager.
 
 ## Testing
-- Prefer fast route/service tests.
-- Use mock DB for unit-style route tests where possible.
-- DB-backed integration tests may be `#[ignore]` with explicit reason.
+- Prefer fast, deterministic, isolated tests that run without external dependencies.
+- Test contracts and observable behavior first; avoid coupling tests to incidental implementation details.
+- Keep tests close to the code they validate by default; use integration tests only when true black-box coverage is needed.
+- Use mock DB/test doubles at system boundaries; do not mock internal logic unnecessarily.
+- Reuse shared fixtures/builders for setup and teardown to avoid duplication and drift.
+- Keep each test focused on one behavior.
+- For each public API/method, cover positive, negative, and edge/boundary cases.
+- Assert error mapping explicitly (for example, domain error vs raw DB error).
+- Assert side effects when relevant (for example generated SQL shape, state updates, emitted outputs), not only return values.
 - Keep test names behavior-oriented (for example: `rejects_missing_auth`, `applies_filter_range`).
+- DB-backed integration tests may be `#[ignore]` with explicit reason.
 
 
 ## View JavaScript Rules (`views/*.html`)
@@ -99,6 +106,5 @@
 - `cargo test -p rust_oxide`
 - `cargo clippy --all-targets --all-features`
 - `cargo fmt`
-
 
 

@@ -192,10 +192,16 @@ mod tests {
     async fn verify_accepts_valid_token() {
         let provider = test_provider(b"verify-secret");
         let claims = make_access_claims(&Uuid::new_v4(), vec![Role::User], 300);
-        let token = encode_token(&crate::auth::jwt::JwtKeys::from_secret(b"verify-secret"), &claims)
-            .expect("token should encode");
+        let token = encode_token(
+            &crate::auth::jwt::JwtKeys::from_secret(b"verify-secret"),
+            &claims,
+        )
+        .expect("token should encode");
 
-        let verified = provider.verify(&token).await.expect("verify should succeed");
+        let verified = provider
+            .verify(&token)
+            .await
+            .expect("verify should succeed");
         assert_eq!(verified.sub, claims.sub);
         assert_eq!(verified.roles, claims.roles);
     }
