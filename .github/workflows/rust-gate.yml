@@ -1,0 +1,16 @@
+name: Rust Gate
+
+on:
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  rust-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy -p rust_oxide --all-targets --all-features -- -D warnings
+      - run: cargo test --workspace

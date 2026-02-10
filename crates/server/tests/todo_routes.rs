@@ -66,11 +66,11 @@ async fn json_response(
     (status, json)
 }
 
-fn json_data<'a>(json: &'a serde_json::Value) -> &'a serde_json::Value {
+fn json_data(json: &serde_json::Value) -> &serde_json::Value {
     json.get("data").unwrap_or(json)
 }
 
-fn json_message<'a>(json: &'a serde_json::Value) -> Option<&'a str> {
+fn json_message(json: &serde_json::Value) -> Option<&str> {
     json.get("message")
         .and_then(|value| value.as_str())
         .or_else(|| json.get("error").and_then(|value| value.as_str()))

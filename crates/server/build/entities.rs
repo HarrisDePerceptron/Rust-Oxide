@@ -82,11 +82,10 @@ pub(crate) fn collect_entity_entries(
     for item in items {
         match item {
             Item::Struct(item_struct) => {
-                if has_derive_entity_model(&item_struct.attrs) {
-                    if let Some(entity) = build_entity_entry(item_struct, module_path, &fk_columns)
-                    {
-                        out.push(entity);
-                    }
+                if has_derive_entity_model(&item_struct.attrs)
+                    && let Some(entity) = build_entity_entry(item_struct, module_path, &fk_columns)
+                {
+                    out.push(entity);
                 }
             }
             Item::Mod(item_mod) => {
@@ -233,10 +232,10 @@ fn has_derive_entity_model(attrs: &[Attribute]) -> bool {
         );
         if let Ok(paths) = paths {
             for path in paths {
-                if let Some(segment) = path.segments.last() {
-                    if segment.ident == "DeriveEntityModel" {
-                        return true;
-                    }
+                if let Some(segment) = path.segments.last()
+                    && segment.ident == "DeriveEntityModel"
+                {
+                    return true;
                 }
             }
         }
@@ -367,10 +366,10 @@ fn field_has_relation_attr(attrs: &[Attribute]) -> bool {
 
 fn is_relation_type(ty: &Type) -> bool {
     let (_, last) = crate::utils::type_path_parts(ty);
-    if let Some(last) = last.as_deref() {
-        if last == "HasOne" || last == "HasMany" {
-            return true;
-        }
+    if let Some(last) = last.as_deref()
+        && (last == "HasOne" || last == "HasMany")
+    {
+        return true;
     }
     if let Some(inner) =
         extract_generic_inner(ty, "Option").or_else(|| extract_generic_inner(ty, "Vec"))
@@ -433,11 +432,9 @@ fn collect_fk_columns_from_enum(item_enum: &ItemEnum, out: &mut HashSet<String>)
                 }
                 Ok(())
             });
-            if belongs_to {
-                if let Some(value) = from_value.as_deref() {
-                    for column in parse_fk_column_variants(value) {
-                        out.insert(column);
-                    }
+            if belongs_to && let Some(value) = from_value.as_deref() {
+                for column in parse_fk_column_variants(value) {
+                    out.insert(column);
                 }
             }
         }
@@ -472,10 +469,8 @@ fn extract_belongs_to_from_field(attrs: &[Attribute]) -> Vec<String> {
             }
             Ok(())
         });
-        if belongs_to {
-            if let Some(value) = from_value.as_deref() {
-                columns.extend(parse_fk_column_variants(value));
-            }
+        if belongs_to && let Some(value) = from_value.as_deref() {
+            columns.extend(parse_fk_column_variants(value));
         }
     }
     columns
@@ -686,7 +681,7 @@ fn mermaid_relation_marker(kind: RelationKind) -> &'static str {
 }
 
 fn mermaid_label(value: &str) -> String {
-    let sanitized = value.replace('\n', " ").replace('\r', " ");
+    let sanitized = value.replace(['\n', '\r'], " ");
     mermaid_sanitize_word(sanitized.trim())
 }
 

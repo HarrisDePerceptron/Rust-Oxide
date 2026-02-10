@@ -100,8 +100,7 @@ pub fn router(state: Arc<AppState>) -> Router {
 }
 
 async fn failing_handler() -> ApiResult<()> {
-    Err::<&str, _>("this should fail").expect("inside the  failign handler");
-    JsonApiResponse::ok(())
+    panic!("inside the failing handler: this should fail");
 }
 
 #[derive(Debug, serde::Serialize)]

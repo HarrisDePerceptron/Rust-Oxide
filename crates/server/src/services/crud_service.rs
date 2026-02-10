@@ -148,7 +148,7 @@ pub trait CrudService {
     ) -> Result<PaginatedResponse<CrudModel<Self::Dao>>, AppError>
     where
         F: FnOnce(Select<CrudEntity<Self::Dao>>) -> Select<CrudEntity<Self::Dao>> + Send,
-        CrudColumn<Self::Dao>: ColumnTrait + Clone,
+        CrudColumn<Self::Dao>: ColumnTrait + Copy,
     {
         let column_filters = self.build_column_filters(filters)?;
         self.dao()
@@ -180,7 +180,7 @@ pub trait CrudService {
         filters: HashMap<String, String>,
     ) -> Result<Vec<ColumnFilter<CrudColumn<Self::Dao>>>, AppError>
     where
-        CrudColumn<Self::Dao>: ColumnTrait + Clone,
+        CrudColumn<Self::Dao>: ColumnTrait + Copy,
     {
         if filters.is_empty() {
             return Ok(Vec::new());
@@ -195,7 +195,7 @@ pub trait CrudService {
                     let spec = spec_map.get(key.as_str()).ok_or_else(invalid_filter)?;
                     let parsed_op = (spec.parse)(&value)?;
                     parsed.push(ColumnFilter {
-                        column: spec.column.clone(),
+                        column: spec.column,
                         op: parsed_op,
                     });
                 }
@@ -239,7 +239,7 @@ pub trait CrudService {
                         }
                     };
                     parsed.push(ColumnFilter {
-                        column: column.clone(),
+                        column: *column,
                         op: parsed_op,
                     });
                 }
@@ -274,19 +274,15 @@ where
     T: std::str::FromStr,
     <T as std::str::FromStr>::Err: std::fmt::Display,
 {
-    raw.trim()
-        .parse::<T>()
-        .map_err(|err| invalid_filter_value_with(err))
+    raw.trim().parse::<T>().map_err(invalid_filter_value_with)
 }
 
 fn parse_float(raw: &str) -> Result<f64, AppError> {
-    raw.trim()
-        .parse::<f64>()
-        .map_err(|err| invalid_filter_value_with(err))
+    raw.trim().parse::<f64>().map_err(invalid_filter_value_with)
 }
 
 fn parse_date(raw: &str) -> Result<NaiveDate, AppError> {
-    NaiveDate::parse_from_str(raw.trim(), "%Y-%m-%d").map_err(|err| invalid_filter_value_with(err))
+    NaiveDate::parse_from_str(raw.trim(), "%Y-%m-%d").map_err(invalid_filter_value_with)
 }
 
 fn parse_time(raw: &str) -> Result<NaiveTime, AppError> {
@@ -322,11 +318,11 @@ fn parse_naive_datetime(raw: &str) -> Result<NaiveDateTime, AppError> {
 }
 
 fn parse_datetime_with_tz(raw: &str) -> Result<DateTime<FixedOffset>, AppError> {
-    DateTime::parse_from_rfc3339(raw.trim()).map_err(|err| invalid_filter_value_with(err))
+    DateTime::parse_from_rfc3339(raw.trim()).map_err(invalid_filter_value_with)
 }
 
 fn parse_json(raw: &str) -> Result<JsonValue, AppError> {
-    serde_json::from_str(raw.trim()).map_err(|err| invalid_filter_value_with(err))
+    serde_json::from_str(raw.trim()).map_err(invalid_filter_value_with)
 }
 
 fn ensure_no_wildcard(raw: &str) -> Result<(), AppError> {
@@ -515,7 +511,7 @@ fn parse_value_by_column_type(raw: &str, column_type: &ColumnType) -> Result<Que
             Ok(QueryValue::Json(Some(Box::new(parse_json(raw)?))))
         }
         ColumnType::Uuid => {
-            let uuid = Uuid::parse_str(raw.trim()).map_err(|err| invalid_filter_value_with(err))?;
+            let uuid = Uuid::parse_str(raw.trim()).map_err(invalid_filter_value_with)?;
             Ok(QueryValue::Uuid(Some(uuid)))
         }
         ColumnType::Enum { variants, .. } => {

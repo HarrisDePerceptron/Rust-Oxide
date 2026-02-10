@@ -1,5 +1,5 @@
 pub mod local;
-mod providers;
+mod registry;
 
 pub use local::LocalAuthProvider;
-pub use providers::{AuthProvider, AuthProviderId, AuthProviders};
+pub use registry::{AuthProvider, AuthProviderId, AuthProviders};

@@ -185,7 +185,7 @@ where
         apply: impl FnOnce(Select<Self::Entity>) -> Select<Self::Entity> + Send,
     ) -> DaoResult<PaginatedResponse<<Self::Entity as EntityTrait>::Model>>
     where
-        <Self::Entity as EntityTrait>::Column: Clone,
+        <Self::Entity as EntityTrait>::Column: Copy,
     {
         if page == 0 || page_size == 0 || page_size > Self::MAX_PAGE_SIZE {
             return Err(DaoLayerError::InvalidPagination { page, page_size });
@@ -196,9 +196,9 @@ where
         let filtered = filters
             .iter()
             .fold(filtered, |select, filter| match &filter.op {
-                FilterOp::Eq(value) => select.filter(filter.column.clone().eq(value.clone())),
+                FilterOp::Eq(value) => select.filter(filter.column.eq(value.clone())),
                 FilterOp::Compare { op, value } => {
-                    let expr = Expr::col(filter.column.clone());
+                    let expr = Expr::col(filter.column);
                     let value = Expr::val(value.clone());
                     let expr = match op {
                         CompareOp::Lt => expr.lt(value),
@@ -208,11 +208,10 @@ where
                     };
                     select.filter(expr)
                 }
-                FilterOp::Like { pattern, escape } => select.filter(
-                    Expr::col(filter.column.clone()).like(LikeExpr::new(pattern).escape(*escape)),
-                ),
+                FilterOp::Like { pattern, escape } => select
+                    .filter(Expr::col(filter.column).like(LikeExpr::new(pattern).escape(*escape))),
                 FilterOp::Between { min, max } => select.filter(
-                    Expr::col(filter.column.clone())
+                    Expr::col(filter.column)
                         .between(Expr::val(min.clone()), Expr::val(max.clone())),
                 ),
             });

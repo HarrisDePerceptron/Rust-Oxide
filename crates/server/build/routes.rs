@@ -116,17 +116,15 @@ impl<'a, 'ast> Visit<'ast> for RouteVisitor<'a> {
                     .nth(1)
                     .map(extract_route_handlers)
                     .unwrap_or_default();
-                if handlers.is_empty() {
-                    if let Some(bindings) = self.route_bindings {
-                        if let Some(bound) = node
-                            .args
-                            .iter()
-                            .nth(1)
-                            .and_then(|expr| resolve_route_binding(expr, bindings))
-                        {
-                            handlers = bound;
-                        }
-                    }
+                if handlers.is_empty()
+                    && let Some(bindings) = self.route_bindings
+                    && let Some(bound) = node
+                        .args
+                        .iter()
+                        .nth(1)
+                        .and_then(|expr| resolve_route_binding(expr, bindings))
+                {
+                    handlers = bound;
                 }
                 if handlers.is_empty() {
                     let methods = node
@@ -346,9 +344,7 @@ fn resolve_ident_type(expr: &Expr, locals: &HashMap<String, String>) -> Option<S
     let Expr::Path(path) = expr else {
         return None;
     };
-    let Some(segment) = path.path.segments.last() else {
-        return None;
-    };
+    let segment = path.path.segments.last()?;
     locals.get(&segment.ident.to_string()).cloned()
 }
 
@@ -374,9 +370,7 @@ fn type_from_constructor(expr: &Expr) -> Option<String> {
     let last = parts.last().map(String::as_str);
     let prev = parts.get(parts.len().saturating_sub(2)).map(String::as_str);
     match (prev, last) {
-        (Some(type_name), Some(method)) if matches!(method, "new" | "from" | "default") => {
-            Some(type_name.to_string())
-        }
+        (Some(type_name), Some("new" | "from" | "default")) => Some(type_name.to_string()),
         _ => None,
     }
 }
@@ -408,10 +402,10 @@ fn is_crud_api_router_new(expr: &Expr) -> bool {
 fn collect_const_string_literals(file: &File) -> HashMap<String, String> {
     let mut out = HashMap::new();
     for item in &file.items {
-        if let Item::Const(item_const) = item {
-            if let Some(value) = extract_string_literal(item_const.expr.as_ref()) {
-                out.insert(item_const.ident.to_string(), value);
-            }
+        if let Item::Const(item_const) = item
+            && let Some(value) = extract_string_literal(item_const.expr.as_ref())
+        {
+            out.insert(item_const.ident.to_string(), value);
         }
     }
     out
@@ -420,10 +414,10 @@ fn collect_const_string_literals(file: &File) -> HashMap<String, String> {
 fn collect_local_types(block: &Block) -> HashMap<String, String> {
     let mut locals = HashMap::new();
     for stmt in &block.stmts {
-        if let Stmt::Local(local) = stmt {
-            if let Some((name, ty)) = local_binding_type(local, &locals) {
-                locals.insert(name, ty);
-            }
+        if let Stmt::Local(local) = stmt
+            && let Some((name, ty)) = local_binding_type(local, &locals)
+        {
+            locals.insert(name, ty);
         }
     }
     locals
@@ -451,10 +445,10 @@ fn local_binding_type(
     }
 
     let init = local.init.as_ref().map(|init| init.expr.as_ref());
-    if let Some(expr) = init {
-        if let Some(ty) = infer_type_from_expr(expr, locals) {
-            return Some((name, ty));
-        }
+    if let Some(expr) = init
+        && let Some(ty) = infer_type_from_expr(expr, locals)
+    {
+        return Some((name, ty));
     }
     None
 }
@@ -535,10 +529,10 @@ fn extract_methods(expr: &Expr) -> Vec<String> {
 
     let mut methods = Vec::new();
     for name in names {
-        if let Some(method) = normalize_method(&name) {
-            if !methods.iter().any(|existing| existing == method) {
-                methods.push(method.to_string());
-            }
+        if let Some(method) = normalize_method(&name)
+            && !methods.iter().any(|existing| existing == method)
+        {
+            methods.push(method.to_string());
         }
     }
 
@@ -660,12 +654,12 @@ fn register_type_doc(registry: &mut TypeRegistry, module_path: &str, name: &str,
 
 pub(crate) fn collect_type_docs(file: &File, module_path: &str, registry: &mut TypeRegistry) {
     for item in &file.items {
-        if let Item::Struct(item_struct) = item {
-            if has_serde_derive(&item_struct.attrs) {
-                let doc = build_struct_doc(item_struct);
-                let name = item_struct.ident.to_string();
-                register_type_doc(registry, module_path, &name, doc);
-            }
+        if let Item::Struct(item_struct) = item
+            && has_serde_derive(&item_struct.attrs)
+        {
+            let doc = build_struct_doc(item_struct);
+            let name = item_struct.ident.to_string();
+            register_type_doc(registry, module_path, &name, doc);
         }
     }
 }
@@ -680,10 +674,10 @@ fn resolve_type_doc<'a>(
         if let Some(doc) = registry.docs.get(&full_path) {
             return Some(doc);
         }
-        if let Some(stripped) = full_path.strip_prefix("crate::") {
-            if let Some(doc) = registry.docs.get(stripped) {
-                return Some(doc);
-            }
+        if let Some(stripped) = full_path.strip_prefix("crate::")
+            && let Some(doc) = registry.docs.get(stripped)
+        {
+            return Some(doc);
         }
     }
     if let Some(last_ident) = last_ident {
@@ -728,15 +722,15 @@ fn expand_type(
     context: &CrudTypeContext,
     depth: usize,
 ) -> String {
-    if let Some(inner) = extract_generic_inner(ty, "HasMany") {
-        if let Some(model) = expand_entity_to_model(inner, registry, context, depth) {
-            return format!("Vec<{}>", model);
-        }
+    if let Some(inner) = extract_generic_inner(ty, "HasMany")
+        && let Some(model) = expand_entity_to_model(inner, registry, context, depth)
+    {
+        return format!("Vec<{}>", model);
     }
-    if let Some(inner) = extract_generic_inner(ty, "HasOne") {
-        if let Some(model) = expand_entity_to_model(inner, registry, context, depth) {
-            return format!("Option<{}>", model);
-        }
+    if let Some(inner) = extract_generic_inner(ty, "HasOne")
+        && let Some(model) = expand_entity_to_model(inner, registry, context, depth)
+    {
+        return format!("Option<{}>", model);
     }
     if let Some(model) = expand_entity_to_model(ty, registry, context, depth) {
         return model;
@@ -818,7 +812,7 @@ fn describe_type(
     type_to_string(ty)
 }
 
-fn extract_request_extractor<'a>(ty: &'a Type) -> Option<(ExtractorKind, &'a Type)> {
+fn extract_request_extractor(ty: &Type) -> Option<(ExtractorKind, &Type)> {
     if let Some(inner) = extract_generic_inner(ty, "Json") {
         return Some((ExtractorKind::Json, inner));
     }
@@ -909,11 +903,11 @@ fn build_curl(method: &str, path: &str, request: &str, auth_required: bool) -> S
     };
 
     let mut url = format!("{}{}", CURL_BASE_URL_PLACEHOLDER, path);
-    if let Some(query) = query {
-        if !query.is_empty() {
-            url.push('?');
-            url.push_str(&query);
-        }
+    if let Some(query) = query
+        && !query.is_empty()
+    {
+        url.push('?');
+        url.push_str(&query);
     }
 
     let mut cmd = format!("curl -sS -X {} \"{}\"", method, url);

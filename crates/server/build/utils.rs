@@ -74,7 +74,7 @@ pub(crate) fn to_pascal_case(value: &str) -> String {
     }
 
     let mut out = String::new();
-    for part in value.split(|ch| ch == '_' || ch == '-') {
+    for part in value.split(['_', '-']) {
         if part.is_empty() {
             continue;
         }
@@ -218,10 +218,9 @@ pub(crate) fn entity_name_from_type(ty: &Type) -> Option<String> {
                 .last()
                 .map(|value| value == "Entity")
                 .unwrap_or(false)
+                && segments.len() >= 2
             {
-                if segments.len() >= 2 {
-                    return Some(segments[segments.len() - 2].clone());
-                }
+                return Some(segments[segments.len() - 2].clone());
             }
             segments.last().cloned()
         }

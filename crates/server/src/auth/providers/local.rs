@@ -138,19 +138,19 @@ impl AuthProvider for LocalAuthProvider {
             .user_service
             .find_by_email(&cfg.admin_email)
             .await
-            .map_err(|err| anyhow::anyhow!(err.to_string()))?
+            .map_err(|err| anyhow::anyhow!("{err}"))?
         {
             tracing::info!("admin user already present: {}", existing.email);
             return Ok(());
         }
 
         let hash = hash_password(&cfg.admin_password)
-            .map_err(|e| anyhow::anyhow!("admin seed hash error: {}", e.to_string()))?;
+            .map_err(|e| anyhow::anyhow!("admin seed hash error: {e}"))?;
         let user = self
             .user_service
             .create_user(&cfg.admin_email, &hash, Role::Admin.as_str())
             .await
-            .map_err(|err| anyhow::anyhow!(err.to_string()))?;
+            .map_err(|err| anyhow::anyhow!("{err}"))?;
         tracing::info!("seeded admin user {}", user.email);
         Ok(())
     }

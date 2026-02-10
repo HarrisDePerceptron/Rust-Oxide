@@ -52,7 +52,9 @@ async fn main() -> Result<()> {
     // 3) /api/v1/login -> token pair
     let tokens = login(&http, &format!("{api_base}/login"), &user, &pass).await?;
     println!(
-        "\nGot access token (first 24 chars): {}…",
+        "\nGot {} access token ({}s, first 24 chars): {}…",
+        tokens.token_type,
+        tokens.expires_in,
         tokens.access_token.chars().take(24).collect::<String>()
     );
 
@@ -62,7 +64,9 @@ async fn main() -> Result<()> {
     // 5) /api/v1/refresh -> new access token
     let refreshed = refresh(&http, &format!("{api_base}/refresh"), &tokens.refresh_token).await?;
     println!(
-        "Refreshed access token (first 24 chars): {}…",
+        "Refreshed {} access token ({}s, first 24 chars): {}…",
+        refreshed.token_type,
+        refreshed.expires_in,
         refreshed.access_token.chars().take(24).collect::<String>()
     );
 
@@ -124,6 +128,10 @@ async fn login(http: &Client, url: &str, email: &str, password: &str) -> Result<
 
     let envelope: ApiResponse<TokenResponse> =
         serde_json::from_str(&text).context("parsing token response failed")?;
+    println!(
+        "Envelope: status={} message={}",
+        envelope.status, envelope.message
+    );
     Ok(envelope.data)
 }
 
@@ -148,6 +156,10 @@ async fn refresh(http: &Client, url: &str, refresh_token: &str) -> Result<TokenR
 
     let envelope: ApiResponse<TokenResponse> =
         serde_json::from_str(&text).context("parsing refresh response failed")?;
+    println!(
+        "Envelope: status={} message={}",
+        envelope.status, envelope.message
+    );
     Ok(envelope.data)
 }
 
