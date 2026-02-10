@@ -16,7 +16,7 @@ use crate::{
     error::AppError,
     middleware::{AuthGuard, AuthRolGuardLayer},
     response::{ApiResult, JsonApiResponse},
-    routes::base_api_router::{CrudApiRouter, Method},
+    routes::crud_api_router::{CrudApiRouter, Method},
     services::{ServiceContext, todo_service},
     state::AppState,
 };

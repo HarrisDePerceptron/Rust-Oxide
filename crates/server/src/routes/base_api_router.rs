@@ -1,18 +1,16 @@
 use axum::{
     Json, Router,
     extract::rejection::QueryRejection,
-    extract::{Path, Query, Request},
+    extract::{Path, Query},
     http::StatusCode,
-    response::Response,
-    routing::{MethodRouter, Route, delete, get, patch, post},
+    routing::{MethodRouter, delete, get, patch, post},
 };
 use sea_orm::{
     ActiveModelTrait, ActiveValue, EntityTrait, IdenStatic, Iterable, Order, PrimaryKeyToColumn,
     Select, TryIntoModel,
 };
 use serde_json::Value;
-use std::{collections::HashMap, convert::Infallible};
-use tower::{Layer, Service, util::BoxCloneSyncServiceLayer};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use super::base_router::BaseRouter;
@@ -21,11 +19,11 @@ use crate::{
     services::crud_service::CrudService,
 };
 
-type DaoOf<S> = <S as CrudService>::Dao;
-type EntityOf<S> = <DaoOf<S> as DaoBase>::Entity;
-type ModelOf<S> = <EntityOf<S> as EntityTrait>::Model;
-type ActiveModelOf<S> = <EntityOf<S> as EntityTrait>::ActiveModel;
-type ColumnOf<S> = <EntityOf<S> as EntityTrait>::Column;
+pub(crate) type DaoOf<S> = <S as CrudService>::Dao;
+pub(crate) type EntityOf<S> = <DaoOf<S> as DaoBase>::Entity;
+pub(crate) type ModelOf<S> = <EntityOf<S> as EntityTrait>::Model;
+pub(crate) type ActiveModelOf<S> = <EntityOf<S> as EntityTrait>::ActiveModel;
+pub(crate) type ColumnOf<S> = <EntityOf<S> as EntityTrait>::Column;
 
 #[derive(Clone, serde::Deserialize)]
 pub struct ListQuery {
@@ -44,7 +42,7 @@ pub enum Method {
     Delete,
 }
 
-const DEFAULT_ALLOWED_METHODS: [Method; 5] = [
+pub(crate) const DEFAULT_ALLOWED_METHODS: [Method; 5] = [
     Method::Create,
     Method::List,
     Method::Get,
@@ -54,64 +52,6 @@ const DEFAULT_ALLOWED_METHODS: [Method; 5] = [
 
 const INVALID_PAYLOAD_MESSAGE: &str = "Invalid payload";
 const INVALID_QUERY_MESSAGE: &str = "Invalid query";
-
-type MethodLayer = BoxCloneSyncServiceLayer<Route<Infallible>, Request, Response, Infallible>;
-
-pub struct CrudApiRouter<S> {
-    service: S,
-    base_path: &'static str,
-    allowed_methods: Vec<Method>,
-    method_middlewares: HashMap<Method, Vec<MethodLayer>>,
-}
-
-impl<S> CrudApiRouter<S> {
-    pub fn new(service: S, base_path: &'static str) -> Self {
-        Self {
-            service,
-            base_path,
-            allowed_methods: DEFAULT_ALLOWED_METHODS.to_vec(),
-            method_middlewares: HashMap::new(),
-        }
-    }
-
-    pub fn set_allowed_methods(mut self, methods: &[Method]) -> Self {
-        self.allowed_methods = methods.to_vec();
-        self
-    }
-
-    pub fn set_method_middleware<L>(mut self, method: Method, layer: L) -> Self
-    where
-        L: Layer<Route<Infallible>> + Clone + Send + Sync + 'static,
-        L::Service: Service<Request, Response = Response, Error = Infallible>
-            + Clone
-            + Send
-            + Sync
-            + 'static,
-        <L::Service as Service<Request>>::Future: Send + 'static,
-    {
-        self.method_middlewares
-            .entry(method)
-            .or_default()
-            .push(BoxCloneSyncServiceLayer::new(layer));
-        self
-    }
-}
-
-impl<S> CrudApiRouter<S>
-where
-    S: CrudService + Clone + Send + Sync + 'static,
-    ActiveModelOf<S>: ActiveModelTrait + TryIntoModel<ModelOf<S>>,
-    ModelOf<S>: for<'de> serde::Deserialize<'de> + serde::Serialize,
-    ModelOf<S>: sea_orm::IntoActiveModel<ActiveModelOf<S>>,
-    ColumnOf<S>: Iterable,
-{
-    pub fn router<State>(self) -> Router<State>
-    where
-        State: Clone + Send + Sync + 'static,
-    {
-        BaseApiRouter::router_for(&self)
-    }
-}
 
 #[allow(async_fn_in_trait)]
 pub trait BaseApiRouter: BaseRouter
@@ -308,41 +248,385 @@ where
     }
 }
 
-impl<S> BaseApiRouter for CrudApiRouter<S>
-where
-    S: CrudService + Clone + Send + Sync + 'static,
-    ActiveModelOf<S>: ActiveModelTrait + TryIntoModel<ModelOf<S>>,
-    ModelOf<S>: for<'de> serde::Deserialize<'de> + serde::Serialize,
-    ModelOf<S>: sea_orm::IntoActiveModel<ActiveModelOf<S>>,
-    ColumnOf<S>: Iterable,
-{
-    type Service = S;
+#[cfg(test)]
+mod tests {
+    use axum::{
+        body::{Body, to_bytes},
+        http::{Request, StatusCode},
+    };
+    use chrono::{FixedOffset, TimeZone};
+    use sea_orm::entity::prelude::*;
+    use sea_orm::{
+        ActiveValue, DatabaseBackend, DatabaseConnection, MockDatabase, Order, Select, Set,
+    };
+    use serde_json::json;
+    use tower::ServiceExt;
+    use uuid::Uuid;
 
-    fn service(&self) -> Self::Service {
-        self.service.clone()
-    }
+    use super::{BaseApiRouter, Method};
+    use crate::{
+        db::dao::{
+            DaoBase, HasCreatedAtColumn, HasIdActiveModel, PaginatedResponse,
+            TimestampedActiveModel,
+        },
+        error::AppError,
+        services::crud_service::CrudService,
+    };
 
-    fn base_path(&self) -> &'static str {
-        self.base_path
-    }
+    mod test_entity {
+        use sea_orm::entity::prelude::*;
 
-    fn allowed_methods(&self) -> &[Method] {
-        self.allowed_methods.as_slice()
-    }
-
-    fn apply_method_middleware<State>(
-        &self,
-        method: Method,
-        route: MethodRouter<State>,
-    ) -> MethodRouter<State>
-    where
-        State: Clone + Send + Sync + 'static,
-    {
-        match self.method_middlewares.get(&method) {
-            Some(layers) => layers
-                .iter()
-                .fold(route, |route, layer| route.route_layer(layer.clone())),
-            None => route,
+        #[derive(
+            Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, DeriveEntityModel,
+        )]
+        #[sea_orm(table_name = "test_base_api_router_items")]
+        pub struct Model {
+            #[sea_orm(primary_key, auto_increment = false)]
+            pub id: uuid::Uuid,
+            pub created_at: DateTimeWithTimeZone,
+            pub updated_at: DateTimeWithTimeZone,
+            pub title: String,
         }
+
+        #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+        pub enum Relation {}
+
+        impl ActiveModelBehavior for ActiveModel {}
+    }
+
+    impl HasCreatedAtColumn for test_entity::Entity {
+        fn created_at_column() -> Self::Column {
+            test_entity::Column::CreatedAt
+        }
+    }
+
+    impl HasIdActiveModel for test_entity::ActiveModel {
+        fn set_id(&mut self, id: Uuid) {
+            self.id = Set(id);
+        }
+    }
+
+    impl TimestampedActiveModel for test_entity::ActiveModel {
+        fn set_created_at(&mut self, ts: DateTimeWithTimeZone) {
+            self.created_at = Set(ts);
+        }
+
+        fn set_updated_at(&mut self, ts: DateTimeWithTimeZone) {
+            self.updated_at = Set(ts);
+        }
+    }
+
+    #[derive(Clone)]
+    struct TestDao {
+        db: DatabaseConnection,
+    }
+
+    impl DaoBase for TestDao {
+        type Entity = test_entity::Entity;
+
+        fn new(db: &DatabaseConnection) -> Self {
+            Self { db: db.clone() }
+        }
+
+        fn db(&self) -> &DatabaseConnection {
+            &self.db
+        }
+    }
+
+    #[derive(Clone)]
+    struct TestCrudService {
+        dao: TestDao,
+    }
+
+    impl TestCrudService {
+        fn new() -> Self {
+            let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
+            Self {
+                dao: TestDao::new(&db),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl CrudService for TestCrudService {
+        type Dao = TestDao;
+
+        fn dao(&self) -> &Self::Dao {
+            &self.dao
+        }
+
+        async fn create<T>(&self, data: T) -> Result<test_entity::Model, AppError>
+        where
+            T: sea_orm::IntoActiveModel<test_entity::ActiveModel> + Send,
+        {
+            let active = data.into_active_model();
+            let title = match active.title {
+                ActiveValue::Set(v) | ActiveValue::Unchanged(v) => v,
+                ActiveValue::NotSet => "created".to_string(),
+            };
+            Ok(model(Uuid::new_v4(), &title))
+        }
+
+        async fn find_by_id(&self, id: Uuid) -> Result<test_entity::Model, AppError> {
+            Ok(model(id, "found"))
+        }
+
+        async fn find_with_filters<F>(
+            &self,
+            page: u64,
+            page_size: u64,
+            _order: Option<(test_entity::Column, Order)>,
+            _filters: std::collections::HashMap<String, String>,
+            _apply: F,
+        ) -> Result<PaginatedResponse<test_entity::Model>, AppError>
+        where
+            F: FnOnce(Select<test_entity::Entity>) -> Select<test_entity::Entity> + Send,
+            test_entity::Column: sea_orm::ColumnTrait + Clone,
+        {
+            Ok(PaginatedResponse {
+                data: vec![],
+                page,
+                page_size,
+                has_next: false,
+                total: None,
+            })
+        }
+
+        async fn update<F>(&self, id: Uuid, apply: F) -> Result<test_entity::Model, AppError>
+        where
+            F: for<'a> FnOnce(&'a mut test_entity::ActiveModel) + Send,
+        {
+            let mut active = test_entity::ActiveModel {
+                id: Set(id),
+                title: Set("before".to_string()),
+                created_at: Set(ts()),
+                updated_at: Set(ts()),
+            };
+            apply(&mut active);
+            let title = match active.title {
+                ActiveValue::Set(v) | ActiveValue::Unchanged(v) => v,
+                ActiveValue::NotSet => "before".to_string(),
+            };
+            Ok(model(id, &title))
+        }
+
+        async fn delete(&self, _id: Uuid) -> Result<(), AppError> {
+            Ok(())
+        }
+    }
+
+    #[derive(Clone)]
+    struct TestBaseRouter {
+        service: TestCrudService,
+        allowed_methods: Vec<Method>,
+    }
+
+    impl TestBaseRouter {
+        fn new(allowed_methods: &[Method]) -> Self {
+            Self {
+                service: TestCrudService::new(),
+                allowed_methods: allowed_methods.to_vec(),
+            }
+        }
+    }
+
+    impl BaseApiRouter for TestBaseRouter {
+        type Service = TestCrudService;
+
+        fn service(&self) -> Self::Service {
+            self.service.clone()
+        }
+
+        fn base_path(&self) -> &'static str {
+            "/items"
+        }
+
+        fn allowed_methods(&self) -> &[Method] {
+            self.allowed_methods.as_slice()
+        }
+    }
+
+    fn ts() -> chrono::DateTime<chrono::FixedOffset> {
+        FixedOffset::east_opt(0)
+            .expect("offset should be valid")
+            .with_ymd_and_hms(2026, 1, 1, 0, 0, 0)
+            .single()
+            .expect("timestamp should be valid")
+    }
+
+    fn model(id: Uuid, title: &str) -> test_entity::Model {
+        test_entity::Model {
+            id,
+            created_at: ts(),
+            updated_at: ts(),
+            title: title.to_string(),
+        }
+    }
+
+    async fn response_json(response: axum::response::Response) -> serde_json::Value {
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should be readable");
+        serde_json::from_slice::<serde_json::Value>(&bytes).expect("response should be valid json")
+    }
+
+    #[test]
+    fn build_create_rejects_invalid_payload() {
+        let err = TestBaseRouter::build_create(json!({ "title": 123 }))
+            .expect_err("invalid payload should fail");
+
+        assert!(err.message().starts_with("Invalid payload:"));
+    }
+
+    #[test]
+    fn build_update_rejects_invalid_payload() {
+        let err = TestBaseRouter::build_update(json!({ "title": 123 }))
+            .expect_err("invalid payload should fail");
+
+        assert!(err.message().starts_with("Invalid payload:"));
+    }
+
+    #[test]
+    fn apply_patch_updates_non_primary_key_field() {
+        let id = Uuid::new_v4();
+        let mut active = test_entity::ActiveModel {
+            id: Set(id),
+            title: Set("before".to_string()),
+            created_at: Set(ts()),
+            updated_at: Set(ts()),
+        };
+        let patch = TestBaseRouter::build_update(json!({ "title": "after" }))
+            .expect("update payload should parse");
+
+        TestBaseRouter::apply_patch(&mut active, patch);
+
+        assert!(matches!(active.title, ActiveValue::Set(ref title) if title == "after"));
+    }
+
+    #[test]
+    fn apply_patch_does_not_override_primary_key_field() {
+        let original_id = Uuid::new_v4();
+        let mut active = test_entity::ActiveModel {
+            id: Set(original_id),
+            title: Set("before".to_string()),
+            created_at: Set(ts()),
+            updated_at: Set(ts()),
+        };
+        let patch = TestBaseRouter::build_update(json!({ "id": Uuid::new_v4() }))
+            .expect("update payload should parse");
+
+        TestBaseRouter::apply_patch(&mut active, patch);
+
+        assert!(matches!(active.id, ActiveValue::Set(id) if id == original_id));
+    }
+
+    #[tokio::test]
+    async fn list_route_defaults_page_to_one() {
+        let router = TestBaseRouter::new(&[Method::List]).router_for();
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/items")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        let json = response_json(response).await;
+        assert_eq!(json["data"]["page"], 1);
+    }
+
+    #[tokio::test]
+    async fn list_route_defaults_page_size_to_twenty_five() {
+        let router = TestBaseRouter::new(&[Method::List]).router_for();
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/items")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        let json = response_json(response).await;
+        assert_eq!(json["data"]["page_size"], 25);
+    }
+
+    #[tokio::test]
+    async fn list_route_uses_query_page_value() {
+        let router = TestBaseRouter::new(&[Method::List]).router_for();
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/items?page=3")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        let json = response_json(response).await;
+        assert_eq!(json["data"]["page"], 3);
+    }
+
+    #[tokio::test]
+    async fn list_route_uses_query_page_size_value() {
+        let router = TestBaseRouter::new(&[Method::List]).router_for();
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/items?page_size=7")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        let json = response_json(response).await;
+        assert_eq!(json["data"]["page_size"], 7);
+    }
+
+    #[tokio::test]
+    async fn list_route_maps_query_rejection_to_bad_request_status() {
+        let router = TestBaseRouter::new(&[Method::List]).router_for();
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/items?page=not-a-number")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn list_route_maps_query_rejection_to_invalid_query_message() {
+        let router = TestBaseRouter::new(&[Method::List]).router_for();
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/items?page=not-a-number")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        let json = response_json(response).await;
+        let message = json["message"]
+            .as_str()
+            .expect("message should be a string");
+        assert!(message.starts_with("Invalid query:"));
     }
 }

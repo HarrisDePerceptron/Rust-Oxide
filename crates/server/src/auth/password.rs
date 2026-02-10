@@ -35,22 +35,35 @@ mod tests {
     use super::{hash_password, verify_password};
 
     #[test]
-    fn rejects_short_password() {
+    fn hash_password_rejects_password_shorter_than_min_len() {
         let err = hash_password("short").expect_err("password should be rejected");
         assert_eq!(err.message(), "Password too short");
     }
 
     #[test]
-    fn hashes_and_verifies_password() {
-        let password = "correct-horse-battery-staple";
-        let hash = hash_password(password).expect("hash should succeed");
-
-        assert!(verify_password(password, &hash).expect("verification should succeed"));
-        assert!(!verify_password("wrong-password", &hash).expect("verification should succeed"));
+    fn hash_password_accepts_password_at_min_len() {
+        let hash = hash_password("12345678").expect("min-length password should be accepted");
+        assert!(!hash.is_empty());
     }
 
     #[test]
-    fn invalid_hash_returns_error() {
+    fn verify_password_returns_true_for_matching_password() {
+        let password = "correct-horse-battery-staple";
+        let hash = hash_password(password).expect("hash should succeed");
+        let verified = verify_password(password, &hash).expect("verification should succeed");
+        assert!(verified);
+    }
+
+    #[test]
+    fn verify_password_returns_false_for_non_matching_password() {
+        let hash = hash_password("correct-horse-battery-staple").expect("hash should succeed");
+        let verified =
+            verify_password("wrong-password", &hash).expect("verification should succeed");
+        assert!(!verified);
+    }
+
+    #[test]
+    fn verify_password_returns_error_for_invalid_hash() {
         let err = verify_password("password123", "not-a-valid-hash")
             .expect_err("invalid hash should fail");
         assert!(
