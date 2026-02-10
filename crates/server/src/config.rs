@@ -16,6 +16,23 @@ pub struct AppConfig {
     pub auth_provider: AuthProviderId,
 }
 
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            host: "127.0.0.1".to_string(),
+            port: 3000,
+            jwt_secret: "super-secret-change-me".to_string(),
+            log_level: "info,tower_http=info".to_string(),
+            database_url: "postgres://postgres:postgres@localhost:5432/rust_oxide".to_string(),
+            db_max_connections: 10,
+            db_min_idle: 2,
+            admin_email: "admin@example.com".to_string(),
+            admin_password: "adminpassword".to_string(),
+            auth_provider: AuthProviderId::Local,
+        }
+    }
+}
+
 impl AppConfig {
     pub fn from_env() -> Result<Self> {
         // Load .env from crate root (falls back to current dir if missing)

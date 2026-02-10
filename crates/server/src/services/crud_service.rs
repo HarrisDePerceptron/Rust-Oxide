@@ -548,50 +548,132 @@ fn parse_value_by_column_type(raw: &str, column_type: &ColumnType) -> Result<Que
 mod tests {
     use std::collections::HashMap;
 
-    use sea_orm::{DatabaseBackend, DbErr, MockDatabase};
-
-    use crate::db::{
-        dao::{DaoBase, TodoDao},
-        entities::todo_list,
+    use chrono::{FixedOffset, TimeZone};
+    use sea_orm::entity::prelude::*;
+    use sea_orm::{
+        DatabaseBackend, DatabaseConnection, DbErr, IntoMockRow, MockDatabase, MockExecResult, Set,
     };
+    use uuid::Uuid;
+
+    use crate::db::dao::{
+        DaoBase, DaoLayerError, HasCreatedAtColumn, HasIdActiveModel, TimestampedActiveModel,
+    };
+    use crate::error::AppError;
 
     use super::{
-        CompareOp, CrudErrors, CrudOp, CrudService, DaoLayerError, FilterMode, FilterOp,
-        FilterParseStrategy, parse_non_string_filter, parse_string_filter,
+        CompareOp, CrudErrors, CrudOp, CrudService, FilterMode, FilterOp, FilterParseStrategy,
+        FilterSpec, QueryValue,
     };
 
-    #[derive(Clone)]
-    struct TestCrudService {
-        dao: TodoDao,
-        parse: FilterParseStrategy,
-        deny: &'static [&'static str],
-        errors: CrudErrors,
+    mod test_entity {
+        use sea_orm::entity::prelude::*;
+
+        #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+        #[sea_orm(table_name = "test_crud_records")]
+        pub struct Model {
+            #[sea_orm(primary_key, auto_increment = false)]
+            pub id: uuid::Uuid,
+            pub created_at: DateTimeWithTimeZone,
+            pub updated_at: DateTimeWithTimeZone,
+            pub title: String,
+            pub score: i32,
+            pub done: bool,
+            pub external_id: uuid::Uuid,
+            pub scheduled_at: DateTimeWithTimeZone,
+        }
+
+        #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+        pub enum Relation {}
+
+        impl ActiveModelBehavior for ActiveModel {}
     }
 
-    impl TestCrudService {
-        fn new(parse: FilterParseStrategy, deny: &'static [&'static str]) -> Self {
-            let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
-            Self {
-                dao: TodoDao::new(&db),
-                parse,
-                deny,
-                errors: CrudErrors::default(),
-            }
+    impl HasCreatedAtColumn for test_entity::Entity {
+        fn created_at_column() -> Self::Column {
+            test_entity::Column::CreatedAt
         }
     }
 
+    impl HasIdActiveModel for test_entity::ActiveModel {
+        fn set_id(&mut self, id: Uuid) {
+            self.id = Set(id);
+        }
+    }
+
+    impl TimestampedActiveModel for test_entity::ActiveModel {
+        fn set_created_at(&mut self, ts: DateTimeWithTimeZone) {
+            self.created_at = Set(ts);
+        }
+
+        fn set_updated_at(&mut self, ts: DateTimeWithTimeZone) {
+            self.updated_at = Set(ts);
+        }
+    }
+
+    #[derive(Clone)]
+    struct TestDao {
+        db: DatabaseConnection,
+    }
+
+    impl DaoBase for TestDao {
+        type Entity = test_entity::Entity;
+
+        fn new(db: &DatabaseConnection) -> Self {
+            Self { db: db.clone() }
+        }
+
+        fn db(&self) -> &DatabaseConnection {
+            &self.db
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    enum FilterModeKind {
+        AllColumns,
+        Allowlist,
+    }
+
+    #[derive(Clone)]
+    struct TestCrudService {
+        dao: TestDao,
+        parse: FilterParseStrategy,
+        deny: &'static [&'static str],
+        errors: CrudErrors,
+        filter_mode: FilterModeKind,
+    }
+
+    fn parse_allowlist_title(raw: &str) -> Result<FilterOp, AppError> {
+        let raw = raw.trim();
+        if raw.eq_ignore_ascii_case("bad") {
+            return Err(AppError::bad_request("Invalid filter value"));
+        }
+        if raw.is_empty() {
+            return Err(AppError::bad_request("Invalid filter value"));
+        }
+        Ok(FilterOp::Eq(QueryValue::String(Some(raw.to_string()))))
+    }
+
+    static TITLE_ALLOWLIST: &[FilterSpec<test_entity::Column>] = &[FilterSpec {
+        key: "title",
+        column: test_entity::Column::Title,
+        parse: parse_allowlist_title,
+    }];
+
     #[async_trait::async_trait]
     impl CrudService for TestCrudService {
-        type Dao = TodoDao;
+        type Dao = TestDao;
 
         fn dao(&self) -> &Self::Dao {
             &self.dao
         }
 
-        fn list_filter_mode(&self) -> FilterMode<todo_list::Column> {
-            FilterMode::AllColumns {
-                deny: self.deny,
-                parse: self.parse,
+        fn list_filter_mode(&self) -> FilterMode<test_entity::Column> {
+            match self.filter_mode {
+                FilterModeKind::AllColumns => FilterMode::AllColumns {
+                    deny: self.deny,
+                    parse: self.parse,
+                },
+                FilterModeKind::Allowlist => FilterMode::Allowlist(TITLE_ALLOWLIST),
             }
         }
 
@@ -600,153 +682,793 @@ mod tests {
         }
     }
 
-    #[test]
-    fn parse_string_filter_supports_exact_and_edge_wildcards() {
-        match parse_string_filter("hello").expect("exact value should parse") {
-            FilterOp::Eq(value) => {
-                assert_eq!(
-                    value,
-                    sea_orm::sea_query::Value::String(Some("hello".to_string()))
-                );
-            }
-            other => panic!("expected Eq, got {other:?}"),
-        }
-
-        match parse_string_filter("*hello*").expect("contains wildcard should parse") {
-            FilterOp::Like { pattern, escape } => {
-                assert_eq!(pattern, "%hello%");
-                assert_eq!(escape, '\\');
-            }
-            other => panic!("expected Like, got {other:?}"),
-        }
-
-        match parse_string_filter("hello*").expect("prefix wildcard should parse") {
-            FilterOp::Like { pattern, .. } => assert_eq!(pattern, "hello%"),
-            other => panic!("expected Like, got {other:?}"),
-        }
-
-        match parse_string_filter("*hello").expect("suffix wildcard should parse") {
-            FilterOp::Like { pattern, .. } => assert_eq!(pattern, "%hello"),
-            other => panic!("expected Like, got {other:?}"),
-        }
+    struct CrudFixtureBuilder {
+        mock: MockDatabase,
+        parse: FilterParseStrategy,
+        deny: &'static [&'static str],
+        errors: CrudErrors,
+        filter_mode: FilterModeKind,
     }
 
-    #[test]
-    fn parse_string_filter_rejects_invalid_forms() {
-        assert!(parse_string_filter("").is_err());
-        assert!(parse_string_filter("*").is_err());
-        assert!(parse_string_filter("a*b").is_err());
-        assert!(parse_string_filter("**").is_err());
-    }
+    impl CrudFixtureBuilder {
+        fn new() -> Self {
+            Self {
+                mock: MockDatabase::new(DatabaseBackend::Postgres),
+                parse: FilterParseStrategy::ByColumnType,
+                deny: &[],
+                errors: CrudErrors::default(),
+                filter_mode: FilterModeKind::AllColumns,
+            }
+        }
 
-    #[test]
-    fn parse_non_string_filter_supports_compare_and_range() {
-        match parse_non_string_filter(">10", &sea_orm::sea_query::ColumnType::Integer)
-            .expect("comparison should parse")
+        fn with_parse(mut self, parse: FilterParseStrategy) -> Self {
+            self.parse = parse;
+            self
+        }
+
+        fn with_deny(mut self, deny: &'static [&'static str]) -> Self {
+            self.deny = deny;
+            self
+        }
+
+        fn with_errors(mut self, errors: CrudErrors) -> Self {
+            self.errors = errors;
+            self
+        }
+
+        fn with_allowlist_mode(mut self) -> Self {
+            self.filter_mode = FilterModeKind::Allowlist;
+            self
+        }
+
+        fn with_query_results<T, I, II>(mut self, sets: II) -> Self
+        where
+            T: IntoMockRow,
+            I: IntoIterator<Item = T>,
+            II: IntoIterator<Item = I>,
         {
-            FilterOp::Compare { op, value } => {
-                assert!(matches!(op, CompareOp::Gt));
-                assert_eq!(value, sea_orm::sea_query::Value::Int(Some(10)));
-            }
-            other => panic!("expected Compare, got {other:?}"),
+            self.mock = self.mock.append_query_results(sets);
+            self
         }
 
-        match parse_non_string_filter("1..9", &sea_orm::sea_query::ColumnType::Integer)
-            .expect("range should parse")
-        {
-            FilterOp::Between { min, max } => {
-                assert_eq!(min, sea_orm::sea_query::Value::Int(Some(1)));
-                assert_eq!(max, sea_orm::sea_query::Value::Int(Some(9)));
+        fn with_query_error(mut self, error: DbErr) -> Self {
+            self.mock = self.mock.append_query_errors([error]);
+            self
+        }
+
+        fn with_exec_result(mut self, rows_affected: u64) -> Self {
+            self.mock = self.mock.append_exec_results([MockExecResult {
+                last_insert_id: 0,
+                rows_affected,
+            }]);
+            self
+        }
+
+        fn with_exec_error(mut self, error: DbErr) -> Self {
+            self.mock = self.mock.append_exec_errors([error]);
+            self
+        }
+
+        fn build(self) -> TestCrudService {
+            let db = self.mock.into_connection();
+            let dao = TestDao::new(&db);
+            TestCrudService {
+                dao,
+                parse: self.parse,
+                deny: self.deny,
+                errors: self.errors,
+                filter_mode: self.filter_mode,
             }
-            other => panic!("expected Between, got {other:?}"),
         }
     }
 
-    #[test]
-    fn parse_non_string_filter_rejects_invalid_ops_for_column_type() {
-        let err = parse_non_string_filter(">true", &sea_orm::sea_query::ColumnType::Boolean)
-            .expect_err("boolean comparison should fail");
-        assert_eq!(err.message(), "Invalid filter");
+    fn ts() -> chrono::DateTime<chrono::FixedOffset> {
+        FixedOffset::east_opt(0)
+            .expect("offset should be valid")
+            .with_ymd_and_hms(2026, 1, 1, 0, 0, 0)
+            .single()
+            .expect("timestamp should be valid")
     }
 
-    #[test]
-    fn build_column_filters_rejects_unknown_or_denied_columns() {
-        let service = TestCrudService::new(FilterParseStrategy::ByColumnType, &["title"]);
-
-        let mut unknown = HashMap::new();
-        unknown.insert("unknown".to_string(), "1".to_string());
-        let unknown_err = service
-            .build_column_filters(unknown)
-            .expect_err("unknown column should fail");
-        assert_eq!(unknown_err.message(), "Invalid filter");
-
-        let mut denied = HashMap::new();
-        denied.insert("title".to_string(), "todo*".to_string());
-        let denied_err = service
-            .build_column_filters(denied)
-            .expect_err("denied column should fail");
-        assert_eq!(denied_err.message(), "Invalid filter");
-    }
-
-    #[test]
-    fn build_column_filters_parses_by_column_type_and_strings_only_modes() {
-        let by_type = TestCrudService::new(FilterParseStrategy::ByColumnType, &[]);
-        let mut numeric = HashMap::new();
-        numeric.insert("score".to_string(), ">=7".to_string());
-        let filters = by_type
-            .build_column_filters(numeric)
-            .expect("numeric score filter should parse");
-        assert_eq!(filters.len(), 1);
-
-        match &filters[0].op {
-            FilterOp::Compare { op, value } => {
-                assert!(matches!(op, CompareOp::Gte));
-                assert_eq!(*value, sea_orm::sea_query::Value::Int(Some(7)));
-            }
-            other => panic!("expected Compare, got {other:?}"),
+    fn model(id: Uuid, title: &str, score: i32, done: bool) -> test_entity::Model {
+        let now = ts();
+        test_entity::Model {
+            id,
+            created_at: now,
+            updated_at: now,
+            title: title.to_string(),
+            score,
+            done,
+            external_id: Uuid::new_v4(),
+            scheduled_at: now,
         }
-
-        let strings_only = TestCrudService::new(FilterParseStrategy::StringsOnly, &[]);
-        let mut non_string = HashMap::new();
-        non_string.insert("score".to_string(), "1".to_string());
-        let err = strings_only
-            .build_column_filters(non_string)
-            .expect_err("non-string column should be rejected in StringsOnly mode");
-        assert_eq!(err.message(), "Invalid filter");
     }
 
-    #[test]
-    fn map_error_distinguishes_database_and_validation_paths() {
-        let service = TestCrudService::new(FilterParseStrategy::ByColumnType, &[]);
+    fn active(title: &str, score: i32, done: bool) -> test_entity::ActiveModel {
+        test_entity::ActiveModel {
+            title: Set(title.to_string()),
+            score: Set(score),
+            done: Set(done),
+            external_id: Set(Uuid::new_v4()),
+            scheduled_at: Set(ts()),
+            ..Default::default()
+        }
+    }
 
-        let create_db = service.map_error(
-            CrudOp::Create,
-            DaoLayerError::Db(DbErr::Custom("boom".into())),
-        );
+    fn filters(entries: &[(&str, &str)]) -> HashMap<String, String> {
+        entries
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn create_returns_model_on_success() {
+        let id = Uuid::new_v4();
+        let service = CrudFixtureBuilder::new()
+            .with_query_results([vec![model(id, "first", 1, false)]])
+            .build();
+
+        let created = service
+            .create(active("first", 1, false))
+            .await
+            .expect("create should succeed");
+
+        assert_eq!(created.id, id);
+    }
+
+    #[tokio::test]
+    async fn create_maps_db_error_to_internal_with_create_message() {
+        let service = CrudFixtureBuilder::new()
+            .with_query_error(DbErr::Custom("insert failed".to_string()))
+            .build();
+
+        let err = service
+            .create(active("first", 1, false))
+            .await
+            .expect_err("create should fail");
+
         assert_eq!(
-            create_db.message(),
+            err.message(),
             "Create failed. Please check the logs for more details"
         );
+    }
 
-        let not_found = service.map_error(
+    #[tokio::test]
+    async fn find_by_id_returns_model_on_success() {
+        let id = Uuid::new_v4();
+        let service = CrudFixtureBuilder::new()
+            .with_query_results([vec![model(id, "first", 1, false)]])
+            .build();
+
+        let found = service
+            .find_by_id(id)
+            .await
+            .expect("find_by_id should succeed");
+
+        assert_eq!(found.id, id);
+    }
+
+    #[tokio::test]
+    async fn find_by_id_maps_not_found_to_service_not_found_message() {
+        let id = Uuid::new_v4();
+        let service = CrudFixtureBuilder::new()
+            .with_query_results([Vec::<test_entity::Model>::new()])
+            .build();
+
+        let err = service
+            .find_by_id(id)
+            .await
+            .expect_err("find_by_id should fail");
+
+        assert_eq!(err.message(), "Resource not found");
+    }
+
+    #[tokio::test]
+    async fn find_by_id_maps_db_error_to_internal_with_find_message() {
+        let service = CrudFixtureBuilder::new()
+            .with_query_error(DbErr::Custom("select failed".to_string()))
+            .build();
+
+        let err = service
+            .find_by_id(Uuid::new_v4())
+            .await
+            .expect_err("find_by_id should fail");
+
+        assert_eq!(
+            err.message(),
+            "Find failed. Please check the logs for more details"
+        );
+    }
+
+    #[tokio::test]
+    async fn find_returns_paginated_response_on_success() {
+        let service = CrudFixtureBuilder::new()
+            .with_query_results([vec![model(Uuid::new_v4(), "first", 1, false)]])
+            .build();
+
+        let response = service
+            .find(1, 1, None, |query| query)
+            .await
+            .expect("find should succeed");
+
+        assert_eq!(response.data.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn find_maps_invalid_pagination_to_bad_request() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let err = service
+            .find(0, 1, None, |query| query)
+            .await
+            .expect_err("find should fail");
+
+        assert_eq!(err.message(), "Invalid pagination: page=0 page_size=1");
+    }
+
+    #[tokio::test]
+    async fn find_maps_db_error_to_internal_with_find_message() {
+        let service = CrudFixtureBuilder::new()
+            .with_query_error(DbErr::Custom("find failed".to_string()))
+            .build();
+
+        let err = service
+            .find(1, 1, None, |query| query)
+            .await
+            .expect_err("find should fail");
+
+        assert_eq!(
+            err.message(),
+            "Find failed. Please check the logs for more details"
+        );
+    }
+
+    #[tokio::test]
+    async fn find_with_filters_returns_paginated_response_on_success() {
+        let service = CrudFixtureBuilder::new()
+            .with_query_results([vec![model(Uuid::new_v4(), "alpha", 7, true)]])
+            .build();
+
+        let response = service
+            .find_with_filters(1, 1, None, filters(&[("title", "alpha")]), |query| query)
+            .await
+            .expect("find_with_filters should succeed");
+
+        assert_eq!(response.data.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn find_with_filters_rejects_invalid_filter_key_before_dao_call() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let err = service
+            .find_with_filters(1, 1, None, filters(&[("unknown", "1")]), |query| query)
+            .await
+            .expect_err("find_with_filters should fail");
+
+        assert_eq!(err.message(), "Invalid filter");
+    }
+
+    #[tokio::test]
+    async fn find_with_filters_rejects_invalid_filter_value_before_dao_call() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let err = service
+            .find_with_filters(1, 1, None, filters(&[("score", "abc")]), |query| query)
+            .await
+            .expect_err("find_with_filters should fail");
+
+        assert!(err.message().starts_with("Invalid filter value"));
+    }
+
+    #[tokio::test]
+    async fn find_with_filters_maps_invalid_pagination_to_bad_request() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let err = service
+            .find_with_filters(0, 1, None, filters(&[("title", "alpha")]), |query| query)
+            .await
+            .expect_err("find_with_filters should fail");
+
+        assert_eq!(err.message(), "Invalid pagination: page=0 page_size=1");
+    }
+
+    #[tokio::test]
+    async fn find_with_filters_maps_db_error_to_internal_with_find_message() {
+        let service = CrudFixtureBuilder::new()
+            .with_query_error(DbErr::Custom("find failed".to_string()))
+            .build();
+
+        let err = service
+            .find_with_filters(1, 1, None, filters(&[("title", "alpha")]), |query| query)
+            .await
+            .expect_err("find_with_filters should fail");
+
+        assert_eq!(
+            err.message(),
+            "Find failed. Please check the logs for more details"
+        );
+    }
+
+    #[tokio::test]
+    async fn update_returns_model_on_success() {
+        let id = Uuid::new_v4();
+        let service = CrudFixtureBuilder::new()
+            .with_query_results([
+                vec![model(id, "before", 1, false)],
+                vec![model(id, "after", 1, false)],
+            ])
+            .build();
+
+        let updated = service
+            .update(id, |active| {
+                active.title = Set("after".to_string());
+            })
+            .await
+            .expect("update should succeed");
+
+        assert_eq!(updated.title, "after");
+    }
+
+    #[tokio::test]
+    async fn update_maps_not_found_to_service_not_found_message() {
+        let service = CrudFixtureBuilder::new()
+            .with_query_results([Vec::<test_entity::Model>::new()])
+            .build();
+
+        let err = service
+            .update(Uuid::new_v4(), |_active| {})
+            .await
+            .expect_err("update should fail");
+
+        assert_eq!(err.message(), "Resource not found");
+    }
+
+    #[tokio::test]
+    async fn update_maps_db_error_to_internal_with_update_message() {
+        let service = CrudFixtureBuilder::new()
+            .with_query_error(DbErr::Custom("lookup failed".to_string()))
+            .build();
+
+        let err = service
+            .update(Uuid::new_v4(), |_active| {})
+            .await
+            .expect_err("update should fail");
+
+        assert_eq!(
+            err.message(),
+            "Update failed. Please check the logs for more details"
+        );
+    }
+
+    #[tokio::test]
+    async fn delete_returns_unit_on_success() {
+        let service = CrudFixtureBuilder::new().with_exec_result(1).build();
+
+        let result = service.delete(Uuid::new_v4()).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn delete_maps_not_found_to_service_not_found_message() {
+        let service = CrudFixtureBuilder::new().with_exec_result(0).build();
+
+        let err = service
+            .delete(Uuid::new_v4())
+            .await
+            .expect_err("delete should fail");
+
+        assert_eq!(err.message(), "Resource not found");
+    }
+
+    #[tokio::test]
+    async fn delete_maps_db_error_to_internal_with_delete_message() {
+        let service = CrudFixtureBuilder::new()
+            .with_exec_error(DbErr::Custom("delete failed".to_string()))
+            .build();
+
+        let err = service
+            .delete(Uuid::new_v4())
+            .await
+            .expect_err("delete should fail");
+
+        assert_eq!(
+            err.message(),
+            "Delete failed. Please check the logs for more details"
+        );
+    }
+
+    #[test]
+    fn build_column_filters_returns_empty_for_empty_input() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let parsed = service
+            .build_column_filters(HashMap::new())
+            .expect("empty filters should parse");
+
+        assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn allowlist_accepts_configured_key() {
+        let service = CrudFixtureBuilder::new().with_allowlist_mode().build();
+
+        let parsed = service
+            .build_column_filters(filters(&[("title", "hello")]))
+            .expect("allowlist key should parse");
+
+        assert_eq!(parsed.len(), 1);
+    }
+
+    #[test]
+    fn allowlist_rejects_unknown_key() {
+        let service = CrudFixtureBuilder::new().with_allowlist_mode().build();
+
+        let err = service
+            .build_column_filters(filters(&[("score", "1")]))
+            .expect_err("unknown allowlist key should fail");
+
+        assert_eq!(err.message(), "Invalid filter");
+    }
+
+    #[test]
+    fn allowlist_propagates_custom_parse_error() {
+        let service = CrudFixtureBuilder::new().with_allowlist_mode().build();
+
+        let err = service
+            .build_column_filters(filters(&[("title", "bad")]))
+            .expect_err("allowlist parse error should fail");
+
+        assert_eq!(err.message(), "Invalid filter value");
+    }
+
+    #[test]
+    fn all_columns_rejects_denied_column() {
+        let service = CrudFixtureBuilder::new().with_deny(&["title"]).build();
+
+        let err = service
+            .build_column_filters(filters(&[("title", "hello")]))
+            .expect_err("denied column should fail");
+
+        assert_eq!(err.message(), "Invalid filter");
+    }
+
+    #[test]
+    fn all_columns_rejects_unknown_column() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let err = service
+            .build_column_filters(filters(&[("unknown", "1")]))
+            .expect_err("unknown column should fail");
+
+        assert_eq!(err.message(), "Invalid filter");
+    }
+
+    #[test]
+    fn strings_only_rejects_non_string_column() {
+        let service = CrudFixtureBuilder::new()
+            .with_parse(FilterParseStrategy::StringsOnly)
+            .build();
+
+        let err = service
+            .build_column_filters(filters(&[("score", "1")]))
+            .expect_err("non-string column should fail");
+
+        assert_eq!(err.message(), "Invalid filter");
+    }
+
+    #[test]
+    fn by_column_type_parses_string_exact_as_eq() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let parsed = service
+            .build_column_filters(filters(&[("title", "hello")]))
+            .expect("string eq should parse");
+
+        assert!(matches!(
+            &parsed[0].op,
+            FilterOp::Eq(QueryValue::String(Some(v))) if v == "hello"
+        ));
+    }
+
+    #[test]
+    fn by_column_type_parses_string_contains_wildcard_as_like() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let parsed = service
+            .build_column_filters(filters(&[("title", "*hello*")]))
+            .expect("contains wildcard should parse");
+
+        assert!(matches!(
+            &parsed[0].op,
+            FilterOp::Like { pattern, .. } if pattern == "%hello%"
+        ));
+    }
+
+    #[test]
+    fn by_column_type_parses_string_prefix_wildcard_as_like() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let parsed = service
+            .build_column_filters(filters(&[("title", "hello*")]))
+            .expect("prefix wildcard should parse");
+
+        assert!(matches!(
+            &parsed[0].op,
+            FilterOp::Like { pattern, .. } if pattern == "hello%"
+        ));
+    }
+
+    #[test]
+    fn by_column_type_parses_string_suffix_wildcard_as_like() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let parsed = service
+            .build_column_filters(filters(&[("title", "*hello")]))
+            .expect("suffix wildcard should parse");
+
+        assert!(matches!(
+            &parsed[0].op,
+            FilterOp::Like { pattern, .. } if pattern == "%hello"
+        ));
+    }
+
+    #[test]
+    fn by_column_type_rejects_interior_wildcard() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let err = service
+            .build_column_filters(filters(&[("title", "a*b")]))
+            .expect_err("interior wildcard should fail");
+
+        assert_eq!(err.message(), "Invalid filter value");
+    }
+
+    #[test]
+    fn by_column_type_escapes_like_metacharacters() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let parsed = service
+            .build_column_filters(filters(&[("title", "*a%b_c*")]))
+            .expect("escaped wildcard should parse");
+
+        assert!(matches!(
+            &parsed[0].op,
+            FilterOp::Like { pattern, .. } if pattern == "%a\\%b\\_c%"
+        ));
+    }
+
+    #[test]
+    fn by_column_type_parses_numeric_comparison() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let parsed = service
+            .build_column_filters(filters(&[("score", ">=7")]))
+            .expect("numeric comparison should parse");
+
+        assert!(matches!(
+            &parsed[0].op,
+            FilterOp::Compare {
+                op: CompareOp::Gte,
+                value: QueryValue::Int(Some(7))
+            }
+        ));
+    }
+
+    #[test]
+    fn by_column_type_parses_numeric_range() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let parsed = service
+            .build_column_filters(filters(&[("score", "1..9")]))
+            .expect("numeric range should parse");
+
+        assert!(matches!(
+            &parsed[0].op,
+            FilterOp::Between {
+                min: QueryValue::Int(Some(1)),
+                max: QueryValue::Int(Some(9))
+            }
+        ));
+    }
+
+    #[test]
+    fn by_column_type_rejects_malformed_range() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let err = service
+            .build_column_filters(filters(&[("score", "1..2..3")]))
+            .expect_err("malformed range should fail");
+
+        assert_eq!(err.message(), "Invalid filter value");
+    }
+
+    #[test]
+    fn by_column_type_rejects_comparison_on_non_orderable_type() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let err = service
+            .build_column_filters(filters(&[("done", ">true")]))
+            .expect_err("comparison on bool should fail");
+
+        assert_eq!(err.message(), "Invalid filter");
+    }
+
+    #[test]
+    fn by_column_type_parses_boolean_aliases() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let parsed = service
+            .build_column_filters(filters(&[("done", "yes")]))
+            .expect("boolean alias should parse");
+
+        assert!(matches!(
+            &parsed[0].op,
+            FilterOp::Eq(QueryValue::Bool(Some(true)))
+        ));
+    }
+
+    #[test]
+    fn by_column_type_rejects_invalid_boolean() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let err = service
+            .build_column_filters(filters(&[("done", "truthy")]))
+            .expect_err("invalid boolean should fail");
+
+        assert_eq!(err.message(), "Invalid filter value");
+    }
+
+    #[test]
+    fn by_column_type_parses_uuid() {
+        let service = CrudFixtureBuilder::new().build();
+        let uuid = Uuid::new_v4().to_string();
+
+        let parsed = service
+            .build_column_filters(filters(&[("external_id", uuid.as_str())]))
+            .expect("uuid should parse");
+
+        assert!(matches!(
+            &parsed[0].op,
+            FilterOp::Eq(QueryValue::Uuid(Some(v)))
+                if *v == uuid.parse::<Uuid>().expect("uuid parse should work")
+        ));
+    }
+
+    #[test]
+    fn by_column_type_rejects_invalid_uuid() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let err = service
+            .build_column_filters(filters(&[("external_id", "not-a-uuid")]))
+            .expect_err("invalid uuid should fail");
+
+        assert!(err.message().starts_with("Invalid filter value:"));
+    }
+
+    #[test]
+    fn by_column_type_rejects_null_literal() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let err = service
+            .build_column_filters(filters(&[("score", "null")]))
+            .expect_err("null literal should fail");
+
+        assert_eq!(err.message(), "Invalid filter value");
+    }
+
+    #[test]
+    fn by_column_type_parses_rfc3339_datetime() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let parsed = service
+            .build_column_filters(filters(&[("scheduled_at", "2026-01-01T00:00:00+00:00")]))
+            .expect("datetime should parse");
+
+        assert!(matches!(
+            &parsed[0].op,
+            FilterOp::Eq(QueryValue::ChronoDateTimeWithTimeZone(Some(_)))
+        ));
+    }
+
+    #[test]
+    fn by_column_type_rejects_invalid_datetime() {
+        let service = CrudFixtureBuilder::new().build();
+
+        let err = service
+            .build_column_filters(filters(&[("scheduled_at", "not-a-datetime")]))
+            .expect_err("invalid datetime should fail");
+
+        assert!(err.message().starts_with("Invalid filter value:"));
+    }
+
+    #[test]
+    fn map_error_uses_custom_create_failed_message() {
+        let service = CrudFixtureBuilder::new()
+            .with_errors(CrudErrors {
+                create_failed: "Create boom",
+                ..CrudErrors::default()
+            })
+            .build();
+
+        let err = service.map_error(CrudOp::Create, DaoLayerError::Db(DbErr::Custom("x".into())));
+
+        assert_eq!(
+            err.message(),
+            "Create boom. Please check the logs for more details"
+        );
+    }
+
+    #[test]
+    fn map_error_uses_custom_find_failed_message_for_list() {
+        let service = CrudFixtureBuilder::new()
+            .with_errors(CrudErrors {
+                find_failed: "Find boom",
+                ..CrudErrors::default()
+            })
+            .build();
+
+        let err = service.map_error(CrudOp::List, DaoLayerError::Db(DbErr::Custom("x".into())));
+
+        assert_eq!(
+            err.message(),
+            "Find boom. Please check the logs for more details"
+        );
+    }
+
+    #[test]
+    fn map_error_uses_custom_update_failed_message() {
+        let service = CrudFixtureBuilder::new()
+            .with_errors(CrudErrors {
+                update_failed: "Update boom",
+                ..CrudErrors::default()
+            })
+            .build();
+
+        let err = service.map_error(CrudOp::Update, DaoLayerError::Db(DbErr::Custom("x".into())));
+
+        assert_eq!(
+            err.message(),
+            "Update boom. Please check the logs for more details"
+        );
+    }
+
+    #[test]
+    fn map_error_uses_custom_delete_failed_message() {
+        let service = CrudFixtureBuilder::new()
+            .with_errors(CrudErrors {
+                delete_failed: "Delete boom",
+                ..CrudErrors::default()
+            })
+            .build();
+
+        let err = service.map_error(CrudOp::Delete, DaoLayerError::Db(DbErr::Custom("x".into())));
+
+        assert_eq!(
+            err.message(),
+            "Delete boom. Please check the logs for more details"
+        );
+    }
+
+    #[test]
+    fn map_error_uses_custom_not_found_message() {
+        let service = CrudFixtureBuilder::new()
+            .with_errors(CrudErrors {
+                not_found: "Gone",
+                ..CrudErrors::default()
+            })
+            .build();
+
+        let err = service.map_error(
             CrudOp::Find,
             DaoLayerError::NotFound {
-                entity: "todo_list",
-                id: uuid::Uuid::nil(),
+                entity: "test",
+                id: Uuid::new_v4(),
             },
         );
-        assert_eq!(not_found.message(), "Resource not found");
 
-        let invalid_page = service.map_error(
-            CrudOp::List,
-            DaoLayerError::InvalidPagination {
-                page: 0,
-                page_size: 25,
-            },
-        );
-        assert_eq!(
-            invalid_page.message(),
-            "Invalid pagination: page=0 page_size=25"
-        );
+        assert_eq!(err.message(), "Gone");
     }
 }

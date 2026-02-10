@@ -90,7 +90,7 @@
 - Keep each test focused on one behavior.
 - For each public API/method, cover positive, negative, and edge/boundary cases.
 - Assert error mapping explicitly (for example, domain error vs raw DB error).
-- Assert side effects when relevant (for example generated SQL shape, state updates, emitted outputs), not only return values.
+- Do not treat argument-forwarding checks as required test coverage unless argument transformation is part of the public contract.
 - Keep test names behavior-oriented (for example: `rejects_missing_auth`, `applies_filter_range`).
 - DB-backed integration tests may be `#[ignore]` with explicit reason.
 
@@ -106,5 +106,4 @@
 - `cargo test -p rust_oxide`
 - `cargo clippy --all-targets --all-features`
 - `cargo fmt`
-
 
