@@ -1,10 +1,60 @@
 use std::{
-    fs,
+    fmt, fs,
     path::{Path, PathBuf},
 };
 
 use quote::ToTokens;
 use syn::{File, GenericArgument, PathArguments, Type};
+
+#[derive(Debug, Clone)]
+pub(crate) struct ParseRustFileError {
+    path: PathBuf,
+    message: String,
+    line: Option<usize>,
+    column: Option<usize>,
+}
+
+impl ParseRustFileError {
+    fn read(path: &Path, err: impl fmt::Display) -> Self {
+        Self {
+            path: path.to_path_buf(),
+            message: format!("failed to read file: {err}"),
+            line: None,
+            column: None,
+        }
+    }
+
+    fn parse(path: &Path, err: syn::Error) -> Self {
+        let start = err.span().start();
+        Self {
+            path: path.to_path_buf(),
+            message: err.to_string(),
+            line: Some(start.line),
+            column: Some(start.column.saturating_add(1)),
+        }
+    }
+}
+
+impl fmt::Display for ParseRustFileError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (self.line, self.column) {
+            (Some(line), Some(column)) => write!(
+                f,
+                "failed to parse {}:{}:{}: {}",
+                self.path.display(),
+                line,
+                column,
+                self.message
+            ),
+            _ => write!(
+                f,
+                "failed to parse {}: {}",
+                self.path.display(),
+                self.message
+            ),
+        }
+    }
+}
 
 pub(crate) fn escape_rust_string(value: &str) -> String {
     value
@@ -15,11 +65,13 @@ pub(crate) fn escape_rust_string(value: &str) -> String {
         .replace('\t', "\\t")
 }
 
+pub(crate) fn try_parse_rust_file(path: &Path) -> Result<File, ParseRustFileError> {
+    let content = fs::read_to_string(path).map_err(|err| ParseRustFileError::read(path, err))?;
+    syn::parse_file(&content).map_err(|err| ParseRustFileError::parse(path, err))
+}
+
 pub(crate) fn parse_rust_file(path: &Path) -> File {
-    let content = fs::read_to_string(path)
-        .unwrap_or_else(|err| panic!("failed to read {}: {}", path.display(), err));
-    syn::parse_file(&content)
-        .unwrap_or_else(|err| panic!("failed to parse {}: {}", path.display(), err))
+    try_parse_rust_file(path).unwrap_or_else(|err| panic!("{err}"))
 }
 
 pub(crate) fn module_path_for_file(path: &Path, src_dir: &Path) -> String {

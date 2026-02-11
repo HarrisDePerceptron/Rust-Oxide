@@ -2420,6 +2420,7 @@ dependencies = [
  "dotenvy",
  "futures-util",
  "jsonwebtoken",
+ "proc-macro2",
  "quote",
  "rand 0.8.5",
  "reqwest",

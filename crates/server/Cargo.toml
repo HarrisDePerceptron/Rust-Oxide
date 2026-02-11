@@ -29,4 +29,5 @@ async-trait = "0.1.89"
 
 [build-dependencies]
 quote = "1"
+proc-macro2 = { version = "1", features = ["span-locations"] }
 syn = { version = "2", features = ["full", "visit"] }

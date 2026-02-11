@@ -9,17 +9,77 @@ mod routes;
 #[path = "build/utils.rs"]
 mod utils;
 
+fn strict_build_mode() -> bool {
+    if let Ok(raw) = env::var("RUST_OXIDE_BUILD_STRICT") {
+        return match raw.trim().to_ascii_lowercase().as_str() {
+            "1" | "true" | "yes" | "on" => true,
+            "0" | "false" | "no" | "off" => false,
+            invalid => {
+                println!(
+                    "cargo:warning=invalid RUST_OXIDE_BUILD_STRICT value '{}'; expected one of [1,true,yes,on,0,false,no,off], falling back to PROFILE",
+                    invalid
+                );
+                profile_is_strict()
+            }
+        };
+    }
+    profile_is_strict()
+}
+
+fn profile_is_strict() -> bool {
+    matches!(
+        env::var("PROFILE").as_deref(),
+        Ok("release") | Ok("bench")
+    )
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-env-changed=RUST_OXIDE_BUILD_STRICT");
 
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("missing CARGO_MANIFEST_DIR");
     let manifest_path = Path::new(&manifest_dir);
     let src_dir = manifest_path.join("src");
     let routes_dir = src_dir.join("routes");
+    let out_dir = env::var("OUT_DIR").expect("missing OUT_DIR");
+    let out_path = Path::new(&out_dir);
 
     let src_files = utils::collect_rust_files(&src_dir);
     for file in &src_files {
         println!("cargo:rerun-if-changed={}", file.display());
+    }
+
+    let mut parse_errors = Vec::new();
+    for file in &src_files {
+        if let Err(err) = utils::try_parse_rust_file(file) {
+            parse_errors.push(err);
+        }
+    }
+
+    if !parse_errors.is_empty() {
+        for error in &parse_errors {
+            println!("cargo:warning={error}");
+        }
+
+        if strict_build_mode() {
+            panic!(
+                "build metadata parse failed for {} file(s); set RUST_OXIDE_BUILD_STRICT=0 (or unset) to allow fallback metadata in local dev",
+                parse_errors.len()
+            );
+        }
+
+        println!(
+            "cargo:warning=metadata generation fallback enabled: route/entity catalogs will be empty for this build; fix parse errors above to restore generated docs"
+        );
+
+        let empty_routes: Vec<routes::RouteEntry> = Vec::new();
+        let empty_entities: Vec<entities::EntityEntry> = Vec::new();
+        let empty_relations: Vec<entities::EntityRelationEntry> = Vec::new();
+
+        routes::write_routes(out_path, &empty_routes);
+        entities::write_entities(out_path, &empty_entities, &empty_relations);
+        docs::write_docs_sections(manifest_path, out_path);
+        return;
     }
 
     let mut registry = routes::TypeRegistry::default();
@@ -85,8 +145,6 @@ fn main() {
     });
     relations.dedup();
 
-    let out_dir = env::var("OUT_DIR").expect("missing OUT_DIR");
-    let out_path = Path::new(&out_dir);
     routes::write_routes(out_path, &routes_list);
     entities::write_entities(out_path, &entities_list, &relations);
     docs::write_docs_sections(manifest_path, out_path);
