@@ -35,9 +35,12 @@ pub struct InitArgs {
     /// Server port (overrides env/default)
     #[arg(long)]
     pub port: Option<u16>,
-    /// Enable auth (currently always enabled in template)
-    #[arg(long, default_value_t = true)]
-    pub auth: bool,
+    /// Enable local auth provider scaffolding
+    #[arg(long = "auth-local", default_value_t = true)]
+    pub auth_local: bool,
+    /// Disable local auth provider scaffolding
+    #[arg(long = "no-auth-local", default_value_t = false)]
+    pub no_auth_local: bool,
     /// Template repo URL (or set SAMPLE_SERVER_TEMPLATE_REPO)
     #[arg(long)]
     pub repo: Option<String>,

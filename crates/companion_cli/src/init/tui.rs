@@ -176,7 +176,7 @@ pub(super) fn run_tui(args: InitArgs, repo: String) -> Result<TuiOutcome> {
         input: String::new(),
         error: None,
         db_index: first_enabled_index(DB_OPTIONS),
-        auth_index: first_enabled_index(AUTH_OPTIONS),
+        auth_index: auth_option_index(args.auth_local),
         cursor: 0,
         db_url: args.database_url.clone().unwrap_or_default(),
         db_url_source: if args.database_url.is_some() {
@@ -243,7 +243,7 @@ fn build_args(state: &UiState, args: &InitArgs) -> InitArgs {
         name: Some(state.name.clone()),
         out: Some(PathBuf::from(state.out_dir.clone())),
         db: DB_OPTIONS[state.db_index].label.to_string(),
-        auth: AUTH_OPTIONS[state.auth_index].enabled,
+        auth_local: AUTH_LOCAL_VALUES[state.auth_index],
         database_url: if state.db_url.is_empty() {
             None
         } else {
@@ -253,6 +253,7 @@ fn build_args(state: &UiState, args: &InitArgs) -> InitArgs {
         repo: args.repo.clone(),
         force: args.force,
         non_interactive: args.non_interactive,
+        no_auth_local: !AUTH_LOCAL_VALUES[state.auth_index],
     }
 }
 
@@ -338,6 +339,19 @@ fn shift_index(current: usize, max: usize, delta: isize) -> usize {
 
 fn first_enabled_index(options: &[ChoiceOption]) -> usize {
     options.iter().position(|opt| opt.enabled).unwrap_or(0)
+}
+
+fn auth_option_index(auth_local: bool) -> usize {
+    let target = if auth_local { 0 } else { 1 };
+    if AUTH_OPTIONS
+        .get(target)
+        .map(|opt| opt.enabled)
+        .unwrap_or(false)
+    {
+        target
+    } else {
+        first_enabled_index(AUTH_OPTIONS)
+    }
 }
 
 fn apply_step(state: &mut UiState) -> Result<bool> {
@@ -866,7 +880,15 @@ const DB_OPTIONS: &[ChoiceOption] = &[
     },
 ];
 
-const AUTH_OPTIONS: &[ChoiceOption] = &[ChoiceOption {
-    label: "enabled",
-    enabled: true,
-}];
+const AUTH_OPTIONS: &[ChoiceOption] = &[
+    ChoiceOption {
+        label: "local provider enabled",
+        enabled: true,
+    },
+    ChoiceOption {
+        label: "local provider disabled",
+        enabled: true,
+    },
+];
+
+const AUTH_LOCAL_VALUES: &[bool] = &[true, false];

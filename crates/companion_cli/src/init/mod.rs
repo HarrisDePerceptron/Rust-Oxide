@@ -20,8 +20,56 @@ const DEFAULT_TEMPLATE_REPO: &str = "https://github.com/HarrisDePerceptron/Rust-
 const ENV_TEMPLATE_REPO: &str = "SAMPLE_SERVER_TEMPLATE_REPO";
 const TEMPLATE_SUBDIR: &str = "crates/server";
 const BASE_ENTITY_SUBDIR: &str = "crates/base_entity_derive";
+const AUTH_BOOTSTRAP_DISABLED: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/init/no_local_auth/auth_bootstrap.rs.tmpl"
+));
+const AUTH_MOD_DISABLED: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/init/no_local_auth/auth_mod.rs.tmpl"
+));
+const AUTH_PROVIDERS_MOD_DISABLED: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/init/no_local_auth/auth_providers_mod.rs.tmpl"
+));
+const DB_ENTITIES_MOD_DISABLED: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/init/no_local_auth/db_entities_mod.rs.tmpl"
+));
+const DB_ENTITIES_PRELUDE_DISABLED: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/init/no_local_auth/db_entities_prelude.rs.tmpl"
+));
+const DB_DAO_MOD_DISABLED: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/init/no_local_auth/db_dao_mod.rs.tmpl"
+));
+const DB_DAO_CONTEXT_DISABLED: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/init/no_local_auth/db_dao_context.rs.tmpl"
+));
+const SERVICES_MOD_DISABLED: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/init/no_local_auth/services_mod.rs.tmpl"
+));
+const SERVICES_CONTEXT_DISABLED: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/init/no_local_auth/services_context.rs.tmpl"
+));
+const API_MOD_DISABLED: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/init/no_local_auth/routes_api_mod.rs.tmpl"
+));
+const API_ROUTER_DISABLED: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/init/no_local_auth/routes_api_router.rs.tmpl"
+));
 
 pub fn run(mut args: InitArgs) -> Result<()> {
+    if args.no_auth_local {
+        args.auth_local = false;
+    }
+
     let interactive = !args.non_interactive && io::stdout().is_terminal();
     let mut temp_dir: Option<TempDir> = None;
     let mut repo_dir: Option<PathBuf> = None;
@@ -83,10 +131,6 @@ pub fn run(mut args: InitArgs) -> Result<()> {
 
     if args.database_url.is_none() {
         args.database_url = Some(default_db_url_for(&name, &args.db));
-    }
-
-    if !args.auth {
-        eprintln!("note: auth toggling is not implemented yet; auth remains enabled");
     }
 
     let crate_name = derive_crate_name(&name);
@@ -153,6 +197,10 @@ pub fn run(mut args: InitArgs) -> Result<()> {
     }
 
     replace_in_dir(&out_dir, DEFAULT_REPLACE_FROM, &crate_name)?;
+
+    if !args.auth_local {
+        disable_local_auth_profile(&out_dir)?;
+    }
 
     if let Some(database_url) = args.database_url.as_ref() {
         let env_dest = out_dir.join(".env");
@@ -273,6 +321,87 @@ fn replace_in_file(path: &Path, from: &str, to: &str) -> Result<()> {
     if updated != contents {
         fs::write(path, updated).with_context(|| format!("failed to write {}", path.display()))?;
     }
+    Ok(())
+}
+
+fn disable_local_auth_profile(root: &Path) -> Result<()> {
+    let files_to_remove = [
+        "src/auth/providers/local.rs",
+        "src/auth/jwt.rs",
+        "src/auth/password.rs",
+        "src/db/entities/user.rs",
+        "src/db/entities/refresh_token.rs",
+        "src/db/dao/user_dao.rs",
+        "src/db/dao/refresh_token_dao.rs",
+        "src/services/user_service.rs",
+        "src/routes/api/protected.rs",
+        "src/routes/api/admin.rs",
+        "tests/auth_flow.rs",
+        "tests/mock_routes.rs",
+        "tests/todo_routes.rs",
+    ];
+    for rel in files_to_remove {
+        remove_file_if_exists(&root.join(rel))?;
+    }
+
+    write_file_if_exists(&root.join("src/auth/bootstrap.rs"), AUTH_BOOTSTRAP_DISABLED)?;
+    write_file_if_exists(&root.join("src/auth/mod.rs"), AUTH_MOD_DISABLED)?;
+    write_file_if_exists(
+        &root.join("src/auth/providers/mod.rs"),
+        AUTH_PROVIDERS_MOD_DISABLED,
+    )?;
+    write_file_if_exists(
+        &root.join("src/db/entities/mod.rs"),
+        DB_ENTITIES_MOD_DISABLED,
+    )?;
+    write_file_if_exists(
+        &root.join("src/db/entities/prelude.rs"),
+        DB_ENTITIES_PRELUDE_DISABLED,
+    )?;
+    write_file_if_exists(&root.join("src/db/dao/mod.rs"), DB_DAO_MOD_DISABLED)?;
+    write_file_if_exists(&root.join("src/db/dao/context.rs"), DB_DAO_CONTEXT_DISABLED)?;
+    write_file_if_exists(&root.join("src/services/mod.rs"), SERVICES_MOD_DISABLED)?;
+    write_file_if_exists(
+        &root.join("src/services/context.rs"),
+        SERVICES_CONTEXT_DISABLED,
+    )?;
+    write_file_if_exists(&root.join("src/routes/api/mod.rs"), API_MOD_DISABLED)?;
+    write_file_if_exists(&root.join("src/routes/api/router.rs"), API_ROUTER_DISABLED)?;
+
+    remove_dependency(&root.join("Cargo.toml"), "argon2")?;
+    remove_dependency(&root.join("Cargo.toml"), "jsonwebtoken")?;
+    remove_dependency(&root.join("Cargo.toml"), "rand")?;
+
+    Ok(())
+}
+
+fn remove_file_if_exists(path: &Path) -> Result<()> {
+    if path.exists() {
+        fs::remove_file(path).with_context(|| format!("failed to remove {}", path.display()))?;
+    }
+    Ok(())
+}
+
+fn write_file_if_exists(path: &Path, contents: &str) -> Result<()> {
+    if path.exists() {
+        fs::write(path, contents).with_context(|| format!("failed to write {}", path.display()))?;
+    }
+    Ok(())
+}
+
+fn remove_dependency(path: &Path, dep_name: &str) -> Result<()> {
+    let contents =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let mut out = String::new();
+    for line in contents.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with(&format!("{dep_name} = ")) {
+            continue;
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    fs::write(path, out).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(())
 }
 

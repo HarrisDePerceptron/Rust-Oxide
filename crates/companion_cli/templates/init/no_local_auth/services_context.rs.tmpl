@@ -1,0 +1,33 @@
+use sea_orm::DatabaseConnection;
+
+use crate::{
+    auth::providers::AuthProviders,
+    db::dao::DaoContext,
+    services::{auth_service::AuthService, todo_service::TodoService},
+    state::AppState,
+};
+
+#[derive(Clone)]
+pub struct ServiceContext {
+    daos: DaoContext,
+}
+
+impl ServiceContext {
+    pub fn new(db: &DatabaseConnection) -> Self {
+        Self {
+            daos: DaoContext::new(db),
+        }
+    }
+
+    pub fn from_state(state: &AppState) -> Self {
+        Self::new(&state.db)
+    }
+
+    pub fn todo(&self) -> TodoService {
+        TodoService::new(self.daos.todo())
+    }
+
+    pub fn auth<'a>(&self, providers: &'a AuthProviders) -> AuthService<'a> {
+        AuthService::new(providers)
+    }
+}

@@ -1,0 +1,17 @@
+use crate::{config::AppConfig, error::AppError, services::ServiceContext};
+
+use super::providers::AuthProviders;
+
+pub fn build_providers(
+    cfg: &AppConfig,
+    _services: &ServiceContext,
+) -> Result<AuthProviders, AppError> {
+    Ok(AuthProviders::new(cfg.auth_provider))
+}
+
+pub async fn init_providers(
+    cfg: &AppConfig,
+    services: &ServiceContext,
+) -> anyhow::Result<AuthProviders> {
+    Ok(build_providers(cfg, services)?)
+}
