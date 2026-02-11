@@ -1,81 +1,152 @@
-        <section id="routing" data-nav-title="Routing" class="doc-section fade-2 mx-auto mt-14 max-w-3xl space-y-4">
+        <section id="routing" data-nav-title="Routing" class="doc-section fade-2 mx-auto mt-14 max-w-3xl space-y-8">
           <h2 class="flex items-center gap-3 font-display text-3xl leading-tight text-[color:var(--pine)] sm:text-4xl">
             <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
             Routing
           </h2>
-          <h3 class="text-lg font-semibold leading-tight text-[color:var(--pine)] sm:text-xl">Wrap a service, expose CRUD endoints, or Don't!</h3>
+          <h3 class="text-lg font-semibold leading-tight text-[color:var(--pine)] sm:text-xl">Compose routers, expose CRUD endpoints, and keep extension points.</h3>
           <p class="text-sm text-black/70">
-            The file <span class="font-semibold">src/routes/base_api_router.rs</span> provides
-            <span class="font-semibold">CrudApiRouter</span>. Hand it a service that implements
-            <span class="font-semibold">CrudService</span> and a base path, and you get five
-            JSON endpoints by default.
+            Routing is layered. The entry router mounts API routes at
+            <span class="font-semibold">/api/v1</span> and merges view routes.
+            <span class="font-semibold">CrudApiRouter</span> lives in
+            <span class="font-semibold">src/routes/crud_api_router.rs</span>, while
+            <span class="font-semibold">src/routes/base_api_router.rs</span> contains the
+            underlying trait hooks used by advanced routers.
           </p>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Quick setup</p>
-            <pre
-              class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"
-            ><code>// src/routes/api/todo_crud.rs
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Router composition</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/routes/entry.rs
+pub const API_PREFIX: &str = "/api/v1";
+
+pub fn router(state: Arc&lt;AppState&gt;) -&gt; Router {
+    Router::new()
+        .nest(API_PREFIX, api::router(state))
+        .merge(views::router())
+}</code></pre>
+          </section>
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Quick CRUD setup</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/routes/api/todo_crud.rs
+use std::sync::Arc;
+use axum::{Router, routing::get};
 use crate::auth::Role;
 use crate::middleware::AuthRolGuardLayer;
-use crate::routes::base_api_router::{CrudApiRouter, Method};
+use crate::routes::crud_api_router::{CrudApiRouter, Method};
 use crate::services::ServiceContext;
+use crate::state::AppState;
 
-let service = ServiceContext::from_state(state.as_ref()).todo();
-let router = CrudApiRouter::new(service, "/todo-crud")
-    .set_method_middleware(
-        Method::Create,
-        AuthRolGuardLayer::new(state.clone(), Role::User),
-    )
-    .router();</code></pre>
-            <p class="mt-4 text-sm text-black/60">
-              Keep handlers thin. Customize list ordering and filtering through the service
-              and override list hooks in the router if needed.
-            </p>
-          </div>
-          <div class="rounded-2xl border border-black/10 bg-white/90 p-4 text-xs text-black/70">
-            <p class="font-semibold text-[color:var(--pine)]">Default endpoints</p>
-            <pre class="mt-3 overflow-x-auto rounded-xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code># http
-POST /base
-GET /base
-GET /base/{id}
-PATCH /base/{id}
-DELETE /base/{id}</code></pre>
-            <p class="mt-2 text-black/50">IDs are UUIDs in this template.</p>
-          </div>
-          <div class="rounded-2xl border border-black/10 bg-[color:var(--mist)]/60 p-4 text-xs text-black/70">
-            <p class="font-semibold text-[color:var(--pine)]">Pagination defaults</p>
-            <pre class="mt-3 overflow-x-auto rounded-xl bg-white/80 p-3 text-xs text-[color:var(--pine)]"><code># query params
-?page=1&page_size=25</code></pre>
-            <p class="mt-2 text-black/50">Max page_size is 100.</p>
-          </div>
-          <div class="rounded-2xl border border-black/10 bg-white/90 p-4 text-xs text-black/70">
-            <p class="font-semibold text-[color:var(--pine)]">Extension points</p>
-            <pre class="mt-3 overflow-x-auto rounded-xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>// src/routes/api/your_router.rs
-use axum::routing::{get, post};
-use sea_orm::{ColumnTrait, Order, QueryFilter};
-use crate::middleware::AuthGuard;
-use crate::routes::base_api_router::{CrudApiRouter, Method, ListQuery};
+const BASE_PATH: &str = "/todo-crud";
 
-async fn create_todo(_auth: AuthGuard) {
-    // ...
-}
-
-let router = CrudApiRouter::new(service, "/todos")
-    .set_allowed_methods(&[Method::Create, Method::List, Method::Get])
-    .router()
-    .route("/todos", post(create_todo))
-    .route("/todos", get(list_todos));
-
-fn list_order() -> Option<(Column, Order)> {
-    Some((Column::CreatedAt, Order::Desc))
-}
-
-fn list_apply(query: &ListQuery, select: Select<Entity>) -> Select<Entity> {
-    if let Some(owner_id) = query.filters.get("owner_id") {
-        select.filter(Column::OwnerId.eq(owner_id.as_str()))
-    } else {
-        select
-    }
+pub fn router(state: Arc&lt;AppState&gt;) -&gt; Router {
+    let service = ServiceContext::from_state(state.as_ref()).todo();
+    CrudApiRouter::new(service.clone(), BASE_PATH)
+        .set_method_middleware(
+            Method::Create,
+            AuthRolGuardLayer::new(state.clone(), Role::User),
+        )
+        .router()
+        .route("/todo-crud/count", get(list_count_handler))
+        .with_state(state)
 }</code></pre>
-          </div>
+            <p class="text-sm text-black/60">
+              Keep handlers thin. Route-level HTTP composition stays in
+              <span class="font-semibold">src/routes/api/</span>;
+              business logic and filter behavior stay in services.
+            </p>
+          </section>
+          <section class="space-y-3 border-t border-black/10 pt-6 text-xs text-black/70">
+            <h3 class="text-base font-semibold text-[color:var(--pine)] sm:text-lg">Default endpoints</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code># http
+POST /api/v1/&lt;base-path&gt;
+GET /api/v1/&lt;base-path&gt;
+GET /api/v1/&lt;base-path&gt;/{id}
+PATCH /api/v1/&lt;base-path&gt;/{id}
+DELETE /api/v1/&lt;base-path&gt;/{id}</code></pre>
+            <p class="text-black/50">
+              Example base path:
+              <span class="font-semibold">/todo-crud</span>. IDs are UUIDs in this template.
+            </p>
+          </section>
+          <section class="space-y-3 border-t border-black/10 pt-6 text-xs text-black/70">
+            <h3 class="text-base font-semibold text-[color:var(--pine)] sm:text-lg">Pagination defaults</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code># query params
+?page=1&page_size=25</code></pre>
+            <p class="text-black/50">Max page_size is 100.</p>
+          </section>
+          <section class="space-y-3 border-t border-black/10 pt-6 text-xs text-black/70">
+            <h3 class="text-base font-semibold text-[color:var(--pine)] sm:text-lg">Filters on list routes</h3>
+            <p class="text-black/60">
+              Generated list routes accept query params and parse them by column type.
+              Defaults are <span class="font-semibold">FilterMode::AllColumns</span> +
+              <span class="font-semibold">FilterParseStrategy::ByColumnType</span>.
+            </p>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code># string column examples
+title=acme
+title=acme*
+title=*acme
+title=*acme*
+
+# orderable non-string examples
+score=>=10
+score=&lt;10
+score=10..25
+
+# typed examples
+done=yes
+external_id=550e8400-e29b-41d4-a716-446655440000
+scheduled_at=2026-01-01T00:00:00+00:00
+meta={"tier":"pro"}</code></pre>
+            <p class="text-black/50">
+              Wildcards are only valid on string columns and only at edges.
+              Interior wildcards (for example <span class="font-semibold">a*b</span>) return 400.
+            </p>
+          </section>
+          <section class="space-y-3 border-t border-black/10 pt-6 text-xs text-black/70">
+            <h3 class="text-base font-semibold text-[color:var(--pine)] sm:text-lg">Filter validation behavior</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code># 400 "Invalid filter"
+# - unknown column key
+# - denied column key
+# - comparison/range used on non-orderable types
+
+# 400 "Invalid filter value"
+# - malformed typed values
+# - malformed ranges (e.g. 1..2..3)
+# - wildcard misuse
+# - null literal ("null")</code></pre>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>// src/services/your_service.rs
+fn list_filter_mode(&self) -> FilterMode<Column> {
+    FilterMode::AllColumns {
+        deny: &["internal_only"],
+        parse: FilterParseStrategy::ByColumnType,
+    }
+    // or FilterMode::Allowlist(SPECS)
+    // or parse: FilterParseStrategy::StringsOnly / BestEffortString
+}</code></pre>
+          </section>
+          <section class="space-y-3 border-t border-black/10 pt-6 text-xs text-black/70">
+            <h3 class="text-base font-semibold text-[color:var(--pine)] sm:text-lg">Extension points</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>// src/routes/api/your_router.rs
+use axum::routing::get;
+use crate::routes::crud_api_router::{CrudApiRouter, Method};
+
+let router = CrudApiRouter::new(service, "/items")
+    .set_allowed_methods(&[Method::List, Method::Get])
+    .router()
+    .route("/items/count", get(count_items));
+
+// For deeper customization, implement BaseApiRouter and override:
+// - list_order
+// - list_apply
+// - register_routes
+// - apply_router_middleware</code></pre>
+          </section>
+          <section class="space-y-3 border-t border-black/10 pt-6 text-xs text-black/70">
+            <h3 class="text-base font-semibold text-[color:var(--pine)] sm:text-lg">Route catalog notes</h3>
+            <p class="text-black/60">
+              Keep <span class="font-semibold">.route(...)</span> paths and
+              <span class="font-semibold">CrudApiRouter::new(..., base_path)</span> base paths as
+              string literals or simple string constants. This keeps
+              <span class="font-semibold">/routes</span> and
+              <span class="font-semibold">/api/v1/routes.json</span> accurate in debug builds.
+            </p>
+          </section>
         </section>
