@@ -26,8 +26,6 @@ pub struct CrudApiRouter<S> {
 
 impl<S> CrudApiRouter<S> {
     pub fn new(service: S, base_path: &'static str) -> Self {
-        let a = 30
-
         Self {
             service,
             base_path,
