@@ -86,6 +86,11 @@
       .floaty {
         animation: float 5s ease-in-out infinite;
       }
+
+      html.top-nav-open,
+      body.top-nav-open {
+        overflow: hidden;
+      }
     </style>
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml" />
   </head>
@@ -110,29 +115,96 @@
               <p class="text-xs text-black/50">Api Service</p>
             </div>
           </a>
+          <button
+            type="button"
+            data-top-nav-toggle
+            aria-expanded="false"
+            aria-controls="top-mobile-drawer"
+            class="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--pine)] shadow-lg shadow-black/5 transition hover:-translate-y-0.5 md:hidden"
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true" class="h-4 w-4">
+              <path
+                d="M3 5h14M3 10h14M3 15h14"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-width="1.5"
+              ></path>
+            </svg>
+            Menu
+          </button>
           <nav class="hidden items-center gap-6 text-sm md:flex">
             <a
-              class="rounded-full border border-black/10 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] shadow-lg shadow-black/5 transition hover:-translate-y-0.5"
+              class="border border-black/10 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] shadow-lg shadow-black/5 transition hover:-translate-y-0.5"
               href="/docs"
               >Docs</a
             >
             <a
-              class="rounded-full bg-[color:var(--pine)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-lg shadow-black/10 transition hover:-translate-y-0.5"
+              class="border border-[color:var(--pine)] bg-[color:var(--pine)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-lg shadow-black/10 transition hover:-translate-y-0.5"
               href="/routes"
               >Routes</a
             >
             <a
-              class="rounded-full border border-black/10 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] shadow-lg shadow-black/5 transition hover:-translate-y-0.5"
+              class="border border-black/10 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] shadow-lg shadow-black/5 transition hover:-translate-y-0.5"
               href="/entities"
               >Entities</a
             >
             <a
-              class="rounded-full border border-black/10 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] shadow-lg shadow-black/5 transition hover:-translate-y-0.5"
+              class="border border-black/10 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] shadow-lg shadow-black/5 transition hover:-translate-y-0.5"
               href="/todo/ui"
               >Todo UI</a
             >
           </nav>
         </div>
+        <div
+          data-top-nav-overlay
+          class="fixed inset-0 z-40 hidden bg-black/45 md:hidden"
+        ></div>
+        <aside
+          id="top-mobile-drawer"
+          data-top-nav-drawer
+          class="fixed inset-y-0 right-0 z-50 box-border w-[min(88vw,22rem)] max-w-full translate-x-full border-l border-black/10 bg-white px-5 pb-6 pt-5 shadow-2xl transition-transform duration-200 ease-out md:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Primary navigation"
+        >
+          <div class="flex items-center justify-between gap-4 border-b border-black/10 pb-3">
+            <p class="text-xs font-semibold uppercase tracking-[0.28em] text-black/50">Navigation</p>
+            <button
+              type="button"
+              data-top-nav-close
+              class="rounded-full border border-black/10 bg-[color:var(--mist)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[color:var(--pine)]"
+            >
+              Close
+            </button>
+          </div>
+          <nav class="mt-4 space-y-2">
+            <a
+              class="block border-l-2 border-transparent px-3 py-3 text-sm font-semibold text-[color:var(--pine)] transition hover:border-[color:var(--pine)] hover:bg-[color:var(--mist)]"
+              data-top-nav-link
+              href="/docs"
+              >Docs</a
+            >
+            <a
+              class="block border-l-2 border-transparent px-3 py-3 text-sm font-semibold text-[color:var(--pine)] transition hover:border-[color:var(--pine)] hover:bg-[color:var(--mist)]"
+              data-top-nav-link
+              href="/routes"
+              >Routes</a
+            >
+            <a
+              class="block border-l-2 border-transparent px-3 py-3 text-sm font-semibold text-[color:var(--pine)] transition hover:border-[color:var(--pine)] hover:bg-[color:var(--mist)]"
+              data-top-nav-link
+              href="/entities"
+              >Entities</a
+            >
+            <a
+              class="block border-l-2 border-transparent px-3 py-3 text-sm font-semibold text-[color:var(--pine)] transition hover:border-[color:var(--pine)] hover:bg-[color:var(--mist)]"
+              data-top-nav-link
+              href="/todo/ui"
+              >Todo UI</a
+            >
+          </nav>
+        </aside>
       </header>
 
       {% block content %}{% endblock %}
@@ -146,5 +218,115 @@
         </div>
       </footer>
     </div>
+    <script>
+      (() => {
+        const DRAWER_TRANSITION_MS = 200;
+        const drawer = document.querySelector("[data-top-nav-drawer]");
+        const overlay = document.querySelector("[data-top-nav-overlay]");
+        const toggleButton = document.querySelector("[data-top-nav-toggle]");
+        const closeButton = document.querySelector("[data-top-nav-close]");
+        const links = Array.from(document.querySelectorAll("[data-top-nav-link]"));
+
+        if (!drawer || !overlay || !toggleButton) {
+          return;
+        }
+
+        let isOpen = false;
+
+        const setExpanded = (expanded) => {
+          toggleButton.setAttribute("aria-expanded", expanded ? "true" : "false");
+        };
+
+        const setScrollLock = (locked) => {
+          document.documentElement.classList.toggle("top-nav-open", locked);
+          document.body.classList.toggle("top-nav-open", locked);
+        };
+
+        const openDrawer = () => {
+          if (isOpen) {
+            return;
+          }
+          isOpen = true;
+          overlay.classList.remove("hidden");
+          drawer.classList.remove("translate-x-full");
+          drawer.classList.add("translate-x-0");
+          setExpanded(true);
+          setScrollLock(true);
+        };
+
+        const closeDrawer = () => {
+          if (!isOpen) {
+            setExpanded(false);
+            setScrollLock(false);
+            return;
+          }
+          isOpen = false;
+          drawer.classList.remove("translate-x-0");
+          drawer.classList.add("translate-x-full");
+          setExpanded(false);
+          setScrollLock(false);
+          window.setTimeout(() => {
+            if (!isOpen) {
+              overlay.classList.add("hidden");
+            }
+          }, DRAWER_TRANSITION_MS);
+        };
+
+        const toggleDrawer = () => {
+          if (isOpen) {
+            closeDrawer();
+            return;
+          }
+          openDrawer();
+        };
+
+        toggleButton.addEventListener("click", (event) => {
+          event.preventDefault();
+          toggleDrawer();
+        });
+
+        if (closeButton) {
+          closeButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            closeDrawer();
+          });
+        }
+
+        overlay.addEventListener("click", closeDrawer);
+
+        for (const link of links) {
+          link.addEventListener("click", closeDrawer);
+        }
+
+        document.addEventListener("pointerdown", (event) => {
+          if (!isOpen) {
+            return;
+          }
+          const target = event.target;
+          if (!(target instanceof Node)) {
+            return;
+          }
+          if (drawer.contains(target) || toggleButton.contains(target)) {
+            return;
+          }
+          closeDrawer();
+        });
+
+        document.addEventListener("keydown", (event) => {
+          if (!isOpen || event.key !== "Escape") {
+            return;
+          }
+          closeDrawer();
+        });
+
+        window.addEventListener("resize", () => {
+          if (window.matchMedia("(min-width: 768px)").matches) {
+            closeDrawer();
+          }
+        });
+
+        closeDrawer();
+      })();
+    </script>
   </body>
 </html>

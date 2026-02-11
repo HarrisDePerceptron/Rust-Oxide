@@ -242,10 +242,10 @@
             link.textContent = getSectionTitle(section);
             if (variant === "desktop") {
               link.className =
-                "doc-nav-link block rounded-lg px-3 py-2 text-black/70 transition hover:bg-[color:var(--mist)] hover:text-[color:var(--pine)]";
+                "doc-nav-link block border-l-2 border-transparent px-3 py-2 text-black/70 transition hover:border-l-[color:var(--pine)] hover:bg-[color:var(--mist)] hover:text-[color:var(--pine)]";
             } else {
               link.className =
-                "doc-nav-link block rounded-xl border border-black/10 px-3 py-3 text-sm font-semibold text-[color:var(--pine)] transition hover:bg-[color:var(--mist)]";
+                "doc-nav-link block border-l-2 border-transparent px-3 py-3 text-sm font-semibold text-[color:var(--pine)] transition hover:border-l-[color:var(--pine)] hover:bg-[color:var(--mist)]";
             }
             return link;
           }
@@ -275,17 +275,19 @@
               if (variant === "mobile") {
                 link.classList.toggle("bg-[color:var(--pine)]", isActive);
                 link.classList.toggle("text-white", isActive);
-                link.classList.toggle("border-[color:var(--pine)]", isActive);
+                link.classList.toggle("border-l-[color:var(--pine)]", isActive);
                 if (!isActive) {
                   link.classList.remove("bg-[color:var(--pine)]");
                   link.classList.remove("text-white");
-                  link.classList.remove("border-[color:var(--pine)]");
+                  link.classList.remove("border-l-[color:var(--pine)]");
                 }
               } else {
+                link.classList.toggle("border-l-[color:var(--pine)]", isActive);
                 link.classList.toggle("bg-[color:var(--mist)]", isActive);
                 link.classList.toggle("text-[color:var(--pine)]", isActive);
                 link.classList.toggle("font-semibold", isActive);
                 if (!isActive) {
+                  link.classList.remove("border-l-[color:var(--pine)]");
                   link.classList.remove("font-semibold");
                 }
               }
