@@ -41,6 +41,18 @@ pub struct InitArgs {
     /// Disable local auth provider scaffolding
     #[arg(long = "no-auth-local", default_value_t = false)]
     pub no_auth_local: bool,
+    /// Include todo example modules, routes, and tests
+    #[arg(long = "todo-example", default_value_t = true)]
+    pub todo_example: bool,
+    /// Exclude todo example modules, routes, and tests
+    #[arg(long = "no-todo-example", default_value_t = false)]
+    pub no_todo_example: bool,
+    /// Include docs page
+    #[arg(long = "docs", default_value_t = true)]
+    pub docs: bool,
+    /// Exclude docs page
+    #[arg(long = "no-docs", default_value_t = false)]
+    pub no_docs: bool,
     /// Template repo URL (or set SAMPLE_SERVER_TEMPLATE_REPO)
     #[arg(long)]
     pub repo: Option<String>,

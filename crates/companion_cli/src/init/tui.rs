@@ -31,6 +31,8 @@ enum Step {
     Database,
     DatabaseUrl,
     Auth,
+    TodoExample,
+    Docs,
     OutputDir,
     Summary,
     Cloning,
@@ -44,14 +46,16 @@ impl Step {
             Step::Database => 3,
             Step::DatabaseUrl => 4,
             Step::Auth => 5,
-            Step::OutputDir => 6,
-            Step::Summary => 7,
-            Step::Cloning => 8,
+            Step::TodoExample => 6,
+            Step::Docs => 7,
+            Step::OutputDir => 8,
+            Step::Summary => 9,
+            Step::Cloning => 10,
         }
     }
 
     fn total() -> usize {
-        8
+        10
     }
 
     fn title(self) -> &'static str {
@@ -61,6 +65,8 @@ impl Step {
             Step::Database => "Database",
             Step::DatabaseUrl => "Database URL",
             Step::Auth => "Auth",
+            Step::TodoExample => "Todo Example",
+            Step::Docs => "Docs",
             Step::OutputDir => "Output directory",
             Step::Summary => "Summary",
             Step::Cloning => "Cloning",
@@ -73,7 +79,9 @@ impl Step {
             Step::Port => Step::Database,
             Step::Database => Step::DatabaseUrl,
             Step::DatabaseUrl => Step::Auth,
-            Step::Auth => Step::OutputDir,
+            Step::Auth => Step::TodoExample,
+            Step::TodoExample => Step::Docs,
+            Step::Docs => Step::OutputDir,
             Step::OutputDir => Step::Summary,
             Step::Summary => Step::Cloning,
             Step::Cloning => Step::Cloning,
@@ -87,7 +95,9 @@ impl Step {
             Step::Database => Step::Port,
             Step::DatabaseUrl => Step::Database,
             Step::Auth => Step::DatabaseUrl,
-            Step::OutputDir => Step::Auth,
+            Step::TodoExample => Step::Auth,
+            Step::Docs => Step::TodoExample,
+            Step::OutputDir => Step::Docs,
             Step::Summary => Step::OutputDir,
             Step::Cloning => Step::Summary,
         }
@@ -103,6 +113,8 @@ struct UiState {
     error: Option<String>,
     db_index: usize,
     auth_index: usize,
+    todo_index: usize,
+    docs_index: usize,
     cursor: usize,
     db_url: String,
     db_url_source: DbUrlSource,
@@ -177,6 +189,8 @@ pub(super) fn run_tui(args: InitArgs, repo: String) -> Result<TuiOutcome> {
         error: None,
         db_index: first_enabled_index(DB_OPTIONS),
         auth_index: auth_option_index(args.auth_local),
+        todo_index: todo_option_index(args.todo_example),
+        docs_index: docs_option_index(args.docs),
         cursor: 0,
         db_url: args.database_url.clone().unwrap_or_default(),
         db_url_source: if args.database_url.is_some() {
@@ -244,6 +258,8 @@ fn build_args(state: &UiState, args: &InitArgs) -> InitArgs {
         out: Some(PathBuf::from(state.out_dir.clone())),
         db: DB_OPTIONS[state.db_index].label.to_string(),
         auth_local: AUTH_LOCAL_VALUES[state.auth_index],
+        todo_example: TODO_EXAMPLE_VALUES[state.todo_index],
+        docs: DOCS_VALUES[state.docs_index],
         database_url: if state.db_url.is_empty() {
             None
         } else {
@@ -254,6 +270,8 @@ fn build_args(state: &UiState, args: &InitArgs) -> InitArgs {
         force: args.force,
         non_interactive: args.non_interactive,
         no_auth_local: !AUTH_LOCAL_VALUES[state.auth_index],
+        no_todo_example: !TODO_EXAMPLE_VALUES[state.todo_index],
+        no_docs: !DOCS_VALUES[state.docs_index],
     }
 }
 
@@ -310,6 +328,12 @@ fn handle_choice_delta(state: &mut UiState, delta: isize) {
         Step::Auth => {
             state.auth_index = adjust_choice_index(state.auth_index, AUTH_OPTIONS, delta);
         }
+        Step::TodoExample => {
+            state.todo_index = adjust_choice_index(state.todo_index, TODO_OPTIONS, delta);
+        }
+        Step::Docs => {
+            state.docs_index = adjust_choice_index(state.docs_index, DOCS_OPTIONS, delta);
+        }
         _ => {}
     }
 }
@@ -351,6 +375,32 @@ fn auth_option_index(auth_local: bool) -> usize {
         target
     } else {
         first_enabled_index(AUTH_OPTIONS)
+    }
+}
+
+fn todo_option_index(todo_example: bool) -> usize {
+    let target = if todo_example { 0 } else { 1 };
+    if TODO_OPTIONS
+        .get(target)
+        .map(|opt| opt.enabled)
+        .unwrap_or(false)
+    {
+        target
+    } else {
+        first_enabled_index(TODO_OPTIONS)
+    }
+}
+
+fn docs_option_index(docs: bool) -> usize {
+    let target = if docs { 0 } else { 1 };
+    if DOCS_OPTIONS
+        .get(target)
+        .map(|opt| opt.enabled)
+        .unwrap_or(false)
+    {
+        target
+    } else {
+        first_enabled_index(DOCS_OPTIONS)
     }
 }
 
@@ -399,6 +449,14 @@ fn apply_step(state: &mut UiState) -> Result<bool> {
             }
         }
         Step::Auth => {
+            state.step = state.step.next();
+            sync_input(state);
+        }
+        Step::TodoExample => {
+            state.step = state.step.next();
+            sync_input(state);
+        }
+        Step::Docs => {
             state.step = state.step.next();
             sync_input(state);
         }
@@ -542,6 +600,8 @@ fn draw_ui(frame: &mut Frame<'_>, state: &UiState) {
             text_input_lines(title, &state.input, state.error.as_deref(), state.cursor)
         }
         Step::Auth => choice_lines("Auth", AUTH_OPTIONS, state.auth_index),
+        Step::TodoExample => choice_lines("Todo example", TODO_OPTIONS, state.todo_index),
+        Step::Docs => choice_lines("Docs", DOCS_OPTIONS, state.docs_index),
         Step::OutputDir => text_input_lines(
             "Output directory",
             &state.input,
@@ -561,6 +621,14 @@ fn draw_ui(frame: &mut Frame<'_>, state: &UiState) {
             Line::from(format!(
                 "Auth:         {}",
                 AUTH_OPTIONS[state.auth_index].label
+            )),
+            Line::from(format!(
+                "Todo example: {}",
+                TODO_OPTIONS[state.todo_index].label
+            )),
+            Line::from(format!(
+                "Docs:         {}",
+                DOCS_OPTIONS[state.docs_index].label
             )),
             Line::from(""),
             Line::from("Press Enter to generate."),
@@ -892,3 +960,29 @@ const AUTH_OPTIONS: &[ChoiceOption] = &[
 ];
 
 const AUTH_LOCAL_VALUES: &[bool] = &[true, false];
+
+const TODO_OPTIONS: &[ChoiceOption] = &[
+    ChoiceOption {
+        label: "included",
+        enabled: true,
+    },
+    ChoiceOption {
+        label: "excluded",
+        enabled: true,
+    },
+];
+
+const TODO_EXAMPLE_VALUES: &[bool] = &[true, false];
+
+const DOCS_OPTIONS: &[ChoiceOption] = &[
+    ChoiceOption {
+        label: "included",
+        enabled: true,
+    },
+    ChoiceOption {
+        label: "excluded",
+        enabled: true,
+    },
+];
+
+const DOCS_VALUES: &[bool] = &[true, false];

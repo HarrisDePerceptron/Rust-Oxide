@@ -1,5 +1,7 @@
 use std::{collections::HashSet, fs, path::Path};
 
+use proc_macro2::TokenTree;
+use quote::ToTokens;
 use syn::{Attribute, Fields, Item, ItemEnum, ItemStruct, LitStr, Type};
 
 use crate::utils::{
@@ -80,6 +82,9 @@ pub(crate) fn collect_entity_entries(
 ) {
     let fk_columns = collect_fk_columns(items);
     for item in items {
+        if item_has_cfg_test_attr(item) {
+            continue;
+        }
         match item {
             Item::Struct(item_struct) => {
                 if has_derive_entity_model(&item_struct.attrs)
@@ -109,6 +114,9 @@ pub(crate) fn collect_entity_relations(
     out: &mut Vec<EntityRelationEntry>,
 ) {
     for item in items {
+        if item_has_cfg_test_attr(item) {
+            continue;
+        }
         match item {
             Item::Struct(item_struct) => {
                 if has_derive_entity_model(&item_struct.attrs) {
@@ -128,6 +136,34 @@ pub(crate) fn collect_entity_relations(
             _ => {}
         }
     }
+}
+
+fn item_has_cfg_test_attr(item: &Item) -> bool {
+    match item {
+        Item::Struct(item_struct) => has_cfg_test_attr(&item_struct.attrs),
+        Item::Enum(item_enum) => has_cfg_test_attr(&item_enum.attrs),
+        Item::Mod(item_mod) => has_cfg_test_attr(&item_mod.attrs),
+        _ => false,
+    }
+}
+
+fn has_cfg_test_attr(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(attr_cfg_mentions_test)
+}
+
+fn attr_cfg_mentions_test(attr: &Attribute) -> bool {
+    if !attr.path().is_ident("cfg") {
+        return false;
+    }
+    token_stream_contains_test_ident(attr.meta.to_token_stream())
+}
+
+fn token_stream_contains_test_ident(stream: proc_macro2::TokenStream) -> bool {
+    stream.into_iter().any(|token| match token {
+        TokenTree::Ident(ident) => ident == "test",
+        TokenTree::Group(group) => token_stream_contains_test_ident(group.stream()),
+        _ => false,
+    })
 }
 
 pub(crate) fn render_mermaid_er_diagram(
@@ -400,6 +436,9 @@ fn parse_fk_column_variants(value: &str) -> Vec<String> {
 fn collect_fk_columns(items: &[Item]) -> HashSet<String> {
     let mut out = HashSet::new();
     for item in items {
+        if item_has_cfg_test_attr(item) {
+            continue;
+        }
         match item {
             Item::Enum(item_enum) => collect_fk_columns_from_enum(item_enum, &mut out),
             Item::Struct(item_struct) => collect_fk_columns_from_model(item_struct, &mut out),

@@ -27,10 +27,7 @@ fn strict_build_mode() -> bool {
 }
 
 fn profile_is_strict() -> bool {
-    matches!(
-        env::var("PROFILE").as_deref(),
-        Ok("release") | Ok("bench")
-    )
+    matches!(env::var("PROFILE").as_deref(), Ok("release") | Ok("bench"))
 }
 
 fn main() {
@@ -41,6 +38,7 @@ fn main() {
     let manifest_path = Path::new(&manifest_dir);
     let src_dir = manifest_path.join("src");
     let routes_dir = src_dir.join("routes");
+    let entities_dir = src_dir.join("db/entities");
     let out_dir = env::var("OUT_DIR").expect("missing OUT_DIR");
     let out_path = Path::new(&out_dir);
 
@@ -113,8 +111,14 @@ fn main() {
 
     routes_list.sort_by(|a, b| a.path.cmp(&b.path).then(a.method.cmp(&b.method)));
 
+    let entities_src_files = if entities_dir.exists() {
+        utils::collect_rust_files(&entities_dir)
+    } else {
+        Vec::new()
+    };
+
     let mut entities_list = Vec::new();
-    for file in &src_files {
+    for file in &entities_src_files {
         let parsed = utils::parse_rust_file(file);
         let module_path = utils::module_path_for_file(file, &src_dir);
         entities::collect_entity_entries(&parsed.items, &module_path, &mut entities_list);
@@ -123,7 +127,7 @@ fn main() {
     entities_list.sort_by(|a, b| a.entity.cmp(&b.entity));
 
     let mut relations = Vec::new();
-    for file in &src_files {
+    for file in &entities_src_files {
         let parsed = utils::parse_rust_file(file);
         let module_path = utils::module_path_for_file(file, &src_dir);
         entities::collect_entity_relations(&parsed.items, &module_path, &mut relations);

@@ -64,10 +64,24 @@ const API_ROUTER_DISABLED: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/templates/init/no_local_auth/routes_api_router.rs.tmpl"
 ));
+const VIEWS_PUBLIC_NO_DOCS: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/init/no_docs/views_public.rs.tmpl"
+));
+const BUILD_DOCS_NO_DOCS: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/init/no_docs/build_docs.rs.tmpl"
+));
 
 pub fn run(mut args: InitArgs) -> Result<()> {
     if args.no_auth_local {
         args.auth_local = false;
+    }
+    if args.no_todo_example {
+        args.todo_example = false;
+    }
+    if args.no_docs {
+        args.docs = false;
     }
 
     let interactive = !args.non_interactive && io::stdout().is_terminal();
@@ -200,6 +214,12 @@ pub fn run(mut args: InitArgs) -> Result<()> {
 
     if !args.auth_local {
         disable_local_auth_profile(&out_dir)?;
+    }
+    if !args.todo_example {
+        disable_todo_example_profile(&out_dir)?;
+    }
+    if !args.docs {
+        disable_docs_profile(&out_dir)?;
     }
 
     if let Some(database_url) = args.database_url.as_ref() {
@@ -402,6 +422,248 @@ fn remove_dependency(path: &Path, dep_name: &str) -> Result<()> {
         out.push('\n');
     }
     fs::write(path, out).with_context(|| format!("failed to write {}", path.display()))?;
+    Ok(())
+}
+
+fn disable_todo_example_profile(root: &Path) -> Result<()> {
+    let files_to_remove = [
+        "src/routes/api/todo_crud.rs",
+        "src/routes/views/todo.rs",
+        "src/services/todo_service.rs",
+        "src/db/entities/todo_item.rs",
+        "src/db/entities/todo_list.rs",
+        "src/db/dao/todo_dao.rs",
+        "views/todo.html",
+        "tests/todo_routes.rs",
+        "tests/mock_routes.rs",
+    ];
+    for rel in files_to_remove {
+        remove_file_if_exists(&root.join(rel))?;
+    }
+
+    remove_anchor_block_by_href(&root.join("views/base.html"), "/todo/ui")?;
+
+    remove_lines_containing(&root.join("src/routes/api/mod.rs"), &["pub mod todo_crud;"])?;
+    remove_lines_containing(
+        &root.join("src/routes/api/router.rs"),
+        &[".merge(todo_crud::router("],
+    )?;
+    replace_in_file_if_exists(
+        &root.join("src/routes/api/router.rs"),
+        "admin, auth, protected, public, todo_crud",
+        "admin, auth, protected, public",
+    )?;
+    replace_in_file_if_exists(
+        &root.join("src/routes/api/router.rs"),
+        "auth, public, todo_crud",
+        "auth, public",
+    )?;
+
+    remove_lines_containing(&root.join("src/routes/views/mod.rs"), &["pub mod todo;"])?;
+    replace_in_file_if_exists(
+        &root.join("src/routes/views/router.rs"),
+        "Router::new().merge(public::router()).merge(todo::router())",
+        "Router::new().merge(public::router())",
+    )?;
+    remove_lines_containing(
+        &root.join("src/routes/views/router.rs"),
+        &["merge(todo::router())"],
+    )?;
+    replace_in_file_if_exists(
+        &root.join("src/routes/views/router.rs"),
+        "super::{public, todo};",
+        "super::public;",
+    )?;
+
+    remove_lines_containing(
+        &root.join("src/services/mod.rs"),
+        &["pub mod todo_service;"],
+    )?;
+    replace_in_file_if_exists(
+        &root.join("src/services/context.rs"),
+        "todo_service::TodoService, ",
+        "",
+    )?;
+    replace_in_file_if_exists(
+        &root.join("src/services/context.rs"),
+        ", todo_service::TodoService",
+        "",
+    )?;
+    remove_method_block(
+        &root.join("src/services/context.rs"),
+        "pub fn todo(&self) -> TodoService {",
+    )?;
+
+    remove_lines_containing(
+        &root.join("src/db/entities/mod.rs"),
+        &["pub mod todo_item;", "pub mod todo_list;"],
+    )?;
+    remove_lines_containing(
+        &root.join("src/db/entities/prelude.rs"),
+        &[
+            "pub use super::todo_item::Entity as TodoItem;",
+            "pub use super::todo_list::Entity as TodoList;",
+        ],
+    )?;
+
+    remove_lines_containing(&root.join("src/db/dao/mod.rs"), &["pub mod todo_dao;"])?;
+    remove_lines_containing(
+        &root.join("src/db/dao/mod.rs"),
+        &["pub use todo_dao::TodoDao;"],
+    )?;
+    replace_in_file_if_exists(&root.join("src/db/dao/context.rs"), ", TodoDao", "")?;
+    remove_method_block(
+        &root.join("src/db/dao/context.rs"),
+        "pub fn todo(&self) -> TodoDao {",
+    )?;
+
+    Ok(())
+}
+
+fn disable_docs_profile(root: &Path) -> Result<()> {
+    for rel in ["views/docs.html", "crates/server/views/docs.html"] {
+        remove_file_if_exists(&root.join(rel))?;
+    }
+    for rel in ["views/docs", "crates/server/views/docs"] {
+        remove_dir_if_exists(&root.join(rel))?;
+    }
+    for rel in ["views/base.html", "crates/server/views/base.html"] {
+        remove_anchor_block_by_href(&root.join(rel), "/docs")?;
+    }
+    for rel in [
+        "src/routes/views/public.rs",
+        "crates/server/src/routes/views/public.rs",
+    ] {
+        write_file_if_exists(&root.join(rel), VIEWS_PUBLIC_NO_DOCS)?;
+    }
+    for rel in ["build/docs.rs", "crates/server/build/docs.rs"] {
+        write_file_if_exists(&root.join(rel), BUILD_DOCS_NO_DOCS)?;
+    }
+    Ok(())
+}
+
+fn remove_lines_containing(path: &Path, needles: &[&str]) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let contents =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let mut changed = false;
+    let mut out = String::new();
+    for line in contents.lines() {
+        if needles.iter().any(|needle| line.contains(needle)) {
+            changed = true;
+            continue;
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    if changed {
+        fs::write(path, out).with_context(|| format!("failed to write {}", path.display()))?;
+    }
+    Ok(())
+}
+
+fn remove_dir_if_exists(path: &Path) -> Result<()> {
+    if path.exists() {
+        fs::remove_dir_all(path).with_context(|| format!("failed to remove {}", path.display()))?;
+    }
+    Ok(())
+}
+
+fn replace_in_file_if_exists(path: &Path, from: &str, to: &str) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    replace_in_file(path, from, to)
+}
+
+fn remove_method_block(path: &Path, signature_fragment: &str) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let contents =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let mut lines: Vec<String> = contents.lines().map(|line| line.to_string()).collect();
+    let start_idx = lines
+        .iter()
+        .position(|line| line.contains(signature_fragment));
+    let Some(start_idx) = start_idx else {
+        return Ok(());
+    };
+
+    let mut depth = brace_delta(&lines[start_idx]);
+    let mut idx = start_idx + 1;
+    while idx < lines.len() {
+        depth += brace_delta(&lines[idx]);
+        if depth == 0 {
+            lines.drain(start_idx..=idx);
+            let mut updated = lines.join("\n");
+            if contents.ends_with('\n') {
+                updated.push('\n');
+            }
+            fs::write(path, updated)
+                .with_context(|| format!("failed to write {}", path.display()))?;
+            return Ok(());
+        }
+        idx += 1;
+    }
+
+    bail!("failed to locate end of method block in {}", path.display())
+}
+
+fn brace_delta(line: &str) -> i32 {
+    let mut count = 0;
+    for ch in line.chars() {
+        if ch == '{' {
+            count += 1;
+        } else if ch == '}' {
+            count -= 1;
+        }
+    }
+    count
+}
+
+fn remove_anchor_block_by_href(path: &Path, href: &str) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let contents =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let mut lines: Vec<String> = contents.lines().map(|line| line.to_string()).collect();
+
+    let href_idx = lines
+        .iter()
+        .position(|line| line.contains("href=") && line.contains(href));
+    let Some(href_idx) = href_idx else {
+        return Ok(());
+    };
+
+    let mut start = href_idx;
+    while start > 0 {
+        let line = lines[start].trim();
+        if line.starts_with("<a") || line == "<a" {
+            break;
+        }
+        start -= 1;
+    }
+
+    let mut end = href_idx;
+    while end + 1 < lines.len() {
+        let line = lines[end].trim();
+        if line.contains("</a>") || line == ">" || line.ends_with('>') {
+            break;
+        }
+        end += 1;
+    }
+
+    lines.drain(start..=end);
+    let mut updated = lines.join("\n");
+    if contents.ends_with('\n') {
+        updated.push('\n');
+    }
+    fs::write(path, updated).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(())
 }
 
