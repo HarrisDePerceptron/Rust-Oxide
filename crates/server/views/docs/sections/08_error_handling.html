@@ -1,0 +1,112 @@
+        <section id="error-handling" data-nav-title="Error handling" class="doc-section fade-2 mx-auto mt-14 max-w-3xl space-y-8">
+          <h2 class="flex items-center gap-3 font-display text-3xl leading-tight text-[color:var(--pine)] sm:text-4xl">
+            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
+            Error handling
+          </h2>
+          <h3 class="text-lg font-semibold leading-tight text-[color:var(--pine)] sm:text-xl">Use AppError as the single application error contract.</h3>
+          <p class="text-sm text-black/70">
+            The server normalizes handler and service failures through
+            <span class="font-semibold">AppError</span>. This keeps response shape,
+            status mapping, and logging behavior consistent across the stack.
+          </p>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">AppError mechanism</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/error.rs
+pub enum AppError {
+    BadRequest(String),
+    Unauthorized(String),
+    Forbidden(String),
+    NotFound(String),
+    Conflict(String),
+    Internal(InternalError),
+}</code></pre>
+            <ul class="list-disc space-y-1 pl-4 text-sm text-black/70">
+              <li>Client-facing variants carry a plain message.</li>
+              <li><span class="font-semibold">Internal</span> can optionally carry a source error for logs.</li>
+              <li>The same type is used by services, middleware, and route handlers.</li>
+            </ul>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Built-in conversions to AppError</h3>
+            <h4 class="text-sm font-semibold text-[color:var(--pine)]">Current conversion implementations</h4>
+            <ul class="list-disc space-y-1 pl-4 text-sm text-black/70">
+              <li><span class="font-semibold">anyhow::Error -&gt; AppError</span>: mapped to internal error with source.</li>
+              <li><span class="font-semibold">DaoLayerError -&gt; AppError</span>: database faults map to internal-with-source; validation-like DAO errors map to bad request.</li>
+              <li><span class="font-semibold">jsonwebtoken::errors::Error -&gt; AppError</span>: mapped to bad request with token validation context.</li>
+            </ul>
+            <p class="text-xs text-black/60">
+              These conversions let you use <span class="font-semibold">?</span> in functions returning
+              <span class="font-semibold">Result&lt;_, AppError&gt;</span>.
+            </p>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Internal server errors: with source vs without source</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// no source attached
+return Err(AppError::internal("internal server error"));
+
+// source attached (preferred for infra/IO/DB failures)
+return Err(AppError::internal_with_source(
+    "database operation failed. Please check the logs for more details",
+    db_err,
+));</code></pre>
+            <ul class="list-disc space-y-1 pl-4 text-sm text-black/70">
+              <li>Use <span class="font-semibold">internal</span> when you only have safe context text.</li>
+              <li>Use <span class="font-semibold">internal_with_source</span> when an underlying error exists and should be logged.</li>
+              <li>Response message stays controlled while detailed source is available to logs.</li>
+            </ul>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">How to implement conversion from a custom error</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>#[derive(Debug)]
+enum MyDomainError {
+    InvalidInput(String),
+    Upstream(std::io::Error),
+}
+
+impl From<MyDomainError> for AppError {
+    fn from(err: MyDomainError) -> Self {
+        match err {
+            MyDomainError::InvalidInput(msg) => AppError::bad_request(msg),
+            MyDomainError::Upstream(source) => {
+                AppError::internal_with_source("upstream call failed", source)
+            }
+        }
+    }
+}</code></pre>
+            <h4 class="text-sm font-semibold text-[color:var(--pine)]">Mapping guideline</h4>
+            <ul class="list-disc space-y-1 pl-4 text-sm text-black/70">
+              <li>Domain or user-input violations should map to 4xx variants.</li>
+              <li>Infrastructure failures should map to internal errors, ideally with source.</li>
+              <li>Keep client message stable and log details through attached source errors.</li>
+            </ul>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">anyhow interoperability</h3>
+            <h4 class="text-sm font-semibold text-[color:var(--pine)]">What is built in today</h4>
+            <ul class="list-disc space-y-1 pl-4 text-sm text-black/70">
+              <li><span class="font-semibold">anyhow::Error -&gt; AppError</span> is implemented directly.</li>
+              <li>The reverse direction is not implemented as a dedicated <span class="font-semibold">From&lt;AppError&gt;</span> impl.</li>
+              <li>Because <span class="font-semibold">AppError</span> implements <span class="font-semibold">std::error::Error</span>, it can still be wrapped into <span class="font-semibold">anyhow::Error</span> when needed.</li>
+            </ul>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// anyhow -> AppError
+let app_err: AppError = anyhow_err.into();
+
+// AppError -> anyhow (manual wrap)
+let anyhow_err = anyhow::Error::new(app_err);</code></pre>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Response and middleware flow</h3>
+            <ul class="list-disc space-y-1 pl-4 text-sm text-black/70">
+              <li><span class="font-semibold">AppError::into_response</span> maps variant to HTTP status and emits JSON API error payload.</li>
+              <li>Error logs are level-mapped from status (5xx=error, 401/403=debug, other 4xx=warn).</li>
+              <li><span class="font-semibold">json_error_middleware</span> wraps non-JSON error responses into the same AppError-based JSON format.</li>
+              <li><span class="font-semibold">catch_panic_layer</span> ensures panics become 500 JSON responses.</li>
+            </ul>
+          </section>
+        </section>

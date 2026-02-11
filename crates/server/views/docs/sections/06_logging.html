@@ -1,0 +1,121 @@
+        <section id="logging" data-nav-title="Logging" class="doc-section fade-2 mx-auto mt-14 max-w-3xl space-y-8">
+          <h2 class="flex items-center gap-3 font-display text-3xl leading-tight text-[color:var(--pine)] sm:text-4xl">
+            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
+            Logging
+          </h2>
+          <h3 class="text-lg font-semibold leading-tight text-[color:var(--pine)] sm:text-xl">How logging is initialized and why each level is used.</h3>
+          <p class="text-sm text-black/70">
+            Logging is built on <span class="font-semibold">tracing</span> +
+            <span class="font-semibold">tracing-subscriber</span>. Startup calls
+            <span class="font-semibold">init_tracing</span>, then installs HTTP tracing and panic capture.
+            The default filter is <span class="font-semibold">info,tower_http=info</span>.
+          </p>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">How to add your own logs</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>use tracing::{debug, info, warn, error};
+
+info!(user_id = %user.id, "user created");
+warn!(path = %request_path, "invalid query parameter");
+debug!(role = %required_role, "auth check failed");
+error!(error = ?err, "database operation failed");</code></pre>
+            <p class="text-xs text-black/60">
+              Prefer structured fields (<span class="font-semibold">key = value</span>) so logs are machine-queryable.
+            </p>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Set log verbosity</h3>
+            <div
+              class="border border-black/10"
+              data-terminal="true"
+              style="background-color: var(--pine); color: var(--mist);"
+            >
+              <div class="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/70">
+                <span>Terminal</span>
+                <button
+                  class="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/40 hover:text-white"
+                  data-copy-target="terminal-logging-levels"
+                  type="button"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-logging-levels"># default behavior
+RUST_LOG=info,tower_http=info cargo run -p rust_oxide
+
+# include request/response debug events
+RUST_LOG=debug,tower_http=debug cargo run -p rust_oxide
+
+# very verbose (including trace)
+RUST_LOG=trace,tower_http=trace cargo run -p rust_oxide</code></pre>
+            </div>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Startup logging pipeline</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/main.rs
+let cfg = AppConfig::from_env()?;
+init_tracing(&cfg.log_level);
+
+let app = Router::new()
+    .merge(router(Arc::clone(&state)))
+    .layer(middleware::from_fn(json_error_middleware))
+    .layer(catch_panic_layer())
+    .layer(TraceLayer::new_for_http());</code></pre>
+            <p class="text-xs text-black/60">
+              Files: <span class="font-semibold">src/main.rs</span>,
+              <span class="font-semibold">src/logging.rs</span>,
+              <span class="font-semibold">src/middleware/json_error.rs</span>,
+              <span class="font-semibold">src/middleware/panic.rs</span>.
+            </p>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Automatic logging behavior</h3>
+            <h4 class="text-sm font-semibold text-[color:var(--pine)]">Automatic events you get without custom instrumentation</h4>
+            <ul class="list-disc space-y-1 pl-4 text-sm text-black/70">
+              <li>Server boot and bind message (<span class="font-semibold">listening on ...</span>).</li>
+              <li>Schema sync message during database initialization.</li>
+              <li>Per-request tracing emitted by <span class="font-semibold">TraceLayer</span>.</li>
+              <li>Panic logs with panic location and backtrace.</li>
+              <li>Structured <span class="font-semibold">AppError</span> logs when handlers return errors.</li>
+            </ul>
+            <p class="text-xs text-black/60">
+              <span class="font-semibold">TraceLayer::new_for_http()</span> classifies only
+              <span class="font-semibold">5xx</span> as request failures by default. Non-5xx responses are normal completions.
+            </p>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Error level mapping</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/response.rs (log_app_error)
+if status.is_server_error() {
+    // 5xx -> error
+} else if status == 401 || status == 403 {
+    // unauthorized/forbidden -> debug
+} else {
+    // other 4xx -> warn
+}</code></pre>
+            <div class="space-y-2 text-sm text-black/70">
+              <p><span class="font-semibold text-[color:var(--pine)]">Error:</span> Internal server failures and panic paths.</p>
+              <p><span class="font-semibold text-[color:var(--pine)]">Warn:</span> Client-facing validation and request-shape errors (for example 400/404/409).</p>
+              <p><span class="font-semibold text-[color:var(--pine)]">Debug:</span> Auth denials (401/403) to reduce log noise in normal protected-route traffic.</p>
+            </div>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">TraceLayer request logs and defaults</h3>
+            <h4 class="text-sm font-semibold text-[color:var(--pine)]">tower-http defaults used by <span class="font-semibold">TraceLayer::new_for_http()</span></h4>
+            <ul class="list-disc space-y-1 pl-4 text-sm text-black/70">
+              <li>Request start event level: <span class="font-semibold">DEBUG</span>.</li>
+              <li>Response finished event level: <span class="font-semibold">DEBUG</span>.</li>
+              <li>Failure event level (5xx/service errors): <span class="font-semibold">ERROR</span>.</li>
+            </ul>
+            <p class="text-xs text-black/60">
+              With default <span class="font-semibold">RUST_LOG=info,tower_http=info</span>,
+              DEBUG-level request/response events are filtered out. Raise to DEBUG during local troubleshooting.
+            </p>
+          </section>
+
+        </section>
