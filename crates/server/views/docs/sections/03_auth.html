@@ -1,4 +1,4 @@
-        <section id="auth" data-nav-title="Authentication" class="doc-section fade-2 mx-auto mt-14 max-w-3xl space-y-4">
+        <section id="auth" data-nav-title="Authentication" class="doc-section fade-2 mx-auto mt-14 max-w-3xl space-y-8">
           <h2 class="flex items-center gap-3 font-display text-3xl leading-tight text-[color:var(--pine)] sm:text-4xl">
             <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
             Authentication
@@ -9,10 +9,10 @@
             <span class="font-semibold">/api/v1/login</span>, and <span class="font-semibold">/api/v1/refresh</span>.
             Use the access token as a Bearer token to call protected endpoints.
           </p>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Get tokens</p>
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Get tokens</h3>
             <div
-              class="mt-4 rounded-2xl border border-black/10 shadow-inner"
+              class="border border-black/10"
               data-terminal="true"
               style="background-color: var(--pine); color: var(--mist);"
             >
@@ -36,11 +36,11 @@ curl -X POST http://localhost:3000/api/v1/login \\
   -H "Content-Type: application/json" \\
   -d '{"email":"you@example.com","password":"password123"}'</code></pre>
             </div>
-          </div>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Call a protected route</p>
+          </section>
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Call a protected route</h3>
             <div
-              class="mt-4 rounded-2xl border border-black/10 shadow-inner"
+              class="border border-black/10"
               data-terminal="true"
               style="background-color: var(--pine); color: var(--mist);"
             >
@@ -58,10 +58,10 @@ curl -X POST http://localhost:3000/api/v1/login \\
 curl http://localhost:3000/api/v1/me \\
   -H "Authorization: Bearer $ACCESS_TOKEN"</code></pre>
             </div>
-          </div>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Minimal route protection</p>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/routes/api/protected.rs
+          </section>
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Minimal route protection</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/routes/api/protected.rs
 use axum::{Router, routing::get};
 use std::sync::Arc;
 use crate::middleware::AuthGuard;
@@ -76,10 +76,10 @@ pub fn router(state: Arc<AppState>) -> Router {
 async fn me(_auth: AuthGuard) {
     // ...
 }</code></pre>
-          </div>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Role-based protection</p>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/routes/api/admin.rs
+          </section>
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Role-based protection</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/routes/api/admin.rs
 use axum::{Router, routing::get};
 use std::sync::Arc;
 use crate::middleware::{AdminRole, AuthRoleGuard};
@@ -94,10 +94,10 @@ pub fn router(state: Arc<AppState>) -> Router {
 async fn admin_stats(AuthRoleGuard { .. }: AuthRoleGuard<AdminRole>) {
     // ...
 }</code></pre>
-          </div>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Role per route</p>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/routes/api/protected.rs
+          </section>
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Role per route</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/routes/api/protected.rs
 use axum::{Router, routing::get};
 use std::sync::Arc;
 use crate::middleware::{AdminRole, AuthRoleGuard, UserRole};
@@ -117,15 +117,15 @@ async fn reports(_auth: AuthRoleGuard<UserRole>) {
 async fn admin_stats(_auth: AuthRoleGuard<AdminRole>) {
     // ...
 }</code></pre>
-          </div>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Auth providers</p>
-            <p class="mt-3 text-sm text-black/70">
+          </section>
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Auth providers</h3>
+            <p class="text-sm text-black/70">
               Auth is provider-driven. The active provider is selected by <span class="font-semibold">AUTH_PROVIDER</span>
               and registered in <span class="font-semibold">src/auth/bootstrap.rs</span>.
               Route handlers use the auth service, and auth guards verify tokens through the active provider.
             </p>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/auth/providers/your_provider.rs
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/auth/providers/your_provider.rs
 use async_trait::async_trait;
 use crate::auth::{Claims, TokenBundle};
 use crate::auth::providers::{AuthProvider, AuthProviderId};
@@ -140,12 +140,12 @@ impl AuthProvider for YourProvider {
     async fn refresh(&self, refresh_token: &str) -> Result<TokenBundle, AppError> { /* ... */ }
     async fn verify(&self, access_token: &str) -> Result<Claims, AppError> { /* ... */ }
 }</code></pre>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/auth/bootstrap.rs
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/auth/bootstrap.rs
 let mut providers = AuthProviders::new(cfg.auth_provider)
     .with_provider(std::sync::Arc::new(YourProvider::new(/* deps */)))?;
 providers.set_active(cfg.auth_provider)?;</code></pre>
-            <p class="mt-3 text-xs text-black/60">
+            <p class="text-xs text-black/60">
               Add provider-specific env vars, then set <span class="font-semibold">AUTH_PROVIDER</span> to switch.
             </p>
-          </div>
+          </section>
         </section>

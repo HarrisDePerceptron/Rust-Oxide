@@ -1,4 +1,4 @@
-        <section id="config" data-nav-title="Application config" class="doc-section fade-2 mx-auto mt-14 max-w-3xl space-y-4">
+        <section id="config" data-nav-title="Application config" class="doc-section fade-2 mx-auto mt-14 max-w-3xl space-y-8">
           <h2 class="flex items-center gap-3 font-display text-3xl leading-tight text-[color:var(--pine)] sm:text-4xl">
             <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
             Application config
@@ -9,9 +9,9 @@
             at startup. The config is stored on <span class="font-semibold">AppState</span>, so routes
             and services can access it via the shared state.
           </p>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Step 1: add a field</p>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/config.rs
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Step 1: add a field</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/config.rs
 #[derive(Debug, Clone)]
 pub struct AppConfig {
     // ...
@@ -29,10 +29,10 @@ impl AppConfig {
         })
     }
 }</code></pre>
-          </div>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">Step 2: read in routes</p>
-            <pre class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/routes/api/public.rs
+          </section>
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Step 2: read in routes</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/routes/api/public.rs
 use axum::extract::State;
 use std::sync::Arc;
 use crate::state::AppState;
@@ -41,5 +41,5 @@ async fn handler(State(state): State<Arc<AppState>>) {
     let name = &state.config.app_name;
     // use name in your response
 }</code></pre>
-          </div>
+          </section>
         </section>

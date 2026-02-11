@@ -1,4 +1,4 @@
-        <section id="project-structure" data-nav-title="Project structure" class="doc-section fade-2 mx-auto mt-14 max-w-3xl space-y-4">
+        <section id="project-structure" data-nav-title="Project structure" class="doc-section fade-2 mx-auto mt-14 max-w-3xl space-y-8">
           <h2 class="flex items-center gap-3 font-display text-3xl leading-tight text-[color:var(--pine)] sm:text-4xl">
             <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
             Project structure
@@ -7,7 +7,8 @@
           <p class="text-sm text-black/70">
             This tree highlights the core modules you will touch most when extending the template.
           </p>
-          <div class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5">
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Core module map</h3>
             <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code># repo root (key modules)
 src/
   main.rs                 # config -> logging -> DB -> auth init -> state -> router
@@ -38,5 +39,5 @@ src/
 views/
   base.html               # shared layout
   docs.html               # docs page</code></pre>
-          </div>
+          </section>
         </section>
