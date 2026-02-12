@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/HarrisDePerceptron/Rust-Oxide/compare/v0.4.0...v0.5.0) (2026-02-12)
+
+
+### Features
+
+* cli updated with auth option ([0fd5a21](https://github.com/HarrisDePerceptron/Rust-Oxide/commit/0fd5a210dc7e678c17f30813ad8db358d37ffa93))
+* exclude docs and todo. entity fix ([22c84e9](https://github.com/HarrisDePerceptron/Rust-Oxide/commit/22c84e9af0ce77704c063d0d7663cefd341c1cff))
+
 ## [0.4.0](https://github.com/HarrisDePerceptron/Rust-Oxide/compare/v0.3.4...v0.4.0) (2026-02-07)
 
 
