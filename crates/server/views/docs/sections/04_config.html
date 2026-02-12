@@ -3,40 +3,68 @@
             <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
             Application config
           </h2>
-          <h3 class="text-lg font-semibold leading-tight text-[color:var(--pine)] sm:text-xl">Compose sub-configs and map <span class="font-mono">APP_*__*</span> env vars automatically.</h3>
+          <h3 class="text-lg font-semibold leading-tight text-[color:var(--pine)] sm:text-xl">Typed config with env mapping, optional sections, and centralized validation.</h3>
           <p class="text-sm text-black/70">
-            Configuration lives in <span class="font-semibold">src/config/</span> and is loaded once
-            at startup. The config is stored on <span class="font-semibold">AppState</span>, so routes
-            and services can access it via the shared state.
+            Configuration lives in <span class="font-semibold">src/config/</span> and is loaded once at startup.
+            <span class="font-semibold">AppConfig</span> is stored in <span class="font-semibold">AppState</span>,
+            so routes and services can access the same typed config object.
           </p>
           <section class="space-y-3 border-t border-black/10 pt-6">
-            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Step 1: add a field in the right sub-config</h3>
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Usage: access config in startup and routes</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/main.rs
+let cfg = AppConfig::from_env()?;
+init_tracing(&cfg.logging.rust_log);
+
+let db_cfg = cfg.database.as_ref().context("database config missing")?;
+let auth_cfg = cfg.auth.as_ref().context("auth config missing")?;
+
+let db = connection::connect(db_cfg).await?;
+let providers = init_providers(auth_cfg, &services).await?;</code></pre>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// route/handler example
+async fn handler(State(state): State<Arc<AppState>>) {
+    let host = &state.config.general.host;
+    let auth_enabled = state.config.auth.is_some();
+    // use values
+}</code></pre>
+          </section>
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Add custom config</h3>
             <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/config/configs.rs
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[serde(default, deny_unknown_fields)]
 pub struct AppConfig {
     pub general: GeneralConfig,
-    // ...
+    pub logging: LoggingConfig,
+    pub database: Option&lt;DatabaseConfig&gt;,
+    pub auth: Option&lt;AuthConfig&gt;,
+    pub external_api: Option&lt;ExternalApiConfig&gt;, // new section
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct GeneralConfig {
-    pub app_name: String,
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExternalApiConfig {
+    pub base_url: String,
+    #[serde(default = "default_external_timeout_secs")]
+    pub timeout_secs: u64,
 }</code></pre>
             <p class="text-xs text-black/60">
-              Naming convention: <span class="font-semibold">APP_SECTION__FIELD</span> (for example
-              <span class="font-semibold">APP_GENERAL__APP_NAME</span>).
+              Then provide env vars like <span class="font-semibold">APP_EXTERNAL_API__BASE_URL</span>
+              and <span class="font-semibold">APP_EXTERNAL_API__TIMEOUT_SECS</span>.
             </p>
           </section>
           <section class="space-y-3 border-t border-black/10 pt-6">
-            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Step 2: read in routes</h3>
-            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/routes/api/public.rs
-use axum::extract::State;
-use std::sync::Arc;
-use crate::state::AppState;
-
-async fn handler(State(state): State<Arc<AppState>>) {
-    let name = &state.config.general.app_name;
-    // use name in your response
-}</code></pre>
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">How config loading works</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/config/envconfig.rs
+config::Environment::with_prefix("APP")
+    .prefix_separator("_")
+    .separator("__")
+    .try_parsing(true)</code></pre>
+            <ul class="list-disc space-y-1 pl-4 text-sm text-black/70">
+              <li>Prefix convention: <span class="font-semibold">APP_</span>.</li>
+              <li>Nesting separator: <span class="font-semibold">__</span> (double underscore).</li>
+              <li>Example key: <span class="font-semibold">APP_DATABASE__MAX_CONNECTIONS</span>.</li>
+              <li><span class="font-semibold">.env</span> is loaded first from crate root, then process env values are read.</li>
+              <li>Deserialization is typed (numbers/bools/enums are parsed, invalid values fail fast).</li>
+            </ul>
           </section>
         </section>
