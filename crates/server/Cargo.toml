@@ -26,6 +26,7 @@ tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 uuid = { version = "1.11", features = ["v4", "serde"] }
 dotenvy="0.15.7"
 async-trait = "0.1.89"
+config = "0.15.18"
 
 [build-dependencies]
 quote = "1"

@@ -1,6 +1,6 @@
 use crate::{
     auth::{Claims, TokenBundle, providers::AuthProviders},
-    config::AppConfig,
+    config::AuthConfig,
     error::AppError,
 };
 
@@ -30,7 +30,7 @@ impl<'a> AuthService<'a> {
         self.providers.active()?.verify(access_token).await
     }
 
-    pub async fn seed_admin(&self, cfg: &AppConfig) -> anyhow::Result<()> {
+    pub async fn seed_admin(&self, cfg: &AuthConfig) -> anyhow::Result<()> {
         self.providers
             .active()
             .map_err(|err| anyhow::anyhow!(err.to_string()))?
@@ -50,7 +50,7 @@ mod tests {
             Role,
             providers::{AuthProvider, AuthProviderId, AuthProviders},
         },
-        config::AppConfig,
+        config::AuthConfig,
     };
 
     use super::*;
@@ -106,7 +106,7 @@ mod tests {
             }
         }
 
-        async fn seed_admin(&self, _cfg: &AppConfig) -> anyhow::Result<()> {
+        async fn seed_admin(&self, _cfg: &AuthConfig) -> anyhow::Result<()> {
             match self.mode {
                 ProviderMode::SeedAdminError => Err(anyhow::anyhow!("seed admin failed")),
                 _ => Ok(()),
@@ -132,8 +132,13 @@ mod tests {
         }
     }
 
-    fn test_config() -> AppConfig {
-        AppConfig::default()
+    fn test_config() -> AuthConfig {
+        AuthConfig {
+            provider: AuthProviderId::Local,
+            jwt_secret: "test-secret".to_string(),
+            admin_email: "admin@example.com".to_string(),
+            admin_password: "adminpassword".to_string(),
+        }
     }
 
     fn providers_with(mode: ProviderMode) -> AuthProviders {

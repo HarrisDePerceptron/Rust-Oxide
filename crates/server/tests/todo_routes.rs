@@ -14,8 +14,9 @@ use rust_oxide::{
         Role,
         bootstrap::build_providers,
         jwt::{JwtKeys, encode_token, make_access_claims},
+        providers::AuthProviderId,
     },
-    config::AppConfig,
+    config::{AppConfig, AuthConfig},
     routes::{API_PREFIX, router},
     services::ServiceContext,
     state::AppState,
@@ -23,9 +24,13 @@ use rust_oxide::{
 
 async fn app_state() -> std::sync::Arc<AppState> {
     let cfg = AppConfig::from_env().expect("load app config");
-    let mut opt = ConnectOptions::new(cfg.database_url.clone());
-    opt.max_connections(cfg.db_max_connections)
-        .min_connections(cfg.db_min_idle)
+    let db_cfg = cfg
+        .database
+        .as_ref()
+        .expect("database config should be present in integration tests");
+    let mut opt = ConnectOptions::new(db_cfg.url.clone());
+    opt.max_connections(db_cfg.max_connections)
+        .min_connections(db_cfg.min_idle)
         .connect_timeout(Duration::from_secs(5))
         .sqlx_logging(false);
 
@@ -36,13 +41,17 @@ async fn app_state() -> std::sync::Arc<AppState> {
         .expect("sync schema");
 
     let mut cfg = cfg;
-    cfg.jwt_secret = "test-secret".to_string();
+    cfg.auth = Some(test_auth_config("test-secret".to_string()));
     build_state(cfg, db)
 }
 
 fn build_state(cfg: AppConfig, db: DatabaseConnection) -> std::sync::Arc<AppState> {
     let services = ServiceContext::new(&db);
-    let providers = build_providers(&cfg, &services).expect("create auth providers");
+    let providers = build_providers(
+        cfg.auth.as_ref().expect("auth config should be present"),
+        &services,
+    )
+    .expect("create auth providers");
     AppState::new(cfg, db, providers)
 }
 
@@ -79,9 +88,26 @@ fn json_message(json: &serde_json::Value) -> Option<&str> {
 fn auth_header(state: &std::sync::Arc<AppState>) -> String {
     let user_id = Uuid::new_v4();
     let claims = make_access_claims(&user_id, vec![Role::User], 3600);
-    let jwt = JwtKeys::from_secret(state.config.jwt_secret.as_bytes());
+    let jwt = JwtKeys::from_secret(
+        state
+            .config
+            .auth
+            .as_ref()
+            .expect("auth config should be present")
+            .jwt_secret
+            .as_bytes(),
+    );
     let token = encode_token(&jwt, &claims).expect("encode token");
     format!("Bearer {token}")
+}
+
+fn test_auth_config(jwt_secret: String) -> AuthConfig {
+    AuthConfig {
+        provider: AuthProviderId::Local,
+        jwt_secret,
+        admin_email: "admin@example.com".to_string(),
+        admin_password: "adminpassword".to_string(),
+    }
 }
 
 fn api_path(path: &str) -> String {

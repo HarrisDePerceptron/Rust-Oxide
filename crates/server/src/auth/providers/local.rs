@@ -6,7 +6,7 @@ use crate::{
         jwt::{JwtKeys, encode_token, make_access_claims},
         password::{hash_password, verify_password},
     },
-    config::AppConfig,
+    config::AuthConfig,
     db::dao::RefreshTokenDao,
     db::entities,
     error::AppError,
@@ -133,7 +133,7 @@ impl AuthProvider for LocalAuthProvider {
         Ok(data.claims)
     }
 
-    async fn seed_admin(&self, cfg: &AppConfig) -> anyhow::Result<()> {
+    async fn seed_admin(&self, cfg: &AuthConfig) -> anyhow::Result<()> {
         if let Some(existing) = self
             .user_service
             .find_by_email(&cfg.admin_email)
@@ -169,7 +169,7 @@ mod tests {
             password::hash_password,
             providers::AuthProvider,
         },
-        config::AppConfig,
+        config::AuthConfig,
         db::entities::{refresh_token, user},
         services::ServiceContext,
     };
@@ -265,11 +265,12 @@ mod tests {
         }
     }
 
-    fn test_config(admin_email: &str, admin_password: &str) -> AppConfig {
-        AppConfig {
+    fn test_config(admin_email: &str, admin_password: &str) -> AuthConfig {
+        AuthConfig {
+            provider: AuthProviderId::Local,
+            jwt_secret: "unit-test-secret".to_string(),
             admin_email: admin_email.to_string(),
             admin_password: admin_password.to_string(),
-            ..AppConfig::default()
         }
     }
 

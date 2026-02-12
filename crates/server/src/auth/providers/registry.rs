@@ -1,14 +1,16 @@
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     auth::{Claims, TokenBundle},
-    config::AppConfig,
+    config::AuthConfig,
     error::AppError,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum AuthProviderId {
     Local,
 }
@@ -41,7 +43,7 @@ pub trait AuthProvider: Send + Sync {
     async fn refresh(&self, refresh_token: &str) -> Result<TokenBundle, AppError>;
     async fn verify(&self, access_token: &str) -> Result<Claims, AppError>;
 
-    async fn seed_admin(&self, _cfg: &AppConfig) -> anyhow::Result<()> {
+    async fn seed_admin(&self, _cfg: &AuthConfig) -> anyhow::Result<()> {
         Ok(())
     }
 }

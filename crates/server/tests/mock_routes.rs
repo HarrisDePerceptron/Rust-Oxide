@@ -14,8 +14,9 @@ use rust_oxide::{
         Role,
         bootstrap::build_providers,
         jwt::{JwtKeys, encode_token, make_access_claims},
+        providers::AuthProviderId,
     },
-    config::AppConfig,
+    config::{AppConfig, AuthConfig},
     middleware::{catch_panic_layer, json_error_middleware},
     routes::{API_PREFIX, router},
     services::ServiceContext,
@@ -29,9 +30,18 @@ fn api_path(path: &str) -> String {
 fn build_state(secret: &[u8]) -> std::sync::Arc<AppState> {
     let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
     let mut cfg = AppConfig::from_env().expect("load app config");
-    cfg.jwt_secret = String::from_utf8_lossy(secret).into_owned();
+    cfg.auth = Some(AuthConfig {
+        provider: AuthProviderId::Local,
+        jwt_secret: String::from_utf8_lossy(secret).into_owned(),
+        admin_email: "admin@example.com".to_string(),
+        admin_password: "adminpassword".to_string(),
+    });
     let services = ServiceContext::new(&db);
-    let providers = build_providers(&cfg, &services).expect("create auth providers");
+    let providers = build_providers(
+        cfg.auth.as_ref().expect("auth config should be present"),
+        &services,
+    )
+    .expect("create auth providers");
     AppState::new(cfg, db, providers)
 }
 

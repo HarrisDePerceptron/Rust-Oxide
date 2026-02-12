@@ -3,32 +3,29 @@
             <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
             Application config
           </h2>
-          <h3 class="text-lg font-semibold leading-tight text-[color:var(--pine)] sm:text-xl">Extend AppConfig, then use it anywhere.</h3>
+          <h3 class="text-lg font-semibold leading-tight text-[color:var(--pine)] sm:text-xl">Compose sub-configs and map <span class="font-mono">APP_*__*</span> env vars automatically.</h3>
           <p class="text-sm text-black/70">
-            Configuration lives in <span class="font-semibold">src/config.rs</span> and is loaded once
+            Configuration lives in <span class="font-semibold">src/config/</span> and is loaded once
             at startup. The config is stored on <span class="font-semibold">AppState</span>, so routes
             and services can access it via the shared state.
           </p>
           <section class="space-y-3 border-t border-black/10 pt-6">
-            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Step 1: add a field</h3>
-            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/config.rs
-#[derive(Debug, Clone)]
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Step 1: add a field in the right sub-config</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/config/configs.rs
+#[derive(Debug, Clone, Deserialize)]
 pub struct AppConfig {
+    pub general: GeneralConfig,
     // ...
-    pub app_name: String,
 }
 
-impl AppConfig {
-    pub fn from_env() -> Result<Self> {
-        // ...
-        let app_name = std::env::var("APP_NAME")
-            .unwrap_or_else(|_| "Sample Server".to_string());
-        Ok(Self {
-            // ...
-            app_name,
-        })
-    }
+#[derive(Debug, Clone, Deserialize)]
+pub struct GeneralConfig {
+    pub app_name: String,
 }</code></pre>
+            <p class="text-xs text-black/60">
+              Naming convention: <span class="font-semibold">APP_SECTION__FIELD</span> (for example
+              <span class="font-semibold">APP_GENERAL__APP_NAME</span>).
+            </p>
           </section>
           <section class="space-y-3 border-t border-black/10 pt-6">
             <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Step 2: read in routes</h3>
@@ -38,7 +35,7 @@ use std::sync::Arc;
 use crate::state::AppState;
 
 async fn handler(State(state): State<Arc<AppState>>) {
-    let name = &state.config.app_name;
+    let name = &state.config.general.app_name;
     // use name in your response
 }</code></pre>
           </section>

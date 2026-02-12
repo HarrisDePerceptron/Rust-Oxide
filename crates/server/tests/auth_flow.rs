@@ -10,8 +10,11 @@ use tower::ServiceExt; // for `oneshot`
 use uuid::Uuid;
 
 use rust_oxide::{
-    auth::{Claims, Role, bootstrap::build_providers, jwt::now_unix, password},
-    config::AppConfig,
+    auth::{
+        Claims, Role, bootstrap::build_providers, jwt::now_unix, password,
+        providers::AuthProviderId,
+    },
+    config::{AppConfig, AuthConfig},
     db::dao::DaoContext,
     routes::{API_PREFIX, router},
     services::ServiceContext,
@@ -25,7 +28,9 @@ fn app() -> axum::Router {
     let secret = b"test-secret";
     let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
     let mut cfg = AppConfig::from_env().expect("load app config");
-    cfg.jwt_secret = String::from_utf8_lossy(secret).into_owned();
+    cfg.auth = Some(test_auth_config(
+        String::from_utf8_lossy(secret).into_owned(),
+    ));
     let state = build_state(cfg, db);
     router(state)
 }
@@ -36,9 +41,13 @@ fn api_path(path: &str) -> String {
 
 async fn app_with_db() -> std::sync::Arc<AppState> {
     let cfg = AppConfig::from_env().expect("load app config");
-    let mut opt = ConnectOptions::new(cfg.database_url.clone());
-    opt.max_connections(cfg.db_max_connections)
-        .min_connections(cfg.db_min_idle)
+    let db_cfg = cfg
+        .database
+        .as_ref()
+        .expect("database config should be present in integration tests");
+    let mut opt = ConnectOptions::new(db_cfg.url.clone());
+    opt.max_connections(db_cfg.max_connections)
+        .min_connections(db_cfg.min_idle)
         .connect_timeout(Duration::from_secs(5))
         .sqlx_logging(false);
 
@@ -49,13 +58,17 @@ async fn app_with_db() -> std::sync::Arc<AppState> {
         .expect("sync schema");
 
     let mut cfg = cfg;
-    cfg.jwt_secret = "test-secret".to_string();
+    cfg.auth = Some(test_auth_config("test-secret".to_string()));
     build_state(cfg, db)
 }
 
 fn build_state(cfg: AppConfig, db: DatabaseConnection) -> std::sync::Arc<AppState> {
     let services = ServiceContext::new(&db);
-    let providers = build_providers(&cfg, &services).expect("create auth providers");
+    let providers = build_providers(
+        cfg.auth.as_ref().expect("auth config should be present"),
+        &services,
+    )
+    .expect("create auth providers");
     AppState::new(cfg, db, providers)
 }
 
@@ -137,7 +150,9 @@ async fn me_with_token_succeeds() {
     let secret = b"test-secret";
     let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
     let mut cfg = AppConfig::from_env().expect("load app config");
-    cfg.jwt_secret = String::from_utf8_lossy(secret).into_owned();
+    cfg.auth = Some(test_auth_config(
+        String::from_utf8_lossy(secret).into_owned(),
+    ));
     let state = build_state(cfg, db);
     let app = router(state.clone());
 
@@ -163,7 +178,9 @@ async fn admin_requires_role() {
     let secret = b"test-secret";
     let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
     let mut cfg = AppConfig::from_env().expect("load app config");
-    cfg.jwt_secret = String::from_utf8_lossy(secret).into_owned();
+    cfg.auth = Some(test_auth_config(
+        String::from_utf8_lossy(secret).into_owned(),
+    ));
     let app = router(build_state(cfg, db));
 
     // token without Admin role
@@ -181,6 +198,15 @@ async fn admin_requires_role() {
         .unwrap();
 
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
+}
+
+fn test_auth_config(jwt_secret: String) -> AuthConfig {
+    AuthConfig {
+        provider: AuthProviderId::Local,
+        jwt_secret,
+        admin_email: "admin@example.com".to_string(),
+        admin_password: "adminpassword".to_string(),
+    }
 }
 
 fn login_token(secret: &[u8], roles: Vec<Role>) -> String {

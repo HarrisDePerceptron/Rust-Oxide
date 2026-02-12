@@ -3,13 +3,13 @@ use std::time::Duration;
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use tracing::info;
 
-use crate::config::AppConfig;
+use crate::config::DatabaseConfig;
 
-pub async fn connect(cfg: &AppConfig) -> anyhow::Result<DatabaseConnection> {
-    let mut options = ConnectOptions::new(cfg.database_url.clone());
+pub async fn connect(cfg: &DatabaseConfig) -> anyhow::Result<DatabaseConnection> {
+    let mut options = ConnectOptions::new(cfg.url.clone());
     options
-        .max_connections(cfg.db_max_connections)
-        .min_connections(cfg.db_min_idle)
+        .max_connections(cfg.max_connections)
+        .min_connections(cfg.min_idle)
         .connect_timeout(Duration::from_secs(5))
         .sqlx_logging(false);
 
