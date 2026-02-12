@@ -17,11 +17,17 @@ src/
   auth/
     bootstrap.rs          # provider registration + active provider selection
     providers/            # auth provider implementations
-  routes/                 # API + HTML routes
+  routes/                 # HTTP layer (routing + middleware + response mapping)
     crud_api_router.rs    # concrete CRUD router wrapper
     base_api_router.rs    # shared CRUD trait hooks
     base_router.rs        # router helper trait
+    response.rs           # JsonApiResponse + AppError -> HTTP mapping
     route_list.rs         # generated route list
+    middleware/
+      auth.rs             # JWT middleware + role guard layer
+      guards.rs           # extractor guards (AuthGuard/AuthRoleGuard)
+      json_error.rs       # normalize non-JSON errors to JSON envelope
+      panic.rs            # panic -> JSON response layer
     api/
       public.rs           # /api/v1/public + /api/v1/routes.json
       auth.rs             # /api/v1 register/login/refresh

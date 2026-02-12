@@ -1,8 +1,8 @@
 use axum::{Router, routing::get};
 
-use crate::response::{ApiResult, JsonApiResponse};
 #[cfg(debug_assertions)]
 use crate::routes::route_list::{RouteInfo, routes};
+use crate::routes::{ApiResult, JsonApiResponse};
 
 pub fn router() -> Router {
     let router = Router::new().route("/public", get(handler));

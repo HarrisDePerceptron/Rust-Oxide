@@ -1,7 +1,7 @@
 # Server Template Guidelines (`src/` scope)
 
 ## Architecture Contract
-- Boot flow in `src/main.rs`: config -> logging -> DB connect/schema sync -> auth provider init -> `AppState` -> router + middleware.
+- Boot flow in `src/main.rs`: config -> logging -> DB connect/schema sync -> auth provider init -> `AppState` -> router + HTTP middleware layers.
 - `AppState` carries `config`, `jwt`, `db`, and `auth_providers`.
 - API prefix is `/api/v1` (`routes::API_PREFIX`); keep API routes nested under it.
 - Router composition is split into `routes/api/*` (JSON) and `routes/views/*` (HTML).
@@ -11,12 +11,13 @@
 - `src/config.rs`: env-driven `AppConfig`.
 - `src/state.rs`: shared app state and JWT keys.
 - `src/auth/`: claims, roles, JWT/password helpers, auth providers.
-- `src/middleware/`: auth guards, JSON error normalization, panic-to-JSON.
 - `src/db/entities/`: SeaORM schema entities.
 - `src/db/dao/`: all DB access; `DaoBase` shared CRUD primitives.
 - `src/services/`: business logic (`CrudService` + feature services).
 - `src/routes/api/`: API handlers.
 - `src/routes/views/`: Askama-rendered pages.
+- `src/routes/middleware/`: auth guards, JSON error normalization, panic-to-JSON.
+- `src/routes/response.rs`: JSON API response envelope and `AppError` -> HTTP mapping.
 - `src/routes/base_api_router.rs`: generic CRUD router builder.
 - `src/routes/route_list.rs` and `src/db/entity_catalog.rs`: generated catalogs used by docs/views.
 
@@ -106,4 +107,3 @@
 - `cargo test -p rust_oxide`
 - `cargo clippy --all-targets --all-features`
 - `cargo fmt`
-

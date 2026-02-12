@@ -10,7 +10,9 @@
             <span class="font-semibold">CrudApiRouter</span> lives in
             <span class="font-semibold">src/routes/crud_api_router.rs</span>, while
             <span class="font-semibold">src/routes/base_api_router.rs</span> contains the
-            underlying trait hooks used by advanced routers.
+            underlying trait hooks used by advanced routers. HTTP middleware and
+            JSON response normalization also live under
+            <span class="font-semibold">src/routes/</span>.
           </p>
           <section class="space-y-3 border-t border-black/10 pt-6">
             <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Router composition</h3>
@@ -29,7 +31,7 @@ pub fn router(state: Arc&lt;AppState&gt;) -&gt; Router {
 use std::sync::Arc;
 use axum::{Router, routing::get};
 use crate::auth::Role;
-use crate::middleware::AuthRolGuardLayer;
+use crate::routes::middleware::AuthRolGuardLayer;
 use crate::routes::crud_api_router::{CrudApiRouter, Method};
 use crate::services::ServiceContext;
 use crate::state::AppState;

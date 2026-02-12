@@ -17,8 +17,11 @@ use rust_oxide::{
         providers::AuthProviderId,
     },
     config::{AppConfig, AuthConfig},
-    middleware::{catch_panic_layer, json_error_middleware},
-    routes::{API_PREFIX, router},
+    routes::{
+        API_PREFIX,
+        middleware::{catch_panic_layer, json_error_middleware},
+        router,
+    },
     services::ServiceContext,
     state::AppState,
 };

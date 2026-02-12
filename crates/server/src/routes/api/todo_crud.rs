@@ -14,9 +14,7 @@ use crate::{
     auth::Role,
     db::entities::{todo_item, todo_list},
     error::AppError,
-    middleware::{AuthGuard, AuthRolGuardLayer},
-    response::{ApiResult, JsonApiResponse},
-    routes::crud_api_router::{CrudApiRouter, Method},
+    routes::{ApiResult, AuthGuard, AuthRolGuardLayer, CrudApiRouter, JsonApiResponse, Method},
     services::{ServiceContext, todo_service},
     state::AppState,
 };

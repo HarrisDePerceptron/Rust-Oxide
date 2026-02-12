@@ -3,8 +3,7 @@ use std::sync::Arc;
 use axum::{Router, routing::get};
 
 use crate::{
-    middleware::{AdminRole, AuthRoleGuard},
-    response::{ApiResult, JsonApiResponse},
+    routes::{AdminRole, ApiResult, AuthRoleGuard, JsonApiResponse},
     state::AppState,
 };
 

@@ -8,7 +8,7 @@ use axum::{
 
 use crate::{
     error::AppError,
-    response::{JsonApiResponse, log_app_error},
+    routes::{JsonApiResponse, response::log_app_error},
 };
 
 const MAX_ERROR_BODY_BYTES: usize = 16 * 1024;

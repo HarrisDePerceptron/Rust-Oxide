@@ -6,7 +6,7 @@ use axum::{
 };
 use tower_http::catch_panic::CatchPanicLayer;
 
-use crate::response::JsonApiResponse;
+use crate::routes::JsonApiResponse;
 
 pub fn catch_panic_layer() -> CatchPanicLayer<fn(Box<dyn Any + Send + 'static>) -> Response> {
     CatchPanicLayer::custom(panic_to_json)

@@ -9,8 +9,10 @@ use rust_oxide::{
     config::AppConfig,
     db::connection,
     logging::init_tracing,
-    middleware::{catch_panic_layer, json_error_middleware},
-    routes::router,
+    routes::{
+        middleware::{catch_panic_layer, json_error_middleware},
+        router,
+    },
     services::ServiceContext,
     state::AppState,
 };

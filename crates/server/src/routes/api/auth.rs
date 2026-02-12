@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use crate::{
     auth::TokenBundle,
-    response::{ApiResult, JsonApiResponse},
+    routes::{ApiResult, JsonApiResponse},
     services::ServiceContext,
     state::AppState,
 };

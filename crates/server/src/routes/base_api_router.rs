@@ -15,8 +15,7 @@ use uuid::Uuid;
 
 use super::base_router::BaseRouter;
 use crate::{
-    db::dao::DaoBase, error::AppError, response::JsonApiResponse,
-    services::crud_service::CrudService,
+    db::dao::DaoBase, error::AppError, routes::JsonApiResponse, services::crud_service::CrudService,
 };
 
 pub(crate) type DaoOf<S> = <S as CrudService>::Dao;
