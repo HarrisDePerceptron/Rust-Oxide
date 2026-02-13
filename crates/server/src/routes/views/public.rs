@@ -101,7 +101,7 @@ pub fn router() -> Router {
 }
 
 fn resolve_public_dir() -> PathBuf {
-    if let Some(path) = std::env::var_os("APP_PUBLIC_DIR") {
+    if let Some(path) = std::env::var_os("RUST_OXIDE_PUBLIC_DIR") {
         return PathBuf::from(path);
     }
 

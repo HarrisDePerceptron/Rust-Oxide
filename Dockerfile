@@ -29,8 +29,7 @@ COPY --from=builder /tmp/rust_oxide /usr/local/bin/rust_oxide
 COPY --from=builder /app/crates/server/public /app/public
 
 ENV APP_GENERAL__HOST=0.0.0.0 \
-    APP_GENERAL__PORT=3000 \
-    APP_PUBLIC_DIR=/app/public
+    APP_GENERAL__PORT=3000
 
 EXPOSE 3000
 
