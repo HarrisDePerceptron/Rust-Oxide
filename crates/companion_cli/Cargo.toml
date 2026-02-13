@@ -1,6 +1,6 @@
 [package]
 name = "rust-oxide-cli"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 description = "Companion CLI for the Rust Oxide backend framework"
 readme = "README.md"
