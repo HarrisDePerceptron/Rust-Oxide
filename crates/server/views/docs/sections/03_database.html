@@ -1,0 +1,153 @@
+        <section id="database" data-nav-title="Database" class="doc-section fade-2 mx-auto mt-14 max-w-3xl space-y-8">
+          <h2 class="flex items-center gap-3 font-display text-3xl leading-tight text-[color:var(--pine)] sm:text-4xl">
+            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
+            Database
+          </h2>
+          <h3 class="text-lg font-semibold leading-tight text-[color:var(--pine)] sm:text-xl">Use URL-driven provider selection for Postgres or SQLite.</h3>
+          <p class="text-sm text-black/70">
+            Database backend is selected from <span class="font-semibold">APP_DATABASE__URL</span>.
+            Startup resolves a provider, connects with provider-specific options, runs provider post-connect hooks,
+            then syncs entity schema.
+          </p>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Usage first: enable Postgres or SQLite</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code># Postgres
+APP_DATABASE__URL=postgres://postgres:postgres@localhost:5432/app_db
+APP_DATABASE__MAX_CONNECTIONS=10
+APP_DATABASE__MIN_IDLE=2
+
+# SQLite (recommended quick-start shape)
+APP_DATABASE__URL=sqlite://app.db?mode=rwc
+APP_DATABASE__MAX_CONNECTIONS=1
+APP_DATABASE__MIN_IDLE=0</code></pre>
+            <p class="text-xs text-black/60">
+              The SQLite URL should include <span class="font-semibold">mode=rwc</span> so the file is created if missing.
+              For existing projects, switching backend is changing this URL plus data migration.
+            </p>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code># CLI initialization options
+cargo run -p rust-oxide-cli -- init my_app --db sqlite
+cargo run -p rust-oxide-cli -- init my_app --db postgres</code></pre>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Current providers implemented</h3>
+            <ul class="list-disc space-y-1 pl-4 text-sm text-black/70">
+              <li><span class="font-semibold">PostgresDbProvider</span> in <span class="font-semibold">src/db/providers/postgres.rs</span></li>
+              <li><span class="font-semibold">SqliteDbProvider</span> in <span class="font-semibold">src/db/providers/sqlite.rs</span></li>
+              <li>Both are registered in <span class="font-semibold">src/db/providers/mod.rs</span></li>
+              <li>Selection happens in <span class="font-semibold">src/db/connection.rs</span> using URL scheme</li>
+            </ul>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/db/connection.rs
+let providers = default_registry()?;
+let provider = providers.provider_for_url(&cfg.url)?;
+let db = provider.connect(cfg).await?;
+provider.post_connect(&db, cfg).await?;</code></pre>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Entity design for multi-db safety</h3>
+            <p class="text-sm text-black/70">
+              Keep entity definitions backend-agnostic. Use standard SeaORM types and relations.
+              The <span class="font-semibold">#[base_entity]</span> macro injects common id/timestamp fields and DAO trait support.
+            </p>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/db/entities/todo_item.rs
+#[base_entity]
+#[sea_orm::model]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, DeriveEntityModel)]
+#[sea_orm(table_name = "todo_items")]
+pub struct Model {
+    #[sea_orm(indexed)]
+    pub list_id: Uuid,
+    pub description: String,
+    #[sea_orm(default_value = false)]
+    pub done: bool,
+    #[sea_orm(belongs_to, from = "list_id", to = "id", on_delete = "Cascade")]
+    pub list: HasOne&lt;super::todo_list::Entity&gt;,
+}</code></pre>
+            <ul class="list-disc space-y-1 pl-4 text-sm text-black/70">
+              <li>Put entities under <span class="font-semibold">src/db/entities/</span>.</li>
+              <li>Define relations explicitly with SeaORM relation attributes.</li>
+              <li>Prefer app-managed timestamps and UUIDs through DAO create/update flow.</li>
+            </ul>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">DAO patterns that scale across providers</h3>
+            <p class="text-sm text-black/70">
+              Keep all data access in DAO modules. The generic <span class="font-semibold">DaoBase</span> handles CRUD,
+              pagination, filtering, id assignment, and timestamp updates. Route handlers should not embed raw SeaORM queries.
+            </p>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/db/dao/todo_dao.rs
+#[derive(Clone)]
+pub struct TodoDao {
+    db: DatabaseConnection,
+}
+
+impl DaoBase for TodoDao {
+    type Entity = TodoList;
+
+    fn new(db: &DatabaseConnection) -> Self {
+        Self { db: db.clone() }
+    }
+
+    fn db(&self) -> &DatabaseConnection {
+        &self.db
+    }
+}</code></pre>
+            <ul class="list-disc space-y-1 pl-4 text-sm text-black/70">
+              <li>Add provider-agnostic queries first (filters, joins, pagination).</li>
+              <li>If provider-specific SQL is unavoidable, isolate it in clearly named DAO methods.</li>
+              <li>Keep service and route layers free of backend conditionals.</li>
+            </ul>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Add custom database support (provider extension)</h3>
+            <p class="text-sm text-black/70">
+              To add a new backend, implement <span class="font-semibold">DbProvider</span>, register it, and choose it by URL scheme.
+              <span class="font-semibold">supports_url</span> identifies compatible URLs and
+              <span class="font-semibold">post_connect</span> applies backend-specific session setup.
+            </p>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/db/providers/your_db.rs
+use async_trait::async_trait;
+use sea_orm::DatabaseConnection;
+use crate::config::DatabaseConfig;
+use crate::db::providers::{DbProvider, DbProviderId};
+
+pub struct YourDbProvider;
+
+#[async_trait]
+impl DbProvider for YourDbProvider {
+    fn id(&self) -> DbProviderId { /* add enum variant */ }
+
+    fn supports_url(&self, url: &str) -> bool {
+        url.starts_with("yourdb://")
+    }
+
+    async fn connect(&self, cfg: &DatabaseConfig) -> anyhow::Result&lt;DatabaseConnection&gt; {
+        // build connect options + open connection
+    }
+
+    async fn post_connect(
+        &self,
+        db: &DatabaseConnection,
+        cfg: &DatabaseConfig,
+    ) -> anyhow::Result&lt;()&gt; {
+        // backend-specific setup (optional)
+        Ok(())
+    }
+}</code></pre>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// src/db/providers/mod.rs
+pub fn default_registry() -> anyhow::Result&lt;DbProviders&gt; {
+    DbProviders::new()
+        .with_provider(Arc::new(PostgresDbProvider))?
+        .with_provider(Arc::new(SqliteDbProvider))?
+        .with_provider(Arc::new(YourDbProvider))
+}</code></pre>
+            <p class="text-xs text-black/60">
+              Keep provider concerns in <span class="font-semibold">src/db/providers/</span>.
+              Keep entity/DAO/service APIs stable so backend swaps do not leak into business logic.
+            </p>
+          </section>
+        </section>
