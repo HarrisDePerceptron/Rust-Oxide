@@ -25,6 +25,60 @@ crates/base_entity_derive/# derive helpers
 cargo run -p rust_oxide
 ```
 
+## Docker
+
+Build the production image:
+
+```sh
+docker build -t rust-oxide-server .
+```
+
+Run the container (replace env values with real secrets):
+
+```sh
+docker run --rm -p 3000:3000 \
+  -e APP_DATABASE__URL='sqlite://app.db?mode=rwc' \
+  -e APP_AUTH__JWT_SECRET='change-me' \
+  -e APP_AUTH__ADMIN_EMAIL='admin@example.com' \
+  -e APP_AUTH__ADMIN_PASSWORD='change-me-123' \
+  rust-oxide-server
+```
+
+Notes:
+- The final image contains only the server binary and `public/` static assets (no Rust source tree).
+- Container defaults: `APP_GENERAL__HOST=0.0.0.0`, `APP_GENERAL__PORT=3000`.
+
+### Docker Compose (app + Postgres)
+
+Start everything:
+
+```sh
+docker compose up --build -d
+```
+
+Follow logs:
+
+```sh
+docker compose logs -f app
+```
+
+Stop and remove containers:
+
+```sh
+docker compose down
+```
+
+The compose stack includes:
+- `app` (this Axum server)
+- `postgres` (persistent DB via `postgres_data` volume)
+
+Useful overrides:
+- `APP_PORT` (default `3000`)
+- `POSTGRES_PORT` (default `5432`)
+- `APP_AUTH__JWT_SECRET`
+- `APP_AUTH__ADMIN_EMAIL`
+- `APP_AUTH__ADMIN_PASSWORD`
+
 ## CLI (oxide)
 
 ### Install from crates.io
@@ -81,4 +135,3 @@ Conventional Commits determine SemVer:
 
 Merging a release-please PR creates a `vX.Y.Z` tag, which triggers the release
 workflow to build binaries and publish `rust-oxide-cli` to crates.io.
-

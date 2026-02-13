@@ -1,0 +1,41 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rust-oxide-server:local
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_GENERAL__HOST: 0.0.0.0
+      APP_GENERAL__PORT: 3000
+      APP_LOGGING__RUST_LOG: ${APP_LOGGING__RUST_LOG:-info,tower_http=info}
+      APP_DATABASE__URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-rust_oxide}
+      APP_AUTH__JWT_SECRET: ${APP_AUTH__JWT_SECRET:-change-me-in-compose}
+      APP_AUTH__ADMIN_EMAIL: ${APP_AUTH__ADMIN_EMAIL:-admin@example.com}
+      APP_AUTH__ADMIN_PASSWORD: ${APP_AUTH__ADMIN_PASSWORD:-change-me-123}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-rust_oxide}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-rust_oxide}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

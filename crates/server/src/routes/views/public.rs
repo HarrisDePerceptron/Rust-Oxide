@@ -1,5 +1,6 @@
 #[cfg(debug_assertions)]
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use askama::Template;
 #[cfg(not(debug_assertions))]
@@ -79,7 +80,7 @@ struct NotAvailableTemplate {
 type HtmlError = (StatusCode, Html<String>);
 
 pub fn router() -> Router {
-    let public_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("public");
+    let public_dir = resolve_public_dir();
     let router = Router::new()
         .route("/", get(index))
         .route("/not-available", get(not_available_view));
@@ -97,6 +98,30 @@ pub fn router() -> Router {
         .route("/routes", get(not_available_redirect));
 
     router.route_service("/{*file}", ServeDir::new(public_dir))
+}
+
+fn resolve_public_dir() -> PathBuf {
+    if let Some(path) = std::env::var_os("APP_PUBLIC_DIR") {
+        return PathBuf::from(path);
+    }
+
+    if let Ok(current_dir) = std::env::current_dir() {
+        let candidate = current_dir.join("public");
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+
+    if let Ok(exe_path) = std::env::current_exe()
+        && let Some(exe_dir) = exe_path.parent()
+    {
+        let candidate = exe_dir.join("public");
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("public")
 }
 
 async fn index() -> Result<Html<String>, HtmlError> {
