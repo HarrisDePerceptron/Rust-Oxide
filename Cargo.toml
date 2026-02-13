@@ -6,3 +6,30 @@ members = [
 ]
 default-members = ["crates/server"]
 resolver = "2"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 8
+debug = 0
+strip = "debuginfo"
+panic = "unwind"
+incremental = false
+
+[profile.release.build-override]
+opt-level = 0
+codegen-units = 256
+
+[profile.release-server]
+inherits = "release"
+codegen-units = 1
+lto = "thin"
+panic = "unwind"
+
+[profile.release-cli]
+inherits = "release"
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

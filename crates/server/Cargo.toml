@@ -32,3 +32,16 @@ config = "0.15.18"
 quote = "1"
 proc-macro2 = { version = "1", features = ["span-locations"] }
 syn = { version = "2", features = ["full", "visit"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+debug = 0
+strip = "debuginfo"
+panic = "unwind"
+incremental = false
+
+[profile.release.build-override]
+opt-level = 0
+codegen-units = 256
