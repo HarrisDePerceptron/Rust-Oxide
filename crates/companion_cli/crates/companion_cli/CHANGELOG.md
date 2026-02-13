@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1](https://github.com/HarrisDePerceptron/Rust-Oxide/compare/v0.6.0...v0.6.1) (2026-02-13)
+
+
+### Bug Fixes
+
+* cli database ordering fixed ([7714c04](https://github.com/HarrisDePerceptron/Rust-Oxide/commit/7714c04bfe091225d061fc94551e81ff9c59d788))
+* updated the cargo toml ([4764baa](https://github.com/HarrisDePerceptron/Rust-Oxide/commit/4764baadfc4bf57327b05cc4fb8fcaaa8f9b056b))
+
 ## [0.6.0](https://github.com/HarrisDePerceptron/Rust-Oxide/compare/v0.5.0...v0.6.0) (2026-02-13)
 
 
