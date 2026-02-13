@@ -527,7 +527,7 @@ fn resolve_default_port(port: Option<u16>) -> String {
     if let Some(port) = port {
         return port.to_string();
     }
-    if let Ok(env_port) = std::env::var("PORT") {
+    if let Some(env_port) = first_non_empty_env(&["APP_GENERAL__PORT", "PORT"]) {
         if let Ok(parsed) = env_port.trim().parse::<u16>() {
             return parsed.to_string();
         }
@@ -739,15 +739,22 @@ fn prepare_db_url(state: &mut UiState) {
     if matches!(state.db_url_source, DbUrlSource::User) {
         return;
     }
-    if let Ok(env_url) = std::env::var("DATABASE_URL") {
-        if !env_url.trim().is_empty() {
-            state.db_url = env_url;
-            state.db_url_source = DbUrlSource::Env;
-            return;
-        }
+    if let Some(env_url) = first_non_empty_env(&["APP_DATABASE__URL", "DATABASE_URL"]) {
+        state.db_url = env_url;
+        state.db_url_source = DbUrlSource::Env;
+        return;
     }
     state.db_url = default_db_url_for(&state.name, DB_OPTIONS[state.db_index].label);
     state.db_url_source = DbUrlSource::Default;
+}
+
+fn first_non_empty_env(keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| {
+        std::env::var(key)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    })
 }
 
 fn insert_char(input: &mut String, cursor: &mut usize, ch: char) {
@@ -944,7 +951,7 @@ const DB_OPTIONS: &[ChoiceOption] = &[
     },
     ChoiceOption {
         label: "sqlite",
-        enabled: false,
+        enabled: true,
     },
 ];
 

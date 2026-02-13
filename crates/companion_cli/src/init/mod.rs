@@ -13,7 +13,7 @@ use tempfile::TempDir;
 use walkdir::WalkDir;
 
 use self::tui::{TuiOutcome, run_tui};
-use crate::cli::{DEFAULT_DB, DEFAULT_PORT, InitArgs};
+use crate::cli::{DEFAULT_DB, DEFAULT_PORT, InitArgs, SQLITE_DB};
 
 const DEFAULT_REPLACE_FROM: &str = "rust_oxide";
 const DEFAULT_TEMPLATE_REPO: &str = "https://github.com/HarrisDePerceptron/Rust-Oxide.git";
@@ -112,10 +112,10 @@ pub fn run(mut args: InitArgs) -> Result<()> {
         None => bail!("project name is required in --non-interactive mode"),
     };
 
-    normalize_db(&args.db)?;
+    args.db = normalize_db(&args.db)?.to_string();
 
     if args.port.is_none() {
-        if let Ok(env_port) = std::env::var("PORT") {
+        if let Some(env_port) = first_non_empty_env(&["APP_GENERAL__PORT", "PORT"]) {
             if let Ok(parsed) = env_port.trim().parse::<u16>() {
                 args.port = Some(parsed);
             } else {
@@ -136,10 +136,8 @@ pub fn run(mut args: InitArgs) -> Result<()> {
     }
 
     if args.database_url.is_none() {
-        if let Ok(env_url) = std::env::var("DATABASE_URL") {
-            if !env_url.trim().is_empty() {
-                args.database_url = Some(env_url);
-            }
+        if let Some(env_url) = first_non_empty_env(&["APP_DATABASE__URL", "DATABASE_URL"]) {
+            args.database_url = Some(env_url);
         }
     }
 
@@ -225,14 +223,14 @@ pub fn run(mut args: InitArgs) -> Result<()> {
     if let Some(database_url) = args.database_url.as_ref() {
         let env_dest = out_dir.join(".env");
         if env_dest.exists() {
-            append_or_replace_env(&env_dest, "DATABASE_URL", database_url)?;
+            append_or_replace_env(&env_dest, "APP_DATABASE__URL", database_url)?;
         }
     }
 
     if let Some(port) = args.port.as_ref() {
         let env_dest = out_dir.join(".env");
         if env_dest.exists() {
-            append_or_replace_env(&env_dest, "PORT", &port.to_string())?;
+            append_or_replace_env(&env_dest, "APP_GENERAL__PORT", &port.to_string())?;
         }
     }
 
@@ -245,12 +243,12 @@ pub fn run(mut args: InitArgs) -> Result<()> {
     Ok(())
 }
 
-fn normalize_db(db: &str) -> Result<&str> {
+fn normalize_db(db: &str) -> Result<&'static str> {
     let normalized = db.trim().to_lowercase();
-    if normalized == DEFAULT_DB {
-        Ok(DEFAULT_DB)
-    } else {
-        bail!("unsupported database '{db}' (only postgres is available)");
+    match normalized.as_str() {
+        DEFAULT_DB => Ok(DEFAULT_DB),
+        SQLITE_DB => Ok(SQLITE_DB),
+        _ => bail!("unsupported database '{db}' (supported: postgres, sqlite)"),
     }
 }
 
@@ -749,8 +747,16 @@ pub(super) fn default_db_url_for(name: &str, label: &str) -> String {
     let base = derive_crate_name(name);
     match label {
         "postgres" => format!("postgres://postgres:postgres@localhost:5432/{base}"),
-        "mysql" => format!("mysql://root:password@localhost:3306/{base}"),
         "sqlite" => format!("sqlite://./{base}.db"),
         _ => format!("postgres://postgres:postgres@localhost:5432/{base}"),
     }
+}
+
+fn first_non_empty_env(keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| {
+        std::env::var(key)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    })
 }
