@@ -942,16 +942,16 @@ struct ChoiceOption {
 
 const DB_OPTIONS: &[ChoiceOption] = &[
     ChoiceOption {
+        label: "sqlite",
+        enabled: true,
+    },
+    ChoiceOption {
         label: "postgres",
         enabled: true,
     },
     ChoiceOption {
         label: "mysql",
         enabled: false,
-    },
-    ChoiceOption {
-        label: "sqlite",
-        enabled: true,
     },
 ];
 

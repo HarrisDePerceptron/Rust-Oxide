@@ -2,8 +2,9 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-pub const DEFAULT_DB: &str = "postgres";
+pub const POSTGRES_DB: &str = "postgres";
 pub const SQLITE_DB: &str = "sqlite";
+pub const DEFAULT_DB: &str = SQLITE_DB;
 pub const DEFAULT_PORT: u16 = 3000;
 
 #[derive(Parser)]
@@ -27,7 +28,7 @@ pub struct InitArgs {
     /// Output directory (defaults to ./<name>)
     #[arg(long)]
     pub out: Option<PathBuf>,
-    /// Database choice (supported: postgres, sqlite)
+    /// Database choice (supported: sqlite, postgres)
     #[arg(long, default_value = DEFAULT_DB)]
     pub db: String,
     /// Database URL (overrides env/default)

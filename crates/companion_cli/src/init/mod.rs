@@ -13,7 +13,7 @@ use tempfile::TempDir;
 use walkdir::WalkDir;
 
 use self::tui::{TuiOutcome, run_tui};
-use crate::cli::{DEFAULT_DB, DEFAULT_PORT, InitArgs, SQLITE_DB};
+use crate::cli::{DEFAULT_PORT, InitArgs, POSTGRES_DB, SQLITE_DB};
 
 const DEFAULT_REPLACE_FROM: &str = "rust_oxide";
 const DEFAULT_TEMPLATE_REPO: &str = "https://github.com/HarrisDePerceptron/Rust-Oxide.git";
@@ -220,6 +220,8 @@ pub fn run(mut args: InitArgs) -> Result<()> {
         disable_docs_profile(&out_dir)?;
     }
 
+    apply_database_profile(&out_dir, &args.db)?;
+
     if let Some(database_url) = args.database_url.as_ref() {
         let env_dest = out_dir.join(".env");
         if env_dest.exists() {
@@ -246,9 +248,9 @@ pub fn run(mut args: InitArgs) -> Result<()> {
 fn normalize_db(db: &str) -> Result<&'static str> {
     let normalized = db.trim().to_lowercase();
     match normalized.as_str() {
-        DEFAULT_DB => Ok(DEFAULT_DB),
+        POSTGRES_DB => Ok(POSTGRES_DB),
         SQLITE_DB => Ok(SQLITE_DB),
-        _ => bail!("unsupported database '{db}' (supported: postgres, sqlite)"),
+        _ => bail!("unsupported database '{db}' (supported: sqlite, postgres)"),
     }
 }
 
@@ -746,8 +748,8 @@ fn format_env_value(value: &str) -> String {
 pub(super) fn default_db_url_for(name: &str, label: &str) -> String {
     let base = derive_crate_name(name);
     match label {
+        "sqlite" => format!("sqlite://{base}.db?mode=rwc"),
         "postgres" => format!("postgres://postgres:postgres@localhost:5432/{base}"),
-        "sqlite" => format!("sqlite://./{base}.db"),
         _ => format!("postgres://postgres:postgres@localhost:5432/{base}"),
     }
 }
@@ -759,4 +761,69 @@ fn first_non_empty_env(keys: &[&str]) -> Option<String> {
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
     })
+}
+
+fn apply_database_profile(root: &Path, db: &str) -> Result<()> {
+    let cargo_toml = root.join("Cargo.toml");
+    if !cargo_toml.exists() {
+        return Ok(());
+    }
+
+    let contents = fs::read_to_string(&cargo_toml)
+        .with_context(|| format!("failed to read {}", cargo_toml.display()))?;
+    let updated = rewrite_sea_orm_driver_feature(&contents, db)?;
+    if updated != contents {
+        fs::write(&cargo_toml, updated)
+            .with_context(|| format!("failed to write {}", cargo_toml.display()))?;
+    }
+    Ok(())
+}
+
+fn rewrite_sea_orm_driver_feature(contents: &str, db: &str) -> Result<String> {
+    let selected_driver = match db {
+        "sqlite" => "sqlx-sqlite",
+        "postgres" => "sqlx-postgres",
+        other => bail!("unsupported database profile '{other}'"),
+    };
+
+    let mut seen = false;
+    let mut rewritten = String::with_capacity(contents.len() + 32);
+
+    for line in contents.lines() {
+        if line.trim_start().starts_with("sea-orm = {") {
+            seen = true;
+            let mut line = line.to_string();
+            line = line.replace("\"sqlx-postgres\", ", "");
+            line = line.replace("\"sqlx-sqlite\", ", "");
+            line = line.replace(", \"sqlx-postgres\"", "");
+            line = line.replace(", \"sqlx-sqlite\"", "");
+            line = line.replace("\"sqlx-postgres\"", "");
+            line = line.replace("\"sqlx-sqlite\"", "");
+
+            let marker = "\"with-chrono\"";
+            let feature_literal = format!("\"{selected_driver}\", ");
+            if !line.contains(selected_driver) {
+                if let Some(idx) = line.find(marker) {
+                    line.insert_str(idx, &feature_literal);
+                } else if let Some(idx) = line.find("features = [") {
+                    line.insert_str(idx + "features = [".len(), &feature_literal);
+                } else {
+                    bail!("failed to find sea-orm features list while applying database profile");
+                }
+            }
+
+            rewritten.push_str(&line);
+            rewritten.push('\n');
+            continue;
+        }
+
+        rewritten.push_str(line);
+        rewritten.push('\n');
+    }
+
+    if !seen {
+        bail!("failed to find sea-orm dependency while applying database profile");
+    }
+
+    Ok(rewritten)
 }
