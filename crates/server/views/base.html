@@ -26,26 +26,45 @@
     </script>
     <style>
       :root {
-        --sand: #f6efe6;
-        --clay: #d18b5a;
-        --pine: #163b36;
-        --sky: #bfe3e0;
-        --ink: #0f1f1d;
-        --mist: #e8f1f0;
+        --sand: #050505;
+        --clay: #f0f0f0;
+        --pine: #080808;
+        --sky: rgba(255, 255, 255, 0.08);
+        --ink: #f5f5f5;
+        --mist: #f3f3f3;
+        --bg-0: #050505;
+        --bg-1: #0b0b0b;
+        --bg-2: #111111;
+        --bg-3: #181818;
+        --line: rgba(255, 255, 255, 0.16);
+        --line-strong: rgba(255, 255, 255, 0.32);
+        --muted: #b5b5b5;
+        --muted-soft: #919191;
       }
 
       .bg-landing {
-        background: radial-gradient(
-            960px 560px at 12% -10%,
-            var(--sky) 0%,
-            transparent 60%
+        background:
+          radial-gradient(
+            1200px 700px at 8% -16%,
+            rgba(255, 255, 255, 0.1) 0%,
+            transparent 56%
           ),
           radial-gradient(
-            840px 520px at 88% 6%,
-            rgba(209, 139, 90, 0.35) 0%,
-            transparent 55%
+            860px 620px at 92% 2%,
+            rgba(255, 255, 255, 0.06) 0%,
+            transparent 62%
           ),
-          linear-gradient(180deg, var(--sand) 0%, #ffffff 45%, #f7fbfb 100%);
+          linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 38%, var(--bg-0) 100%);
+        color-scheme: dark;
+      }
+
+      body {
+        color: var(--ink);
+      }
+
+      ::selection {
+        background: #f5f5f5;
+        color: #050505;
       }
 
       @keyframes fade-up {
@@ -91,8 +110,90 @@
       body.top-nav-open {
         overflow: hidden;
       }
+
+      [class*="bg-white"] {
+        background-color: var(--bg-2) !important;
+      }
+
+      [class*="bg-[color:var(--mist)]"] {
+        background-color: var(--bg-3) !important;
+      }
+
+      [class*="bg-[color:var(--pine)]"] {
+        background-color: var(--bg-0) !important;
+      }
+
+      [class*="text-black/"] {
+        color: var(--muted) !important;
+      }
+
+      [class*="text-[color:var(--pine)]"] {
+        color: var(--ink) !important;
+      }
+
+      [class*="text-[color:var(--mist)]"] {
+        color: #f2f2f2 !important;
+      }
+
+      [class*="border-black/"] {
+        border-color: var(--line) !important;
+      }
+
+      [class*="border-[color:var(--pine)]"] {
+        border-color: var(--line-strong) !important;
+      }
+
+      [class*="from-white"] {
+        --tw-gradient-from: var(--bg-2) var(--tw-gradient-from-position) !important;
+      }
+
+      [class*="to-[color:var(--mist)]"] {
+        --tw-gradient-to: var(--bg-3) var(--tw-gradient-to-position) !important;
+      }
+
+      [class*="shadow-black/"] {
+        --tw-shadow-color: rgba(0, 0, 0, 0.8) !important;
+      }
+
+      .nav-pill {
+        border: 1px solid rgba(255, 255, 255, 0.28) !important;
+        background: rgba(255, 255, 255, 0.06) !important;
+        color: #f3f3f3 !important;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        backdrop-filter: blur(6px);
+      }
+
+      .nav-pill:hover {
+        border-color: rgba(255, 255, 255, 0.5) !important;
+        background: rgba(255, 255, 255, 0.14) !important;
+      }
+
+      .nav-pill-active {
+        border-color: rgba(255, 255, 255, 0.95) !important;
+        background: #f5f5f5 !important;
+        color: #080808 !important;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.42);
+      }
+
+      .nav-mobile-link {
+        color: #f3f3f3 !important;
+        font-weight: 700;
+      }
+
+      .nav-mobile-link:hover {
+        border-color: rgba(255, 255, 255, 0.42) !important;
+        background: rgba(255, 255, 255, 0.08) !important;
+        color: #ffffff !important;
+      }
+
+      .nav-mobile-active {
+        border-color: rgba(255, 255, 255, 0.65) !important;
+        background: rgba(255, 255, 255, 0.12) !important;
+        color: #ffffff !important;
+      }
     </style>
-    <link rel="icon" href="/images/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/images/ox-logo.svg" type="image/svg+xml" />
   </head>
   <body class="bg-landing text-[color:var(--ink)] antialiased">
     <div class="min-h-screen">
@@ -101,11 +202,11 @@
           class="mx-auto flex max-w-6xl items-center justify-between gap-6"
         >
           <a class="flex items-center gap-3" href="/">
-            <div
-              class="grid h-11 w-11 place-items-center rounded-2xl bg-[color:var(--pine)] text-sm font-semibold text-white shadow-lg shadow-black/10"
-            >
-              RS
-            </div>
+            <img
+              src="/images/ox-logo.svg"
+              alt="{{ project_name }} logo"
+              class="h-[4.5rem] w-[4.5rem] object-contain drop-shadow-[0_0_14px_rgba(255,130,48,0.48)]"
+            />
             <div>
               <p
                 class="text-xs uppercase tracking-[0.35em] text-[color:var(--pine)]"
@@ -120,7 +221,7 @@
             data-top-nav-toggle
             aria-expanded="false"
             aria-controls="top-mobile-drawer"
-            class="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--pine)] shadow-lg shadow-black/5 transition hover:-translate-y-0.5 md:hidden"
+            class="nav-pill inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs uppercase shadow-lg shadow-black/5 transition hover:-translate-y-0.5 md:hidden"
           >
             <svg viewBox="0 0 20 20" aria-hidden="true" class="h-4 w-4">
               <path
@@ -135,23 +236,31 @@
           </button>
           <nav class="hidden items-center gap-6 text-sm md:flex">
             <a
-              class="border border-black/10 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] shadow-lg shadow-black/5 transition hover:-translate-y-0.5"
+              class="nav-pill px-4 py-2 text-xs uppercase shadow-lg shadow-black/5 transition hover:-translate-y-0.5"
               href="/docs"
+              data-nav-link
+              data-nav-path="/docs"
               >Docs</a
             >
             <a
-              class="border border-[color:var(--pine)] bg-[color:var(--pine)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-lg shadow-black/10 transition hover:-translate-y-0.5"
+              class="nav-pill px-4 py-2 text-xs uppercase shadow-lg shadow-black/10 transition hover:-translate-y-0.5"
               href="/routes"
+              data-nav-link
+              data-nav-path="/routes"
               >Routes</a
             >
             <a
-              class="border border-black/10 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] shadow-lg shadow-black/5 transition hover:-translate-y-0.5"
+              class="nav-pill px-4 py-2 text-xs uppercase shadow-lg shadow-black/5 transition hover:-translate-y-0.5"
               href="/entities"
+              data-nav-link
+              data-nav-path="/entities"
               >Entities</a
             >
             <a
-              class="border border-black/10 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--pine)] shadow-lg shadow-black/5 transition hover:-translate-y-0.5"
+              class="nav-pill px-4 py-2 text-xs uppercase shadow-lg shadow-black/5 transition hover:-translate-y-0.5"
               href="/todo/ui"
+              data-nav-link
+              data-nav-path="/todo/ui"
               >Todo UI</a
             >
           </nav>
@@ -180,27 +289,35 @@
           </div>
           <nav class="mt-4 space-y-2">
             <a
-              class="block border-l-2 border-transparent px-3 py-3 text-sm font-semibold text-[color:var(--pine)] transition hover:border-[color:var(--pine)] hover:bg-[color:var(--mist)]"
+              class="nav-mobile-link block border-l-2 border-transparent px-3 py-3 text-sm transition"
               data-top-nav-link
               href="/docs"
+              data-nav-link
+              data-nav-path="/docs"
               >Docs</a
             >
             <a
-              class="block border-l-2 border-transparent px-3 py-3 text-sm font-semibold text-[color:var(--pine)] transition hover:border-[color:var(--pine)] hover:bg-[color:var(--mist)]"
+              class="nav-mobile-link block border-l-2 border-transparent px-3 py-3 text-sm transition"
               data-top-nav-link
               href="/routes"
+              data-nav-link
+              data-nav-path="/routes"
               >Routes</a
             >
             <a
-              class="block border-l-2 border-transparent px-3 py-3 text-sm font-semibold text-[color:var(--pine)] transition hover:border-[color:var(--pine)] hover:bg-[color:var(--mist)]"
+              class="nav-mobile-link block border-l-2 border-transparent px-3 py-3 text-sm transition"
               data-top-nav-link
               href="/entities"
+              data-nav-link
+              data-nav-path="/entities"
               >Entities</a
             >
             <a
-              class="block border-l-2 border-transparent px-3 py-3 text-sm font-semibold text-[color:var(--pine)] transition hover:border-[color:var(--pine)] hover:bg-[color:var(--mist)]"
+              class="nav-mobile-link block border-l-2 border-transparent px-3 py-3 text-sm transition"
               data-top-nav-link
               href="/todo/ui"
+              data-nav-link
+              data-nav-path="/todo/ui"
               >Todo UI</a
             >
           </nav>
@@ -226,6 +343,40 @@
         const toggleButton = document.querySelector("[data-top-nav-toggle]");
         const closeButton = document.querySelector("[data-top-nav-close]");
         const links = Array.from(document.querySelectorAll("[data-top-nav-link]"));
+        const allNavLinks = Array.from(document.querySelectorAll("[data-nav-link]"));
+
+        const normalizePath = (path) => {
+          if (!path || path === "/") {
+            return "/";
+          }
+          return path.endsWith("/") ? path.slice(0, -1) : path;
+        };
+
+        const applyActiveNav = () => {
+          const currentPath = normalizePath(window.location.pathname);
+          for (const link of allNavLinks) {
+            const targetPath = normalizePath(
+              link.getAttribute("data-nav-path") || link.getAttribute("href") || "/"
+            );
+            const isActive = currentPath === targetPath;
+
+            if (link.classList.contains("nav-pill")) {
+              link.classList.toggle("nav-pill-active", isActive);
+            }
+
+            if (link.classList.contains("nav-mobile-link")) {
+              link.classList.toggle("nav-mobile-active", isActive);
+            }
+
+            if (isActive) {
+              link.setAttribute("aria-current", "page");
+            } else {
+              link.removeAttribute("aria-current");
+            }
+          }
+        };
+
+        applyActiveNav();
 
         if (!drawer || !overlay || !toggleButton) {
           return;
