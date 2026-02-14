@@ -205,7 +205,7 @@
             <img
               src="/images/ox-logo.svg"
               alt="{{ project_name }} logo"
-              class="h-[4.5rem] w-[4.5rem] object-contain drop-shadow-[0_0_14px_rgba(255,130,48,0.48)]"
+              class="h-[3.75rem] w-[3.75rem] object-contain drop-shadow-[0_0_14px_rgba(255,130,48,0.48)]"
             />
             <div>
               <p
@@ -213,9 +213,9 @@
               >
                 {{ project_name }}
               </p>
-              <p class="text-xs text-black/50">Api Service</p>
             </div>
           </a>
+          {% if show_docs_link || show_debug_links %}
           <button
             type="button"
             data-top-nav-toggle
@@ -234,7 +234,9 @@
             </svg>
             Menu
           </button>
+          {% endif %}
           <nav class="hidden items-center gap-6 text-sm md:flex">
+            {% if show_docs_link %}
             <a
               class="nav-pill px-4 py-2 text-xs uppercase shadow-lg shadow-black/5 transition hover:-translate-y-0.5"
               href="/docs"
@@ -242,6 +244,8 @@
               data-nav-path="/docs"
               >Docs</a
             >
+            {% endif %}
+            {% if show_debug_links %}
             <a
               class="nav-pill px-4 py-2 text-xs uppercase shadow-lg shadow-black/10 transition hover:-translate-y-0.5"
               href="/routes"
@@ -263,8 +267,10 @@
               data-nav-path="/todo/ui"
               >Todo UI</a
             >
+            {% endif %}
           </nav>
         </div>
+        {% if show_docs_link || show_debug_links %}
         <div
           data-top-nav-overlay
           class="fixed inset-0 z-40 hidden bg-black/45 md:hidden"
@@ -288,6 +294,7 @@
             </button>
           </div>
           <nav class="mt-4 space-y-2">
+            {% if show_docs_link %}
             <a
               class="nav-mobile-link block border-l-2 border-transparent px-3 py-3 text-sm transition"
               data-top-nav-link
@@ -296,6 +303,8 @@
               data-nav-path="/docs"
               >Docs</a
             >
+            {% endif %}
+            {% if show_debug_links %}
             <a
               class="nav-mobile-link block border-l-2 border-transparent px-3 py-3 text-sm transition"
               data-top-nav-link
@@ -320,18 +329,47 @@
               data-nav-path="/todo/ui"
               >Todo UI</a
             >
+            {% endif %}
           </nav>
         </aside>
+        {% endif %}
       </header>
 
       {% block content %}{% endblock %}
 
       <footer class="px-6 pb-10 sm:px-10">
         <div
-          class="mx-auto flex max-w-6xl flex-col items-start justify-between gap-4 border-t border-black/10 pt-6 text-xs text-black/50 sm:flex-row sm:items-center"
+          class="mx-auto flex max-w-6xl flex-col items-start justify-between gap-4 border-t border-black/10 pt-6 text-sm text-black/50 md:flex-row md:items-center"
         >
-          <p>Built for Rust developers who want a bold hello world.</p>
-          <p>Template time: {{ now }}</p>
+          <div class="flex flex-wrap items-center gap-3">
+            <a
+              class="font-bold text-[color:var(--mist)] underline decoration-2 decoration-[color:var(--mist)]/75 underline-offset-4 transition hover:text-white hover:decoration-white"
+              href="https://github.com/HarrisDePerceptron/Rust-Oxide"
+              target="_blank"
+              rel="noopener noreferrer"
+              >GitHub</a
+            >
+            <span class="text-black/35">|</span>
+            <span
+              >Created by:
+              <a
+                class="font-bold text-[color:var(--mist)] underline decoration-2 decoration-[color:var(--mist)]/75 underline-offset-4 transition hover:text-white hover:decoration-white"
+                href="https://github.com/HarrisDePerceptron"
+                target="_blank"
+                rel="noopener noreferrer"
+                >Harris</a
+              ></span
+            >
+            <span class="text-black/35">|</span>
+            <a
+              class="font-bold text-[color:var(--mist)] underline decoration-2 decoration-[color:var(--mist)]/75 underline-offset-4 transition hover:text-white hover:decoration-white"
+              href="https://x.com/HarrisDePercept"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Reach out on X</a
+            >
+          </div>
+          <p>Build on: {{ now }}</p>
         </div>
       </footer>
     </div>

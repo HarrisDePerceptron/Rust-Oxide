@@ -1,279 +1,311 @@
 {% extends "base.html" %}
 
-{% block title %}{{ project_name }} | Hello World{% endblock %}
-{% block description %}Hello World landing page for {{ project_name }}, built with Rust, Axum, SeaORM, and Askama.{% endblock %}
+{% block title %}{{ project_name }} | Rust Oxide{% endblock %}
+{% block description %}Rust Oxide landing page with GitHub access, quick CLI install, and application stack overview.{% endblock %}
 
 {% block content %}
-      <main class="px-6 pb-16 pt-10 sm:px-10">
-        <section
-          class="relative mx-auto grid max-w-6xl gap-10 lg:grid-cols-[1.1fr_0.9fr]"
-        >
-          <div class="fade-1 space-y-6">
-            <div
-              class="inline-flex items-center gap-3 rounded-full border border-black/10 bg-white/80 px-4 py-2 text-xs uppercase tracking-[0.3em] text-black/60 shadow-sm"
-            >
-              <span
-                class="h-2 w-2 rounded-full bg-[color:var(--clay)]"
-              ></span>
-              Hello World
+      <main class="pb-16 pt-8">
+        <section class="fade-1 relative overflow-hidden border-y border-black/10 bg-white/95">
+          <div class="relative mx-auto max-w-6xl px-6 py-16 sm:px-10 sm:py-20">
+            <div class="grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
+              <div class="space-y-6">
+                <p class="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/85 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-[color:var(--pine)] shadow-sm">
+                  <span class="h-2 w-2 rounded-full bg-[color:var(--clay)]"></span>
+                  Rust Oxide
+                </p>
+                <h1 class="font-display text-4xl leading-tight text-[color:var(--pine)] sm:text-5xl lg:text-6xl">
+                  Minimal-stack Rust backend starter for real projects.
+                </h1>
+                <p class="max-w-2xl text-sm text-[color:var(--mist)] sm:text-base">
+                  Build production-ready APIs with Axum, SeaORM, and Askama. Use the companion CLI
+                  to scaffold apps and CRUD APIs quickly, then extend the same codebase for auth,
+                  data, and UI.
+                </p>
+                <div class="flex flex-wrap items-center gap-3">
+                  <a
+                    class="inline-flex items-center gap-2 rounded-full bg-[color:var(--pine)] px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-black/15 transition hover:-translate-y-0.5"
+                    href="/docs"
+                  >
+                    Getting Started
+                  </a>
+                  <a
+                    class="inline-flex items-center gap-2 rounded-full border border-black/15 bg-white/80 px-6 py-3 text-sm font-semibold text-[color:var(--pine)] transition hover:border-black/30"
+                    href="https://github.com/HarrisDePerceptron/Rust-Oxide"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true" class="h-4 w-4">
+                      <path
+                        fill="currentColor"
+                        d="M12 .5A12 12 0 0 0 8.2 23.9c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.3-1.8-1.3-1.8-1.1-.8.1-.8.1-.8 1.2.1 1.8 1.2 1.8 1.2 1.1 1.9 2.9 1.4 3.6 1.1.1-.8.4-1.4.8-1.7-2.7-.3-5.6-1.4-5.6-6 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.3 2.8.1 3.1.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.7-5.6 6 .4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6A12 12 0 0 0 12 .5Z"
+                      ></path>
+                    </svg>
+                    GitHub repository
+                  </a>
+                </div>
+                <p class="text-xs uppercase tracking-[0.28em] text-black/40">Rendered at {{ now }}</p>
+              </div>
+
+              <div class="rounded-3xl border border-black/10 bg-white/90 p-6 shadow-xl shadow-black/10">
+                <p class="text-xs font-semibold uppercase tracking-[0.28em] text-black/50">At a glance</p>
+                <ul class="mt-4 space-y-3 text-sm text-black/70">
+                  <li class="rounded-xl border border-black/10 bg-[color:var(--mist)]/70 px-4 py-3">
+                    Axum API routing with middleware and JSON error normalization
+                  </li>
+                  <li class="rounded-xl border border-black/10 bg-[color:var(--mist)]/70 px-4 py-3">
+                    SeaORM entities and DAO/service layers for clean boundaries
+                  </li>
+                  <li class="rounded-xl border border-black/10 bg-[color:var(--mist)]/70 px-4 py-3">
+                    JWT auth, roles, and refresh token flow
+                  </li>
+                  <li class="rounded-xl border border-black/10 bg-[color:var(--mist)]/70 px-4 py-3">
+                    Companion CLI for scaffolding projects and CRUD APIs
+                  </li>
+                </ul>
+              </div>
             </div>
-            <h1
-              class="font-display text-4xl leading-tight text-[color:var(--pine)] sm:text-5xl lg:text-6xl"
-            >
-              A modern Rust landing page that ships fast, looks sharp, and
-              stays simple.
-            </h1>
-            <p class="max-w-xl text-base text-black/70 sm:text-lg">
-              This template is powered by Rust, Axum, SeaORM, and Askama. It is
-              a clean starting point for APIs and web front doors, styled with
-              Tailwind CSS so you can ship a polished Hello World in minutes.
-            </p>
-            <div class="flex flex-wrap items-center gap-4">
+          </div>
+        </section>
+
+        <section class="fade-2 mx-auto mt-10 max-w-4xl px-6 sm:px-10">
+          <div class="border-t border-black/10 pt-8 text-center">
+            <p class="text-xs font-semibold uppercase tracking-[0.28em] text-black/50">Install now</p>
+            <h2 class="mt-3 font-display text-3xl leading-tight text-[color:var(--pine)] sm:text-4xl">
+              Install <span class="font-semibold">oxide</span> with one command.
+            </h2>
+            <p class="mt-3 text-sm text-black/65 sm:text-base">Use the script install or cargo install approach.</p>
+
+            <div class="mt-6 space-y-4 text-left">
+              <div class="rounded-2xl border border-black/10 bg-white/90 p-4 shadow-lg shadow-black/5">
+                <p class="px-1 pb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-black/50">Script</p>
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <pre class="min-w-0 flex-1 overflow-x-auto rounded-xl bg-white/95 p-3 text-xs text-[color:var(--pine)]"><code id="install-command">curl -fsSL https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh | sh</code></pre>
+                  <button
+                    type="button"
+                    data-install-copy
+                    class="inline-flex shrink-0 items-center justify-center rounded-full bg-[color:var(--pine)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:-translate-y-0.5"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-3">
+                <span class="h-px flex-1 bg-black/10"></span>
+                <p class="text-center text-xs font-semibold uppercase tracking-[0.24em] text-black/45">or</p>
+                <span class="h-px flex-1 bg-black/10"></span>
+              </div>
+
+              <div class="rounded-2xl border border-black/10 bg-white/90 p-4 shadow-lg shadow-black/5">
+                <p class="px-1 pb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-black/50">Cargo</p>
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <pre class="min-w-0 flex-1 overflow-x-auto rounded-xl bg-white/95 p-3 text-xs text-[color:var(--pine)]"><code id="cargo-install-command">cargo install rust-oxide-cli</code></pre>
+                  <button
+                    type="button"
+                    data-cargo-install-copy
+                    class="inline-flex shrink-0 items-center justify-center rounded-full bg-[color:var(--pine)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:-translate-y-0.5"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-4 rounded-2xl border border-black/10 bg-white/90 p-4 text-left shadow-lg shadow-black/5">
+              <p class="px-1 pb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-black/50">After install</p>
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <pre class="min-w-0 flex-1 overflow-x-auto rounded-xl bg-white/95 p-3 text-xs text-[color:var(--pine)]"><code id="oxide-init-command">oxide init my_app</code></pre>
+                <button
+                  type="button"
+                  data-oxide-init-copy
+                  class="inline-flex shrink-0 items-center justify-center rounded-full bg-[color:var(--pine)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:-translate-y-0.5"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+
+            <p class="mt-4 text-xs text-black/60">
+              Script URL:
               <a
-                class="rounded-full bg-[color:var(--pine)] px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-black/15 transition hover:-translate-y-0.5"
-                href="#get-started"
+                class="break-all font-semibold text-[color:var(--pine)] underline decoration-black/35 underline-offset-2"
+                href="https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh"
+                target="_blank"
+                rel="noopener noreferrer"
               >
-                Get started
+                https://raw.githubusercontent.com/HarrisDePerceptron/Rust-Oxide/master/scripts/install.sh
               </a>
-              <a
-                class="rounded-full border border-black/15 px-6 py-3 text-sm font-semibold text-[color:var(--pine)] transition hover:border-black/30"
-                href="#stack"
-              >
-                Explore the stack
-              </a>
-            </div>
-            <p class="text-xs uppercase tracking-[0.3em] text-black/40">
-              Rendered at {{ now }}
             </p>
           </div>
+        </section>
 
-          <div class="fade-2 relative">
-            <div
-              class="absolute -right-6 top-12 hidden h-24 w-24 rounded-full bg-[color:var(--mist)] blur-2xl lg:block"
-            ></div>
-            <div
-              class="rounded-3xl border border-black/10 bg-white/90 p-6 shadow-xl shadow-black/10"
-            >
-              <div class="flex items-center justify-between">
-                <h2 class="text-sm font-semibold text-black/70">
-                  Template snapshot
-                </h2>
-                <span
-                  class="rounded-full bg-[color:var(--mist)] px-3 py-1 text-[11px] font-semibold text-[color:var(--pine)]"
-                  >Rust 2024</span
-                >
+        <section id="application-stack" class="fade-3 mx-auto mt-10 max-w-6xl px-6 sm:px-10">
+          <div class="rounded-3xl border border-black/10 bg-white/95 p-8 shadow-xl shadow-black/10">
+            <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-[0.28em] text-black/50">Application stack</p>
+                <h2 class="mt-2 font-display text-3xl leading-tight text-[color:var(--pine)] sm:text-4xl">Powered By</h2>
               </div>
-              <div class="mt-6 space-y-4 text-sm text-black/70">
-                <div
-                  class="rounded-2xl border border-dashed border-black/10 bg-[color:var(--mist)]/60 p-4"
-                >
-                  <p class="text-xs uppercase tracking-[0.25em] text-black/50">
-                    Stack
-                  </p>
-                  <p class="mt-2 text-base font-semibold text-[color:var(--pine)]">
-                    Axum + Askama + SeaORM + JWT Auth
-                  </p>
-                </div>
-                <div class="grid gap-3 sm:grid-cols-2">
-                  <div class="rounded-2xl bg-white p-4 shadow-sm">
-                    <p class="text-xs uppercase tracking-[0.25em] text-black/40">
-                      Focus
-                    </p>
-                    <p class="mt-2 font-semibold text-[color:var(--pine)]">
-                      Fast API scaffolding
-                    </p>
-                  </div>
-                  <div class="rounded-2xl bg-white p-4 shadow-sm">
-                    <p class="text-xs uppercase tracking-[0.25em] text-black/40">
-                      Style
-                    </p>
-                    <p class="mt-2 font-semibold text-[color:var(--pine)]">
-                      Tailwind in one file
-                    </p>
-                  </div>
-                </div>
-                <div
-                  class="rounded-2xl border border-black/10 bg-gradient-to-r from-white to-[color:var(--mist)] p-4"
-                >
-                  <p class="text-xs uppercase tracking-[0.25em] text-black/50">
-                    Auth
-                  </p>
-                  <p class="mt-2 text-sm">
-                    Access + refresh tokens with Argon2 password hashing.
-                  </p>
-                </div>
+              <p class="max-w-md text-sm text-black/65">
+                Core runtime, API, persistence, templating, auth, and frontend tooling used in this starter.
+              </p>
+            </div>
+
+            <div class="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <article class="rounded-2xl border border-black/10 bg-[color:var(--mist)]/70 p-5">
+                <p class="text-xs uppercase tracking-[0.25em] text-black/45">Language</p>
+                <h3 class="mt-2 text-base font-semibold text-[color:var(--pine)]">Rust 2024</h3>
+                <p class="mt-2 text-sm text-black/65">
+                  Core implementation language for API, services, data access, and templates.
+                </p>
+              </article>
+              <article class="rounded-2xl border border-black/10 bg-[color:var(--mist)]/70 p-5">
+                <p class="text-xs uppercase tracking-[0.25em] text-black/45">Web framework</p>
+                <h3 class="mt-2 text-base font-semibold text-[color:var(--pine)]">Axum + Tower</h3>
+                <p class="mt-2 text-sm text-black/65">Routing, middleware, request extractors, and HTTP composition.</p>
+              </article>
+              <article class="rounded-2xl border border-black/10 bg-[color:var(--mist)]/70 p-5">
+                <p class="text-xs uppercase tracking-[0.25em] text-black/45">Data layer</p>
+                <h3 class="mt-2 text-base font-semibold text-[color:var(--pine)]">SeaORM</h3>
+                <p class="mt-2 text-sm text-black/65">Entity modeling, schema sync, and typed DAO-backed persistence.</p>
+              </article>
+              <article class="rounded-2xl border border-black/10 bg-[color:var(--mist)]/70 p-5">
+                <p class="text-xs uppercase tracking-[0.25em] text-black/45">Auth</p>
+                <h3 class="mt-2 text-base font-semibold text-[color:var(--pine)]">JWT + Argon2</h3>
+                <p class="mt-2 text-sm text-black/65">Access/refresh token flow with password hashing and role guards.</p>
+              </article>
+            </div>
+
+            <div class="mt-6 flex flex-wrap gap-2 text-xs">
+              <span class="rounded-full border border-black/10 bg-[color:var(--mist)]/80 px-3 py-1 font-semibold text-[color:var(--pine)]">Tokio runtime</span>
+              <span class="rounded-full border border-black/10 bg-[color:var(--mist)]/80 px-3 py-1 font-semibold text-[color:var(--pine)]">Askama templates</span>
+            </div>
+          </div>
+        </section>
+
+        <section id="framework-features" class="fade-3 mx-auto mt-10 max-w-6xl px-6 sm:px-10">
+          <div class="border-t border-black/10 pt-8">
+            <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-[0.28em] text-black/50">Framework features</p>
+                <h2 class="mt-2 font-display text-3xl leading-tight text-[color:var(--pine)] sm:text-4xl">Whats in Rust Oxide</h2>
               </div>
-            </div>
-            <div
-              class="floaty absolute -bottom-8 left-6 hidden rounded-2xl border border-black/10 bg-white/90 px-4 py-3 text-xs text-black/60 shadow-lg shadow-black/10 lg:block"
-            >
-              Ready for your first endpoint.
-            </div>
-          </div>
-        </section>
-
-        <section
-          id="features"
-          class="fade-2 mx-auto mt-16 grid max-w-6xl gap-6 md:grid-cols-3"
-        >
-          <div class="rounded-3xl bg-white/90 p-6 shadow-lg shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/40">
-              Entity first
-            </p>
-            <h3 class="mt-3 text-lg font-semibold text-[color:var(--pine)]">
-              SeaORM synced on boot
-            </h3>
-            <p class="mt-3 text-sm text-black/65">
-              Keep schema and models aligned without manual migrations during
-              early builds.
-            </p>
-          </div>
-          <div class="rounded-3xl bg-white/90 p-6 shadow-lg shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/40">
-              Secure by default
-            </p>
-            <h3 class="mt-3 text-lg font-semibold text-[color:var(--pine)]">
-              JWT roles and guards
-            </h3>
-            <p class="mt-3 text-sm text-black/65">
-              Role-aware routes with refresh tokens so you can iterate safely.
-            </p>
-          </div>
-          <div class="rounded-3xl bg-white/90 p-6 shadow-lg shadow-black/5">
-            <p class="text-xs uppercase tracking-[0.3em] text-black/40">
-              Clean UI
-            </p>
-            <h3 class="mt-3 text-lg font-semibold text-[color:var(--pine)]">
-              Tailwind from day one
-            </h3>
-            <p class="mt-3 text-sm text-black/65">
-              Design-forward landing pages without leaving your Rust project.
-            </p>
-          </div>
-        </section>
-
-        <section
-          id="stack"
-          class="fade-3 mx-auto mt-16 grid max-w-6xl gap-8 lg:grid-cols-[1fr_1.1fr]"
-        >
-          <div
-            class="rounded-3xl border border-black/10 bg-white/95 p-6 shadow-xl shadow-black/5"
-          >
-            <p class="text-xs uppercase tracking-[0.3em] text-black/50">
-              Example route
-            </p>
-            <pre
-              class="mt-4 overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"
-            ><code>use axum::{routing::get, Router};
-
-async fn hello() -&gt; &amp;'static str {
-    "Hello from Rust!"
-}
-
-let app = Router::new().route("/", get(hello));</code></pre>
-            <p class="mt-4 text-sm text-black/60">
-              This is the shape of your first endpoint. Build on it, wire auth,
-              and ship.
-            </p>
-          </div>
-          <div class="space-y-5">
-            <div
-              class="rounded-3xl bg-[color:var(--mist)]/70 p-6 shadow-inner"
-            >
-              <h3 class="text-lg font-semibold text-[color:var(--pine)]">
-                Designed for full-stack Rust
-              </h3>
-              <p class="mt-3 text-sm text-black/70">
-                Use the same language for your API, authentication, and HTML
-                rendering. Askama templates keep it fast and safe.
+              <p class="max-w-md text-sm text-black/65">
+                These capabilities are included out of the box so teams can focus on product logic.
               </p>
             </div>
-            <div
-              class="grid gap-4 rounded-3xl border border-black/10 bg-white/90 p-6"
-            >
-              <div class="flex flex-wrap gap-2 text-xs">
-                <span
-                  class="rounded-full bg-[color:var(--mist)] px-3 py-1 font-semibold text-[color:var(--pine)]"
-                  >Rust</span
-                >
-                <span
-                  class="rounded-full bg-[color:var(--mist)] px-3 py-1 font-semibold text-[color:var(--pine)]"
-                  >Axum</span
-                >
-                <span
-                  class="rounded-full bg-[color:var(--mist)] px-3 py-1 font-semibold text-[color:var(--pine)]"
-                  >SeaORM</span
-                >
-                <span
-                  class="rounded-full bg-[color:var(--mist)] px-3 py-1 font-semibold text-[color:var(--pine)]"
-                  >Askama</span
-                >
-                <span
-                  class="rounded-full bg-[color:var(--mist)] px-3 py-1 font-semibold text-[color:var(--pine)]"
-                  >Tailwind</span
-                >
-              </div>
-              <p class="text-sm text-black/70">
-                Everything you need for a production-ready hello world that
-                still feels handcrafted.
-              </p>
-            </div>
-          </div>
-        </section>
 
-        <section
-          class="fade-3 mx-auto mt-16 max-w-6xl rounded-3xl border border-black/10 bg-white/95 p-8 shadow-xl shadow-black/10"
-        >
-          <div class="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p class="text-xs uppercase tracking-[0.3em] text-black/50">
-                Route directory
-              </p>
-              <h2 class="mt-2 text-2xl font-semibold text-[color:var(--pine)]">
-                Browse every endpoint in one place.
-              </h2>
-              <p class="mt-2 text-sm text-black/60">
-                Explore the generated route catalog grouped by source file.
-              </p>
-            </div>
-            <a
-              class="rounded-full bg-[color:var(--pine)] px-6 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-lg shadow-black/15 transition hover:-translate-y-0.5"
-              href="/routes"
-            >
-              View routes
-            </a>
-          </div>
-        </section>
+            <div class="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              <article class="min-h-[11rem] rounded-2xl border border-black/10 bg-white/90 p-6 shadow-lg shadow-black/5">
+                <h3 class="text-base font-bold text-[color:var(--pine)] sm:text-lg">Ship in minutes</h3>
+                <p class="mt-2 text-sm text-black/65">Install, run, and scaffold new services with a minimal setup path.</p>
+              </article>
+              <article class="min-h-[11rem] rounded-2xl border border-black/10 bg-white/90 p-6 shadow-lg shadow-black/5">
+                <h3 class="text-base font-bold text-[color:var(--pine)] sm:text-lg">Automatic API documentation</h3>
+                <p class="mt-2 text-sm text-black/65">Routes and docs pages are generated from project metadata and kept aligned.</p>
+              </article>
+              <article class="min-h-[11rem] rounded-2xl border border-black/10 bg-white/90 p-6 shadow-lg shadow-black/5">
+                <h3 class="text-base font-bold text-[color:var(--pine)] sm:text-lg">Database agnostic</h3>
+                <p class="mt-2 text-sm text-black/65">Supports multiple providers including SQLite and Postgres.</p>
+              </article>
 
-        <section
-          id="get-started"
-          class="fade-3 mx-auto mt-16 max-w-6xl rounded-3xl border border-black/10 bg-white/95 p-8 shadow-xl shadow-black/10"
-        >
-          <div class="flex flex-col gap-6 md:flex-row md:items-center">
-            <div class="flex-1">
-              <h2 class="text-2xl font-semibold text-[color:var(--pine)]">
-                Ship your next Rust service with confidence.
-              </h2>
-              <p class="mt-2 text-sm text-black/70">
-                Run the server, hit the routes, and start building your own
-                endpoints with a clean auth baseline.
-              </p>
-            </div>
-            <div class="flex flex-wrap gap-3">
-              <span
-                class="rounded-full border border-black/10 bg-[color:var(--mist)] px-4 py-2 text-xs font-semibold text-[color:var(--pine)]"
-                >cargo run</span
-              >
-              <span
-                class="rounded-full border border-black/10 bg-[color:var(--mist)] px-4 py-2 text-xs font-semibold text-[color:var(--pine)]"
-                >cargo test</span
-              >
-              <span
-                class="rounded-full border border-black/10 bg-[color:var(--mist)] px-4 py-2 text-xs font-semibold text-[color:var(--pine)]"
-                >cargo fmt</span
-              >
+              <article class="min-h-[11rem] rounded-2xl border border-black/10 bg-white/90 p-6 shadow-lg shadow-black/5">
+                <h3 class="text-base font-bold text-[color:var(--pine)] sm:text-lg">Predictable API responses</h3>
+                <p class="mt-2 text-sm text-black/65">JSON payloads follow a consistent envelope for easier client integration.</p>
+              </article>
+              <article class="min-h-[11rem] rounded-2xl border border-black/10 bg-white/90 p-6 shadow-lg shadow-black/5">
+                <h3 class="text-base font-bold text-[color:var(--pine)] sm:text-lg">Consistent error handling</h3>
+                <p class="mt-2 text-sm text-black/65">Centralized error mapping and middleware normalization across endpoints.</p>
+              </article>
+              <article class="min-h-[11rem] rounded-2xl border border-black/10 bg-white/90 p-6 shadow-lg shadow-black/5">
+                <h3 class="text-base font-bold text-[color:var(--pine)] sm:text-lg">Ready-to-ship HTML templates</h3>
+                <p class="mt-2 text-sm text-black/65">Responsive Askama views with shared layout and reusable UI patterns.</p>
+              </article>
+
+              <article class="min-h-[11rem] rounded-2xl border border-black/10 bg-white/90 p-6 shadow-lg shadow-black/5">
+                <h3 class="text-base font-bold text-[color:var(--pine)] sm:text-lg">Auth ready by default</h3>
+                <p class="mt-2 text-sm text-black/65">JWT auth, role guards, and refresh token flows are already wired.</p>
+              </article>
+              <article class="min-h-[11rem] rounded-2xl border border-black/10 bg-white/90 p-6 shadow-lg shadow-black/5">
+                <h3 class="text-base font-bold text-[color:var(--pine)] sm:text-lg">Typed configuration</h3>
+                <p class="mt-2 text-sm text-black/65">Environment-driven config with schema validation and safe defaults.</p>
+              </article>
+              <article class="min-h-[11rem] rounded-2xl border border-black/10 bg-white/90 p-6 shadow-lg shadow-black/5">
+                <h3 class="text-base font-bold text-[color:var(--pine)] sm:text-lg">Built-in observability</h3>
+                <p class="mt-2 text-sm text-black/65">Tracing and structured middleware logging to monitor behavior quickly.</p>
+              </article>
             </div>
           </div>
         </section>
       </main>
+
+      <script>
+        (() => {
+          const installCopyButton = document.querySelector("[data-install-copy]");
+          const installCommand = document.querySelector("#install-command");
+          const cargoCopyButton = document.querySelector("[data-cargo-install-copy]");
+          const cargoCommand = document.querySelector("#cargo-install-command");
+          const oxideInitCopyButton = document.querySelector("[data-oxide-init-copy]");
+          const oxideInitCommand = document.querySelector("#oxide-init-command");
+
+          const bindCopyButton = (button, commandNode) => {
+            if (!button || !commandNode) {
+              return;
+            }
+
+            const commandText = commandNode.textContent?.trim() || "";
+            const defaultLabel = button.textContent;
+
+            const setLabel = (label) => {
+              button.textContent = label;
+            };
+
+            const resetLabelSoon = () => {
+              window.setTimeout(() => {
+                setLabel(defaultLabel || "Copy");
+              }, 1500);
+            };
+
+            const fallbackCopy = () => {
+              const selection = window.getSelection();
+              if (!selection) {
+                return false;
+              }
+              const range = document.createRange();
+              range.selectNodeContents(commandNode);
+              selection.removeAllRanges();
+              selection.addRange(range);
+              const copied = document.execCommand("copy");
+              selection.removeAllRanges();
+              return copied;
+            };
+
+            button.addEventListener("click", async () => {
+              if (!commandText) {
+                setLabel("No text");
+                resetLabelSoon();
+                return;
+              }
+
+              try {
+                await navigator.clipboard.writeText(commandText);
+                setLabel("Copied");
+                resetLabelSoon();
+                return;
+              } catch (_error) {
+                if (fallbackCopy()) {
+                  setLabel("Copied");
+                } else {
+                  setLabel("Select");
+                }
+                resetLabelSoon();
+              }
+            });
+          };
+
+          bindCopyButton(installCopyButton, installCommand);
+          bindCopyButton(cargoCopyButton, cargoCommand);
+          bindCopyButton(oxideInitCopyButton, oxideInitCommand);
+        })();
+      </script>
 {% endblock %}

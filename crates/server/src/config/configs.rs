@@ -31,6 +31,7 @@ impl EnvConfig for AppConfig {
 pub struct GeneralConfig {
     pub host: String,
     pub port: u16,
+    pub enable_docs_in_release: bool,
 }
 
 impl Default for GeneralConfig {
@@ -38,6 +39,7 @@ impl Default for GeneralConfig {
         Self {
             host: defaults::DEFAULT_HOST.to_string(),
             port: defaults::DEFAULT_PORT as u16,
+            enable_docs_in_release: defaults::DEFAULT_ENABLE_DOCS_IN_RELEASE,
         }
     }
 }

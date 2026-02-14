@@ -10,6 +10,6 @@ pub const API_PREFIX: &str = "/api/v1";
 
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
-        .nest(API_PREFIX, api::router(state))
-        .merge(views::router())
+        .nest(API_PREFIX, api::router(state.clone()))
+        .merge(views::router(state))
 }

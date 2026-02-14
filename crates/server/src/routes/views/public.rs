@@ -1,11 +1,11 @@
 #[cfg(debug_assertions)]
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use askama::Template;
 #[cfg(not(debug_assertions))]
 use axum::response::Redirect;
-use axum::{Router, http::StatusCode, response::Html, routing::get};
+use axum::{Router, extract::State, http::StatusCode, response::Html, routing::get};
 use chrono::Local;
 use tower_http::services::ServeDir;
 
@@ -13,8 +13,15 @@ use tower_http::services::ServeDir;
 use crate::db::entity_catalog::{self, EntityInfo};
 #[cfg(debug_assertions)]
 use crate::routes::route_list::routes;
-#[cfg(debug_assertions)]
+use crate::state::AppState;
+
 include!(concat!(env!("OUT_DIR"), "/docs_sections_generated.rs"));
+
+#[derive(Clone, Copy)]
+struct NavVisibility {
+    show_docs_link: bool,
+    show_debug_links: bool,
+}
 
 #[cfg(debug_assertions)]
 #[derive(Clone)]
@@ -40,6 +47,8 @@ struct RouteGroup {
 struct IndexTemplate {
     now: String,
     project_name: String,
+    show_docs_link: bool,
+    show_debug_links: bool,
 }
 
 #[cfg(debug_assertions)]
@@ -49,6 +58,8 @@ struct RoutesTemplate {
     now: String,
     route_groups: Vec<RouteGroup>,
     project_name: String,
+    show_docs_link: bool,
+    show_debug_links: bool,
 }
 
 #[cfg(debug_assertions)]
@@ -59,15 +70,18 @@ struct EntitiesTemplate {
     entities: &'static [EntityInfo],
     erd_mermaid: &'static str,
     project_name: String,
+    show_docs_link: bool,
+    show_debug_links: bool,
 }
 
-#[cfg(debug_assertions)]
 #[derive(Template)]
 #[template(path = "docs.html")]
 struct DocsTemplate {
     now: String,
     project_name: String,
     sections_html: String,
+    show_docs_link: bool,
+    show_debug_links: bool,
 }
 
 #[derive(Template)]
@@ -75,29 +89,44 @@ struct DocsTemplate {
 struct NotAvailableTemplate {
     now: String,
     project_name: String,
+    show_docs_link: bool,
+    show_debug_links: bool,
 }
 
 type HtmlError = (StatusCode, Html<String>);
 
-pub fn router() -> Router {
+pub fn router(state: Arc<AppState>) -> Router {
     let public_dir = resolve_public_dir();
+    #[cfg(not(debug_assertions))]
+    let docs_enabled = docs_enabled(state.as_ref());
+
     let router = Router::new()
         .route("/", get(index))
         .route("/not-available", get(not_available_view));
 
     #[cfg(debug_assertions)]
+    let router = router.route("/docs", get(docs_view));
+
+    #[cfg(not(debug_assertions))]
+    let router = if docs_enabled {
+        router.route("/docs", get(docs_view))
+    } else {
+        router.route("/docs", get(not_available_redirect))
+    };
+
+    #[cfg(debug_assertions)]
     let router = router
-        .route("/docs", get(docs_view))
         .route("/entities", get(entities_view))
         .route("/routes", get(routes_view));
 
     #[cfg(not(debug_assertions))]
     let router = router
-        .route("/docs", get(not_available_redirect))
         .route("/entities", get(not_available_redirect))
         .route("/routes", get(not_available_redirect));
 
-    router.route_service("/{*file}", ServeDir::new(public_dir))
+    router
+        .route_service("/{*file}", ServeDir::new(public_dir))
+        .with_state(state)
 }
 
 fn resolve_public_dir() -> PathBuf {
@@ -124,24 +153,44 @@ fn resolve_public_dir() -> PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("public")
 }
 
-async fn index() -> Result<Html<String>, HtmlError> {
-    let now = Local::now().to_rfc3339();
+fn docs_enabled(state: &AppState) -> bool {
+    cfg!(debug_assertions) || state.config.general.enable_docs_in_release
+}
+
+fn nav_visibility(state: &AppState) -> NavVisibility {
+    NavVisibility {
+        show_docs_link: docs_enabled(state),
+        show_debug_links: cfg!(debug_assertions),
+    }
+}
+
+async fn index(State(state): State<Arc<AppState>>) -> Result<Html<String>, HtmlError> {
+    let now = formatted_build_time();
     let project_name = project_name();
-    let rendered = IndexTemplate { now, project_name }
-        .render()
-        .map_err(|_| html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render index"))?;
+    let nav = nav_visibility(state.as_ref());
+    let rendered = IndexTemplate {
+        now,
+        project_name,
+        show_docs_link: nav.show_docs_link,
+        show_debug_links: nav.show_debug_links,
+    }
+    .render()
+    .map_err(|_| html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render index"))?;
     Ok(Html(rendered))
 }
 
 #[cfg(debug_assertions)]
-async fn routes_view() -> Result<Html<String>, HtmlError> {
-    let now = Local::now().to_rfc3339();
+async fn routes_view(State(state): State<Arc<AppState>>) -> Result<Html<String>, HtmlError> {
+    let now = formatted_build_time();
     let route_groups = build_route_groups();
     let project_name = project_name();
+    let nav = nav_visibility(state.as_ref());
     let rendered = RoutesTemplate {
         now,
         route_groups,
         project_name,
+        show_docs_link: nav.show_docs_link,
+        show_debug_links: nav.show_debug_links,
     }
     .render()
     .map_err(|_| html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render routes"))?;
@@ -149,16 +198,19 @@ async fn routes_view() -> Result<Html<String>, HtmlError> {
 }
 
 #[cfg(debug_assertions)]
-async fn entities_view() -> Result<Html<String>, HtmlError> {
-    let now = Local::now().to_rfc3339();
+async fn entities_view(State(state): State<Arc<AppState>>) -> Result<Html<String>, HtmlError> {
+    let now = formatted_build_time();
     let entities = entity_catalog::entities();
     let erd_mermaid = entity_catalog::erd_mermaid();
     let project_name = project_name();
+    let nav = nav_visibility(state.as_ref());
     let rendered = EntitiesTemplate {
         now,
         entities,
         erd_mermaid,
         project_name,
+        show_docs_link: nav.show_docs_link,
+        show_debug_links: nav.show_debug_links,
     }
     .render()
     .map_err(|_| {
@@ -170,32 +222,40 @@ async fn entities_view() -> Result<Html<String>, HtmlError> {
     Ok(Html(rendered))
 }
 
-#[cfg(debug_assertions)]
-async fn docs_view() -> Result<Html<String>, HtmlError> {
-    let now = Local::now().to_rfc3339();
+async fn docs_view(State(state): State<Arc<AppState>>) -> Result<Html<String>, HtmlError> {
+    let now = formatted_build_time();
     let project_name = project_name();
     let sections_html = DOCS_SECTIONS_HTML.to_string();
+    let nav = nav_visibility(state.as_ref());
     let rendered = DocsTemplate {
         now,
         project_name,
         sections_html,
+        show_docs_link: nav.show_docs_link,
+        show_debug_links: nav.show_debug_links,
     }
     .render()
     .map_err(|_| html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render docs"))?;
     Ok(Html(rendered))
 }
 
-async fn not_available_view() -> Result<Html<String>, HtmlError> {
-    let now = Local::now().to_rfc3339();
+async fn not_available_view(State(state): State<Arc<AppState>>) -> Result<Html<String>, HtmlError> {
+    let now = formatted_build_time();
     let project_name = project_name();
-    let rendered = NotAvailableTemplate { now, project_name }
-        .render()
-        .map_err(|_| {
-            html_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "failed to render availability page",
-            )
-        })?;
+    let nav = nav_visibility(state.as_ref());
+    let rendered = NotAvailableTemplate {
+        now,
+        project_name,
+        show_docs_link: nav.show_docs_link,
+        show_debug_links: nav.show_debug_links,
+    }
+    .render()
+    .map_err(|_| {
+        html_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "failed to render availability page",
+        )
+    })?;
     Ok(Html(rendered))
 }
 
@@ -273,6 +333,10 @@ pub(crate) fn project_name() -> String {
     } else {
         out
     }
+}
+
+pub(crate) fn formatted_build_time() -> String {
+    Local::now().format("%d-%m-%Y %H:%M").to_string()
 }
 
 fn html_error(status: StatusCode, message: &'static str) -> HtmlError {

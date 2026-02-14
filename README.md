@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="crates/server/public/images/ox-logo.svg" alt="Rust Oxide logo" width="120" />
+</p>
+
 # Rust Oxide - Opinionated Backend
 
 A starter for building JSON APIs with Axum and SeaORM, plus a companion
@@ -10,6 +14,7 @@ CLI to scaffold new projects and CRUD APIs.
 - Layered architecture
 - Templates for HTML views (docs, routes, entities)
 - Companion CLI (`oxide`) for project scaffolding and API generation
+- Optional release docs toggle via `APP_GENERAL__ENABLE_DOCS_IN_RELEASE`
 
 ## Project layout (high level)
 
