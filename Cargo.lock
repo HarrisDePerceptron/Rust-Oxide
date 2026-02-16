@@ -2374,6 +2374,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "realtime"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+ "uuid",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2606,6 +2621,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rand 0.8.5",
+ "realtime",
  "reqwest",
  "sea-orm",
  "serde",

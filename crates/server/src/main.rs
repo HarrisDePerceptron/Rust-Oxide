@@ -49,7 +49,8 @@ async fn run() -> anyhow::Result<()> {
 
     let providers = init_providers(auth_cfg, &services).await?;
 
-    let state = AppState::new(cfg, db, providers);
+    let realtime = rust_oxide::realtime::RealtimeHandle::spawn(cfg.realtime.clone());
+    let state = AppState::new(cfg, db, providers, realtime);
 
     let app = Router::new()
         .merge(router(Arc::clone(&state)))

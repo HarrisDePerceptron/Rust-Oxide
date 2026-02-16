@@ -17,6 +17,7 @@ use rust_oxide::{
         providers::AuthProviderId,
     },
     config::{AppConfig, AuthConfig},
+    realtime::RealtimeHandle,
     routes::{
         API_PREFIX,
         middleware::{catch_panic_layer, json_error_middleware},
@@ -45,7 +46,8 @@ fn build_state(secret: &[u8]) -> std::sync::Arc<AppState> {
         &services,
     )
     .expect("create auth providers");
-    AppState::new(cfg, db, providers)
+    let realtime = RealtimeHandle::spawn(cfg.realtime.clone());
+    AppState::new(cfg, db, providers, realtime)
 }
 
 fn app(secret: &[u8]) -> Router {

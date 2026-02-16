@@ -3,6 +3,7 @@ members = [
     "crates/server",
     "crates/companion_cli",
     "crates/base_entity_derive",
+    "crates/realtime",
 ]
 default-members = ["crates/server"]
 resolver = "2"

@@ -114,3 +114,17 @@ impl From<crate::db::dao::DaoLayerError> for AppError {
         }
     }
 }
+
+impl From<realtime::server::RealtimeError> for AppError {
+    fn from(err: realtime::server::RealtimeError) -> Self {
+        match err {
+            realtime::server::RealtimeError::BadRequest(message) => AppError::bad_request(message),
+            realtime::server::RealtimeError::Unauthorized(message) => {
+                AppError::unauthorized(message)
+            }
+            realtime::server::RealtimeError::Forbidden(message) => AppError::forbidden(message),
+            realtime::server::RealtimeError::NotFound(message) => AppError::not_found(message),
+            realtime::server::RealtimeError::Internal(message) => AppError::internal(message),
+        }
+    }
+}

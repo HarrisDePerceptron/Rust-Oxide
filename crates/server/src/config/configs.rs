@@ -1,4 +1,5 @@
 use anyhow::Result;
+pub use realtime::server::RealtimeConfig;
 use serde::{Deserialize, Serialize};
 
 use crate::auth::providers::AuthProviderId;
@@ -12,6 +13,7 @@ pub struct AppConfig {
     pub logging: LoggingConfig,
     pub database: Option<DatabaseConfig>,
     pub auth: Option<AuthConfig>,
+    pub realtime: RealtimeConfig,
 }
 
 impl AppConfig {
