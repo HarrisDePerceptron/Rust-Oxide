@@ -1,5 +1,6 @@
 pub mod admin;
 pub mod auth;
+pub mod chat;
 pub mod protected;
 pub mod public;
 pub mod realtime;

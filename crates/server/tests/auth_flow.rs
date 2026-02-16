@@ -16,7 +16,7 @@ use rust_oxide::{
     },
     config::{AppConfig, AuthConfig},
     db::dao::DaoContext,
-    realtime::RealtimeHandle,
+    realtime::{AppRealtimeVerifier, RealtimeHandle, RealtimeRuntimeState},
     routes::{API_PREFIX, router},
     services::ServiceContext,
     state::AppState,
@@ -32,15 +32,18 @@ fn app() -> axum::Router {
     cfg.auth = Some(test_auth_config(
         String::from_utf8_lossy(secret).into_owned(),
     ));
-    let state = build_state(cfg, db);
-    router(state)
+    let (state, realtime_runtime) = build_state(cfg, db);
+    router(state, realtime_runtime)
 }
 
 fn api_path(path: &str) -> String {
     format!("{API_PREFIX}{path}")
 }
 
-async fn app_with_db() -> std::sync::Arc<AppState> {
+async fn app_with_db() -> (
+    std::sync::Arc<AppState>,
+    std::sync::Arc<RealtimeRuntimeState>,
+) {
     let cfg = AppConfig::from_env().expect("load app config");
     let db_cfg = cfg
         .database
@@ -63,7 +66,13 @@ async fn app_with_db() -> std::sync::Arc<AppState> {
     build_state(cfg, db)
 }
 
-fn build_state(cfg: AppConfig, db: DatabaseConnection) -> std::sync::Arc<AppState> {
+fn build_state(
+    cfg: AppConfig,
+    db: DatabaseConnection,
+) -> (
+    std::sync::Arc<AppState>,
+    std::sync::Arc<RealtimeRuntimeState>,
+) {
     let services = ServiceContext::new(&db);
     let providers = build_providers(
         cfg.auth.as_ref().expect("auth config should be present"),
@@ -71,7 +80,12 @@ fn build_state(cfg: AppConfig, db: DatabaseConnection) -> std::sync::Arc<AppStat
     )
     .expect("create auth providers");
     let realtime = RealtimeHandle::spawn(cfg.realtime.clone());
-    AppState::new(cfg, db, providers, realtime)
+    let realtime_runtime = std::sync::Arc::new(RealtimeRuntimeState::new(
+        realtime,
+        std::sync::Arc::new(AppRealtimeVerifier::new(providers.clone())),
+    ));
+    let state = AppState::new(cfg, db, providers);
+    (state, realtime_runtime)
 }
 
 #[tokio::test]
@@ -98,7 +112,7 @@ async fn public_route_works() {
 #[tokio::test]
 #[ignore = "requires Postgres database"]
 async fn login_returns_token() {
-    let state = app_with_db().await;
+    let (state, realtime_runtime) = app_with_db().await;
     let email = format!("login-{}@example.com", Uuid::new_v4());
     let password_value = "password123";
     let hash = password::hash_password(password_value).unwrap();
@@ -107,7 +121,7 @@ async fn login_returns_token() {
         .create_user(&email, &hash, Role::User.as_str())
         .await
         .unwrap();
-    let app = router(state);
+    let app = router(state, realtime_runtime);
 
     let payload = json!({"email": email, "password": password_value});
     let res = app
@@ -155,8 +169,8 @@ async fn me_with_token_succeeds() {
     cfg.auth = Some(test_auth_config(
         String::from_utf8_lossy(secret).into_owned(),
     ));
-    let state = build_state(cfg, db);
-    let app = router(state.clone());
+    let (state, realtime_runtime) = build_state(cfg, db);
+    let app = router(state.clone(), realtime_runtime);
 
     let token = login_token(secret, vec![Role::User]);
 
@@ -183,7 +197,8 @@ async fn admin_requires_role() {
     cfg.auth = Some(test_auth_config(
         String::from_utf8_lossy(secret).into_owned(),
     ));
-    let app = router(build_state(cfg, db));
+    let (state, realtime_runtime) = build_state(cfg, db);
+    let app = router(state, realtime_runtime);
 
     // token without Admin role
     let token = login_token(secret, vec![Role::User]);

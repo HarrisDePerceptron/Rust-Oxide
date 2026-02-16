@@ -1,0 +1,644 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project_name }} | Realtime Chat Demo{% endblock %}
+{% block description %}One-to-one realtime chat demo backed by room membership and websocket channels.{% endblock %}
+
+{% block content %}
+      <main class="fade-1 px-6 pb-16 pt-10 sm:px-10">
+        <section class="mx-auto max-w-6xl border-b border-black/10 pb-6">
+          <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div class="space-y-4">
+              <div
+                class="inline-flex items-center gap-3 rounded-full border border-black/10 bg-white/80 px-4 py-2 text-xs uppercase tracking-[0.3em] text-black/60 shadow-sm"
+              >
+                <span class="h-2 w-2 rounded-full bg-[color:var(--clay)]"></span>
+                Realtime demo
+              </div>
+              <h1 class="text-3xl font-semibold text-[color:var(--pine)] sm:text-4xl">
+                One-to-one room chat over realtime websocket channels.
+              </h1>
+              <p class="max-w-3xl text-sm text-black/70 sm:text-base">
+                Connect with a JWT, join a room by name, and exchange messages with one other
+                participant. Room capacity and channel access are enforced server-side.
+              </p>
+            </div>
+
+            <div class="w-full max-w-sm rounded-2xl border border-black/10 bg-white/90 p-5 shadow-lg shadow-black/5">
+              <p class="text-xs uppercase tracking-[0.3em] text-black/50">Now</p>
+              <h2 class="mt-3 text-xl font-semibold text-[color:var(--pine)]">{{ now }}</h2>
+              <p class="mt-3 text-sm text-black/65">
+                Endpoint: <code class="text-xs">/api/v1/realtime/socket</code>
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="mx-auto mt-8 grid max-w-6xl gap-6 lg:grid-cols-[0.9fr_1.5fr]">
+          <aside class="fade-2 space-y-6 rounded-3xl border border-black/10 bg-white/95 p-6 shadow-lg shadow-black/5">
+            <div>
+              <p class="text-xs uppercase tracking-[0.3em] text-black/40">Connection</p>
+              <p id="socket-status" class="mt-2 text-sm font-semibold text-black/70">Disconnected</p>
+              <p id="identity-status" class="mt-1 text-xs text-black/50">User: unknown</p>
+            </div>
+
+            <div class="space-y-3">
+              <label class="text-xs font-semibold uppercase tracking-[0.25em] text-black/40">JWT token</label>
+              <textarea
+                id="token-input"
+                class="h-28 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-xs text-black/70 shadow-sm outline-none transition focus:border-[color:var(--pine)]"
+                placeholder="Paste access token (Bearer value only)"
+              ></textarea>
+              <div class="flex flex-wrap gap-3">
+                <button
+                  id="connect-btn"
+                  class="rounded-2xl bg-[color:var(--pine)] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-black/10 transition hover:-translate-y-0.5"
+                  type="button"
+                >
+                  Connect
+                </button>
+                <button
+                  id="disconnect-btn"
+                  class="rounded-2xl border border-black/10 bg-white px-5 py-2 text-sm font-semibold text-black/60 transition hover:-translate-y-0.5"
+                  type="button"
+                >
+                  Disconnect
+                </button>
+              </div>
+            </div>
+
+            <div class="space-y-3 rounded-2xl border border-black/10 bg-[color:var(--mist)]/70 p-4">
+              <p class="text-xs font-semibold uppercase tracking-[0.25em] text-black/40">Room</p>
+              <input
+                id="room-input"
+                class="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black/70 shadow-sm outline-none transition focus:border-[color:var(--pine)]"
+                placeholder="demo-room"
+                type="text"
+              />
+              <div class="flex flex-wrap gap-3">
+                <button
+                  id="join-btn"
+                  class="rounded-2xl bg-[color:var(--pine)] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-black/10 transition hover:-translate-y-0.5"
+                  type="button"
+                >
+                  Join room
+                </button>
+                <button
+                  id="leave-btn"
+                  class="rounded-2xl border border-black/10 bg-white px-5 py-2 text-sm font-semibold text-black/60 transition hover:-translate-y-0.5"
+                  type="button"
+                >
+                  Leave room
+                </button>
+              </div>
+              <p id="room-status" class="text-xs text-black/50">No active room</p>
+            </div>
+
+            <div class="space-y-2">
+              <p class="text-xs font-semibold uppercase tracking-[0.25em] text-black/40">Event log</p>
+              <div
+                id="event-log"
+                class="h-44 overflow-y-auto rounded-2xl border border-black/10 bg-white p-3 text-xs text-black/65"
+              ></div>
+            </div>
+          </aside>
+
+          <section class="fade-3 rounded-3xl border border-black/10 bg-white/95 p-6 shadow-lg shadow-black/5">
+            <div class="flex items-end justify-between gap-4 border-b border-black/10 pb-4">
+              <div>
+                <p class="text-xs uppercase tracking-[0.3em] text-black/40">Messages</p>
+                <h2 class="mt-2 text-lg font-semibold text-[color:var(--pine)]">Room conversation</h2>
+              </div>
+              <p id="message-hint" class="text-xs text-black/50">Connect and join a room to chat</p>
+            </div>
+            <p id="typing-indicator" class="mt-3 min-h-5 text-xs text-black/55"></p>
+
+            <div
+              id="messages"
+              class="mt-5 h-[25rem] space-y-3 overflow-y-auto rounded-2xl border border-black/10 bg-[color:var(--mist)]/60 p-4"
+            ></div>
+
+            <form id="message-form" class="mt-4 flex flex-col gap-3 sm:flex-row">
+              <input
+                id="message-input"
+                class="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black/70 shadow-sm outline-none transition focus:border-[color:var(--pine)]"
+                placeholder="Write a message"
+                type="text"
+              />
+              <button
+                id="send-btn"
+                class="rounded-2xl bg-[color:var(--pine)] px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-black/10 transition hover:-translate-y-0.5"
+                type="submit"
+              >
+                Send
+              </button>
+            </form>
+          </section>
+        </section>
+      </main>
+
+      <script>
+        (() => {
+          const WS_PATH = "/api/v1/realtime/socket";
+          const API_JOIN = "/api/v1/chat/rooms/join";
+          const API_LEAVE = "/api/v1/chat/rooms/leave";
+          const API_ME = "/api/v1/me";
+
+          const byId = (id) => document.getElementById(id);
+          const state = {
+            ws: null,
+            token: "",
+            userId: null,
+            roomName: null,
+            roomChannel: null,
+            nextSeq: 1,
+            pendingMessages: new Map(),
+          };
+
+          const tokenInput = byId("token-input");
+          const roomInput = byId("room-input");
+          const messageInput = byId("message-input");
+          const connectBtn = byId("connect-btn");
+          const disconnectBtn = byId("disconnect-btn");
+          const joinBtn = byId("join-btn");
+          const leaveBtn = byId("leave-btn");
+          const messageForm = byId("message-form");
+          const socketStatus = byId("socket-status");
+          const identityStatus = byId("identity-status");
+          const roomStatus = byId("room-status");
+          const eventLog = byId("event-log");
+          const messages = byId("messages");
+          const messageHint = byId("message-hint");
+          const typingIndicator = byId("typing-indicator");
+
+          const isConnected = () => state.ws && state.ws.readyState === WebSocket.OPEN;
+          const isSocketBusy = () => state.ws && (state.ws.readyState === WebSocket.CONNECTING);
+          const nextId = () => `m${state.nextSeq++}`;
+          const shortUserId = (value) => {
+            const userId = String(value || "").trim();
+            if (!userId) {
+              return "unknown";
+            }
+            return userId.length <= 5 ? userId : userId.slice(-5);
+          };
+
+          let selfTyping = false;
+          let selfTypingStopTimer = null;
+          const peerTypingUsers = new Map();
+          const peerTypingTimers = new Map();
+
+          function logEvent(message) {
+            const node = document.createElement("p");
+            node.textContent = `${new Date().toLocaleTimeString()}  ${message}`;
+            eventLog.prepend(node);
+          }
+
+          function setSocketStatus(text, className) {
+            socketStatus.textContent = text;
+            socketStatus.className = `mt-2 text-sm font-semibold ${className}`;
+          }
+
+          function updateUiState() {
+            connectBtn.disabled = isConnected() || isSocketBusy();
+            disconnectBtn.disabled = !state.ws;
+            joinBtn.disabled = !isConnected();
+            leaveBtn.disabled = !isConnected() || !state.roomChannel;
+            const roomLabel = state.roomName
+              ? `${state.roomName} (${state.roomChannel || "not subscribed"})`
+              : "No active room";
+            roomStatus.textContent = roomLabel;
+            messageHint.textContent = state.roomName
+              ? `Room: ${state.roomName}`
+              : "Connect and join a room to chat";
+          }
+
+          function renderTypingIndicator() {
+            if (!typingIndicator) {
+              return;
+            }
+            if (peerTypingUsers.size === 0 || !state.roomChannel) {
+              typingIndicator.textContent = "";
+              return;
+            }
+            const labels = Array.from(peerTypingUsers.values()).map(shortUserId);
+            typingIndicator.textContent = `${labels.join(", ")} typing...`;
+          }
+
+          function clearPeerTyping() {
+            for (const timer of peerTypingTimers.values()) {
+              window.clearTimeout(timer);
+            }
+            peerTypingTimers.clear();
+            peerTypingUsers.clear();
+            renderTypingIndicator();
+          }
+
+          function apiHeaders() {
+            return {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${state.token}`,
+            };
+          }
+
+          async function apiJson(url, payload) {
+            const response = await fetch(url, {
+              method: "POST",
+              headers: apiHeaders(),
+              body: JSON.stringify(payload),
+            });
+            const body = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(body.message || `HTTP ${response.status}`);
+            }
+            return body.data ?? body;
+          }
+
+          async function resolveIdentity() {
+            const response = await fetch(API_ME, { headers: { Authorization: `Bearer ${state.token}` } });
+            const body = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(body.message || "Failed to resolve identity");
+            }
+            const data = body.data ?? {};
+            state.userId = data.sub || null;
+            identityStatus.textContent = `User: ${shortUserId(state.userId)}`;
+          }
+
+          function wsUrlFromToken(token) {
+            const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+            const query = new URLSearchParams({ token });
+            return `${protocol}://${window.location.host}${WS_PATH}?${query.toString()}`;
+          }
+
+          function sendFrame(frame) {
+            if (!isConnected()) {
+              throw new Error("Socket is not connected");
+            }
+            const payload = JSON.stringify({
+              ...frame,
+              ts: Math.floor(Date.now() / 1000),
+            });
+            state.ws.send(payload);
+            logEvent(`-> ${frame.op} (${frame.id})`);
+          }
+
+          function appendMessage(kind, author, text, reqId = null) {
+            const wrapper = document.createElement("article");
+            wrapper.className = kind === "self"
+              ? "ml-auto max-w-[85%] rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm shadow-sm"
+              : kind === "system"
+                ? "mx-auto max-w-[95%] rounded-xl border border-dashed border-black/10 bg-white/70 px-3 py-2 text-xs text-black/55"
+                : "max-w-[85%] rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm shadow-sm";
+
+            if (kind !== "system") {
+              const title = document.createElement("p");
+              title.className = "text-[11px] uppercase tracking-[0.2em] text-black/45";
+              title.textContent = shortUserId(author);
+              wrapper.appendChild(title);
+            }
+
+            const body = document.createElement("p");
+            body.className = kind === "system" ? "" : "mt-1 text-black/75";
+            body.textContent = text;
+            wrapper.appendChild(body);
+
+            if (reqId) {
+              wrapper.dataset.pendingReqId = reqId;
+              const pending = document.createElement("p");
+              pending.className = "mt-1 text-[11px] text-black/45";
+              pending.textContent = "pending...";
+              wrapper.appendChild(pending);
+              state.pendingMessages.set(reqId, pending);
+            }
+
+            messages.appendChild(wrapper);
+            messages.scrollTop = messages.scrollHeight;
+          }
+
+          function markPending(reqId, ok) {
+            const node = state.pendingMessages.get(reqId);
+            if (!node) {
+              return;
+            }
+            node.textContent = ok ? "sent" : "failed";
+            node.className = ok
+              ? "mt-1 text-[11px] text-black/45"
+              : "mt-1 text-[11px] text-rose-600";
+            state.pendingMessages.delete(reqId);
+          }
+
+          function clearRoomState() {
+            stopSelfTyping({ sendEvent: false });
+            clearPeerTyping();
+            state.roomName = null;
+            state.roomChannel = null;
+            updateUiState();
+          }
+
+          function sendTypingEvent(isTyping) {
+            if (!isConnected() || !state.roomChannel) {
+              return;
+            }
+            sendFrame({
+              op: "channel_emit",
+              id: nextId(),
+              channel: state.roomChannel,
+              event: "chat.typing",
+              data: {
+                room_name: state.roomName,
+                typing: !!isTyping,
+              },
+            });
+          }
+
+          function stopSelfTyping(options = { sendEvent: true }) {
+            if (selfTypingStopTimer) {
+              window.clearTimeout(selfTypingStopTimer);
+              selfTypingStopTimer = null;
+            }
+            if (selfTyping && options.sendEvent) {
+              try {
+                sendTypingEvent(false);
+              } catch (_err) {
+              }
+            }
+            selfTyping = false;
+          }
+
+          function handleTypingInput() {
+            if (!isConnected() || !state.roomChannel) {
+              return;
+            }
+            const text = messageInput.value.trim();
+            if (!text) {
+              stopSelfTyping();
+              return;
+            }
+
+            if (!selfTyping) {
+              selfTyping = true;
+              try {
+                sendTypingEvent(true);
+              } catch (_err) {
+              }
+            }
+
+            if (selfTypingStopTimer) {
+              window.clearTimeout(selfTypingStopTimer);
+            }
+            selfTypingStopTimer = window.setTimeout(() => {
+              stopSelfTyping();
+            }, 1200);
+          }
+
+          function setPeerTyping(userId, isTyping) {
+            if (!userId) {
+              return;
+            }
+
+            const existing = peerTypingTimers.get(userId);
+            if (existing) {
+              window.clearTimeout(existing);
+              peerTypingTimers.delete(userId);
+            }
+
+            if (!isTyping) {
+              peerTypingUsers.delete(userId);
+              renderTypingIndicator();
+              return;
+            }
+
+            peerTypingUsers.set(userId, userId);
+            const timer = window.setTimeout(() => {
+              peerTypingUsers.delete(userId);
+              peerTypingTimers.delete(userId);
+              renderTypingIndicator();
+            }, 1800);
+            peerTypingTimers.set(userId, timer);
+            renderTypingIndicator();
+          }
+
+          function onWsMessage(event) {
+            let frame;
+            try {
+              frame = JSON.parse(event.data);
+            } catch (_err) {
+              logEvent("Invalid frame from server");
+              return;
+            }
+
+            switch (frame.op) {
+              case "connected":
+                logEvent(`connected: conn_id=${frame.conn_id}`);
+                break;
+              case "joined":
+                if (frame.channel === state.roomChannel) {
+                  appendMessage("system", "", `Joined channel ${frame.channel}`);
+                }
+                break;
+              case "left":
+                if (frame.channel === state.roomChannel) {
+                  appendMessage("system", "", `Left channel ${frame.channel}`);
+                }
+                break;
+              case "event":
+                if (frame.event === "chat.message") {
+                  const text = frame.data?.text ?? "";
+                  const from = frame.from_user || "server";
+                  appendMessage("peer", from, text);
+                } else if (frame.event === "chat.presence") {
+                  const action = frame.data?.action || "updated";
+                  const who = frame.data?.user_id || "unknown";
+                  const count = frame.data?.member_count;
+                  appendMessage("system", "", `${shortUserId(who)} ${action} (${count ?? "?"} in room)`);
+                } else if (frame.event === "chat.typing") {
+                  const who = frame.from_user || frame.data?.user_id || null;
+                  if (who && who !== state.userId) {
+                    setPeerTyping(who, !!frame.data?.typing);
+                  }
+                } else {
+                  logEvent(`<event:${frame.event}> ${JSON.stringify(frame.data)}`);
+                }
+                break;
+              case "ack":
+                logEvent(`ack for ${frame.for_id}: ${frame.ok ? "ok" : "error"}`);
+                markPending(frame.for_id, !!frame.ok);
+                if (!frame.ok && frame.error?.message) {
+                  appendMessage("system", "", `Server rejected message: ${frame.error.message}`);
+                }
+                break;
+              case "error":
+                appendMessage("system", "", `Error: ${frame.error?.message || "unknown error"}`);
+                break;
+              case "pong":
+                break;
+              default:
+                logEvent(`unknown frame op=${frame.op}`);
+            }
+          }
+
+          async function connectSocket() {
+            if (isConnected() || isSocketBusy()) {
+              return;
+            }
+
+            state.token = tokenInput.value.trim();
+            if (!state.token) {
+              appendMessage("system", "", "Token is required");
+              return;
+            }
+
+            try {
+              await resolveIdentity();
+            } catch (err) {
+              appendMessage("system", "", `Auth failed: ${err.message}`);
+              return;
+            }
+
+            const ws = new WebSocket(wsUrlFromToken(state.token));
+            state.ws = ws;
+            setSocketStatus("Connecting...", "text-amber-500");
+            updateUiState();
+
+            ws.addEventListener("open", () => {
+              setSocketStatus("Connected", "text-emerald-500");
+              appendMessage("system", "", "Socket connected");
+              updateUiState();
+            });
+
+            ws.addEventListener("message", onWsMessage);
+
+            ws.addEventListener("close", () => {
+              setSocketStatus("Disconnected", "text-black/70");
+              appendMessage("system", "", "Socket closed");
+              clearPeerTyping();
+              stopSelfTyping({ sendEvent: false });
+              state.ws = null;
+              clearRoomState();
+              updateUiState();
+            });
+
+            ws.addEventListener("error", () => {
+              appendMessage("system", "", "Socket error");
+            });
+          }
+
+          function disconnectSocket() {
+            if (!state.ws) {
+              return;
+            }
+            state.ws.close();
+          }
+
+          async function joinRoom() {
+            if (!isConnected()) {
+              appendMessage("system", "", "Connect first");
+              return;
+            }
+
+            const roomName = roomInput.value.trim();
+            if (!roomName) {
+              appendMessage("system", "", "room_name is required");
+              return;
+            }
+
+            try {
+              const data = await apiJson(API_JOIN, { room_name: roomName });
+              if (state.roomChannel && state.roomChannel !== data.channel) {
+                try {
+                  sendFrame({
+                    op: "channel_leave",
+                    id: nextId(),
+                    channel: state.roomChannel,
+                  });
+                } catch (_err) {
+                }
+              }
+
+              state.roomName = data.room_name;
+              state.roomChannel = data.channel;
+
+              sendFrame({
+                op: "channel_join",
+                id: nextId(),
+                channel: state.roomChannel,
+              });
+
+              appendMessage(
+                "system",
+                "",
+                `Room joined: ${data.room_name} (${data.member_count}/2 participants)`
+              );
+              if (data.switched_from) {
+                appendMessage("system", "", `Switched from room: ${data.switched_from}`);
+              }
+              updateUiState();
+            } catch (err) {
+              appendMessage("system", "", `Join failed: ${err.message}`);
+            }
+          }
+
+          async function leaveRoom() {
+            if (!isConnected() || !state.roomName || !state.roomChannel) {
+              appendMessage("system", "", "No active room to leave");
+              return;
+            }
+
+            const leavingRoom = state.roomName;
+            const leavingChannel = state.roomChannel;
+            try {
+              stopSelfTyping();
+              await apiJson(API_LEAVE, { room_name: leavingRoom });
+              sendFrame({
+                op: "channel_leave",
+                id: nextId(),
+                channel: leavingChannel,
+              });
+              appendMessage("system", "", `Left room ${leavingRoom}`);
+              clearRoomState();
+            } catch (err) {
+              appendMessage("system", "", `Leave failed: ${err.message}`);
+            }
+          }
+
+          function sendMessage(event) {
+            event.preventDefault();
+            if (!isConnected() || !state.roomChannel) {
+              appendMessage("system", "", "Join a room before sending");
+              return;
+            }
+            const text = messageInput.value.trim();
+            if (!text) {
+              return;
+            }
+
+            const reqId = nextId();
+            try {
+              stopSelfTyping();
+              sendFrame({
+                op: "channel_emit",
+                id: reqId,
+                channel: state.roomChannel,
+                event: "chat.message",
+                data: {
+                  room_name: state.roomName,
+                  text,
+                },
+              });
+              appendMessage("self", state.userId || "you", text, reqId);
+              messageInput.value = "";
+            } catch (err) {
+              appendMessage("system", "", `Send failed: ${err.message}`);
+            }
+          }
+
+          connectBtn.addEventListener("click", connectSocket);
+          disconnectBtn.addEventListener("click", disconnectSocket);
+          joinBtn.addEventListener("click", joinRoom);
+          leaveBtn.addEventListener("click", leaveRoom);
+          messageInput.addEventListener("input", handleTypingInput);
+          messageForm.addEventListener("submit", sendMessage);
+
+          updateUiState();
+        })();
+      </script>
+{% endblock %}

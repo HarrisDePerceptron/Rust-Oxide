@@ -21,6 +21,7 @@ pub async fn run_socket_session(
     cfg: RealtimeConfig,
 ) {
     let conn_id = ConnectionId::new();
+    let user_id = auth.user_id.clone();
     let (outbound_tx, mut outbound_rx) = mpsc::channel(cfg.outbound_queue_size);
 
     let meta = ConnectionMeta {
@@ -37,6 +38,8 @@ pub async fn run_socket_session(
     {
         return;
     }
+
+    tracing::debug!(conn_id = %conn_id, user_id = %user_id, "realtime session connected");
 
     let (mut ws_sender, mut ws_receiver) = socket.split();
     let mut heartbeat = interval(Duration::from_secs(cfg.heartbeat_interval_secs));
@@ -137,6 +140,13 @@ pub async fn run_socket_session(
             }
         }
     };
+
+    tracing::debug!(
+        conn_id = %conn_id,
+        user_id = %user_id,
+        reason = ?disconnect_reason,
+        "realtime session closing"
+    );
 
     let _ = hub_tx
         .send(HubCommand::Unregister {

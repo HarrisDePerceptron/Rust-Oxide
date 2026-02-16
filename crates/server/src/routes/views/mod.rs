@@ -1,3 +1,4 @@
+pub mod chat;
 pub mod public;
 mod router;
 pub mod todo;

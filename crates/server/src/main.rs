@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::Context;
-use axum::{Router, middleware};
+use axum::{Extension, Router, middleware};
 use tower_http::trace::TraceLayer;
 
 use rust_oxide::{
@@ -9,6 +9,7 @@ use rust_oxide::{
     config::AppConfig,
     db::connection,
     logging::init_tracing,
+    realtime::{AppChannelPolicy, AppRealtimeVerifier, ChatRoomRegistry, RealtimeRuntimeState},
     routes::{
         middleware::{catch_panic_layer, json_error_middleware},
         router,
@@ -48,12 +49,21 @@ async fn run() -> anyhow::Result<()> {
     let services = ServiceContext::new(&db);
 
     let providers = init_providers(auth_cfg, &services).await?;
+    let chat_rooms = ChatRoomRegistry::new();
+    let realtime = rust_oxide::realtime::RealtimeHandle::spawn_with_policy(
+        cfg.realtime.clone(),
+        Arc::new(AppChannelPolicy::new(chat_rooms.clone())),
+    );
+    let realtime_runtime = Arc::new(RealtimeRuntimeState::new(
+        realtime.clone(),
+        Arc::new(AppRealtimeVerifier::new(providers.clone())),
+    ));
 
-    let realtime = rust_oxide::realtime::RealtimeHandle::spawn(cfg.realtime.clone());
-    let state = AppState::new(cfg, db, providers, realtime);
+    let state = AppState::new(cfg, db, providers);
 
     let app = Router::new()
-        .merge(router(Arc::clone(&state)))
+        .merge(router(Arc::clone(&state), realtime_runtime))
+        .layer(Extension(chat_rooms))
         .layer(middleware::from_fn(json_error_middleware))
         .layer(catch_panic_layer())
         .layer(TraceLayer::new_for_http());

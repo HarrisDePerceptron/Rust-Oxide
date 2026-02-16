@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use axum::{
     Router,
     extract::{
@@ -13,7 +12,7 @@ use axum::{
 };
 use serde::Deserialize;
 
-use super::{RealtimeError, RealtimeHandle, SessionAuth};
+use super::{RealtimeError, RealtimeRuntimeState};
 
 #[derive(Debug, Clone)]
 pub struct RealtimeRouteOptions {
@@ -32,21 +31,15 @@ impl Default for RealtimeRouteOptions {
     }
 }
 
-#[async_trait]
-pub trait RealtimeAxumState: Send + Sync + 'static {
-    fn realtime_handle(&self) -> &RealtimeHandle;
-    async fn verify_realtime_token(&self, token: &str) -> Result<SessionAuth, RealtimeError>;
-}
-
-struct HandlerState<S> {
-    state: Arc<S>,
+struct HandlerState {
+    runtime: Arc<RealtimeRuntimeState>,
     options: RealtimeRouteOptions,
 }
 
-impl<S> Clone for HandlerState<S> {
+impl Clone for HandlerState {
     fn clone(&self) -> Self {
         Self {
-            state: Arc::clone(&self.state),
+            runtime: Arc::clone(&self.runtime),
             options: self.options.clone(),
         }
     }
@@ -101,33 +94,27 @@ impl IntoResponse for RealtimeHttpError {
     }
 }
 
-pub fn router<S>(state: Arc<S>) -> Router
-where
-    S: RealtimeAxumState,
-{
-    router_with_options(state, RealtimeRouteOptions::default())
+pub fn router(runtime: Arc<RealtimeRuntimeState>) -> Router {
+    router_with_options(runtime, RealtimeRouteOptions::default())
 }
 
-pub fn router_with_options<S>(state: Arc<S>, options: RealtimeRouteOptions) -> Router
-where
-    S: RealtimeAxumState,
-{
+pub fn router_with_options(
+    runtime: Arc<RealtimeRuntimeState>,
+    options: RealtimeRouteOptions,
+) -> Router {
     let path = options.path;
     Router::new()
-        .route(path, get(socket_handler::<S>))
-        .with_state(HandlerState { state, options })
+        .route(path, get(socket_handler))
+        .with_state(HandlerState { runtime, options })
 }
 
-async fn socket_handler<S>(
-    State(handler_state): State<HandlerState<S>>,
+async fn socket_handler(
+    State(handler_state): State<HandlerState>,
     upgrade: Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
     headers: HeaderMap,
     Query(query): Query<SocketQuery>,
-) -> Response
-where
-    S: RealtimeAxumState,
-{
-    let realtime = handler_state.state.realtime_handle().clone();
+) -> Response {
+    let realtime = handler_state.runtime.handle.clone();
 
     if !realtime.is_enabled() {
         return RealtimeHttpError::RealtimeDisabled.into_response();
@@ -143,7 +130,7 @@ where
         Err(err) => return err.into_response(),
     };
 
-    let auth = match handler_state.state.verify_realtime_token(&token).await {
+    let auth = match handler_state.runtime.verifier.verify_token(&token).await {
         Ok(auth) => auth,
         Err(err) => return RealtimeHttpError::VerifyFailed(err).into_response(),
     };

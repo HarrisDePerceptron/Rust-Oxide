@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use axum::Router;
 
-use crate::state::AppState;
+use crate::realtime::RealtimeRuntimeState;
 
-pub fn router(state: Arc<AppState>) -> Router {
-    realtime::server::axum::router(state)
+pub fn router(runtime: Arc<RealtimeRuntimeState>) -> Router {
+    realtime::server::axum::router(runtime)
 }

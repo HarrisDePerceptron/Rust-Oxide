@@ -27,12 +27,16 @@ pub struct RealtimeHandle {
 
 impl RealtimeHandle {
     pub fn spawn(config: RealtimeConfig) -> Self {
+        Self::spawn_with_policy(config, Arc::new(DefaultChannelPolicy))
+    }
+
+    pub fn spawn_with_policy(config: RealtimeConfig, policy: Arc<dyn ChannelPolicy>) -> Self {
         if !config.enabled {
             return Self { config, tx: None };
         }
 
         let (tx, rx) = mpsc::channel(HUB_QUEUE_SIZE);
-        let mut hub = RealtimeHub::new(config.clone(), rx, Arc::new(DefaultChannelPolicy));
+        let mut hub = RealtimeHub::new(config.clone(), rx, policy);
         tokio::spawn(async move {
             hub.run().await;
         });
@@ -299,10 +303,17 @@ impl RealtimeHub {
         );
     }
 
-    fn unregister(&mut self, conn_id: ConnectionId, _reason: DisconnectReason) {
+    fn unregister(&mut self, conn_id: ConnectionId, reason: DisconnectReason) {
         let Some(existing) = self.connections.remove(&conn_id) else {
             return;
         };
+
+        tracing::debug!(
+            conn_id = %conn_id,
+            user_id = %existing.meta.user_id,
+            reason = ?reason,
+            "realtime connection disconnected"
+        );
 
         if let Some(user_set) = self.users.get_mut(&existing.meta.user_id) {
             user_set.remove(&conn_id);
@@ -324,7 +335,20 @@ impl RealtimeHub {
     }
 
     fn handle_join(&mut self, conn_id: ConnectionId, channel: ChannelName, req_id: String) {
+        tracing::debug!(
+            conn_id = %conn_id,
+            channel = %channel,
+            req_id = %req_id,
+            "realtime join requested"
+        );
+
         if !self.check_join_rate(conn_id) {
+            tracing::debug!(
+                conn_id = %conn_id,
+                channel = %channel,
+                req_id = %req_id,
+                "realtime join denied: rate limited"
+            );
             self.send_frame(
                 conn_id,
                 ServerFrame::ack_err(req_id, "rate_limited", "Join rate limit exceeded"),
@@ -337,6 +361,14 @@ impl RealtimeHub {
         };
 
         if let Err(err) = self.policy.can_join(&meta, &channel) {
+            tracing::debug!(
+                conn_id = %conn_id,
+                user_id = %meta.user_id,
+                channel = %channel,
+                req_id = %req_id,
+                reason = %err,
+                "realtime join denied by policy"
+            );
             self.send_frame(
                 conn_id,
                 ServerFrame::ack_err(req_id, "forbidden_channel", err.message()),
@@ -349,6 +381,12 @@ impl RealtimeHub {
             .get(&conn_id)
             .is_some_and(|set| set.contains(&channel))
         {
+            tracing::debug!(
+                conn_id = %conn_id,
+                channel = %channel,
+                req_id = %req_id,
+                "realtime join acknowledged: already joined"
+            );
             self.send_frame(conn_id, ServerFrame::ack_ok(req_id));
             return;
         }
@@ -360,6 +398,12 @@ impl RealtimeHub {
             .unwrap_or(0)
             >= self.config.max_channels_per_connection
         {
+            tracing::debug!(
+                conn_id = %conn_id,
+                channel = %channel,
+                req_id = %req_id,
+                "realtime join denied: channel limit exceeded"
+            );
             self.send_frame(
                 conn_id,
                 ServerFrame::ack_err(
@@ -372,9 +416,23 @@ impl RealtimeHub {
         }
 
         if let Some(reason) = self.join_internal(conn_id, channel.clone()) {
+            tracing::debug!(
+                conn_id = %conn_id,
+                channel = %channel,
+                reason = ?reason,
+                "realtime join caused disconnect"
+            );
             self.unregister(conn_id, reason);
             return;
         }
+
+        tracing::debug!(
+            conn_id = %conn_id,
+            user_id = %meta.user_id,
+            channel = %channel,
+            req_id = %req_id,
+            "realtime join succeeded"
+        );
 
         self.send_frame(conn_id, ServerFrame::ack_ok(req_id));
         self.send_frame(
@@ -388,11 +446,23 @@ impl RealtimeHub {
     }
 
     fn handle_leave(&mut self, conn_id: ConnectionId, channel: ChannelName, req_id: String) {
+        tracing::debug!(
+            conn_id = %conn_id,
+            channel = %channel,
+            req_id = %req_id,
+            "realtime leave requested"
+        );
         let was_member = self
             .connection_channels
             .get(&conn_id)
             .is_some_and(|set| set.contains(&channel));
         if !was_member {
+            tracing::debug!(
+                conn_id = %conn_id,
+                channel = %channel,
+                req_id = %req_id,
+                "realtime leave denied: not joined"
+            );
             self.send_frame(
                 conn_id,
                 ServerFrame::ack_err(req_id, "channel_not_joined", "Not a member of channel"),
@@ -401,6 +471,12 @@ impl RealtimeHub {
         }
 
         self.leave_internal(conn_id, &channel);
+        tracing::debug!(
+            conn_id = %conn_id,
+            channel = %channel,
+            req_id = %req_id,
+            "realtime leave succeeded"
+        );
         self.send_frame(conn_id, ServerFrame::ack_ok(req_id));
         self.send_frame(
             conn_id,
