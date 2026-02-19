@@ -2,6 +2,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::Context;
 use axum::{Extension, Router, middleware};
+use realtime::server::RealtimeError;
 use tower_http::trace::TraceLayer;
 
 use rust_oxide::{
@@ -79,5 +80,25 @@ async fn run() -> anyhow::Result<()> {
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
+    Ok(())
+}
+
+async fn SomeFuncton(
+    realtime: Arc<RealtimeRuntimeState>,
+) -> Result<(), Box<dyn std::error::Error + 'static>> {
+    let handle: Result<(), RealtimeError> = tokio::spawn(async move {
+        let mut cont = true;
+
+        realtime.on_message("common", |msg| print!("Got message: {}", msg));
+        while cont {
+            realtime.send("common", "hello there".into()).await?;
+
+            cont = false;
+        }
+
+        Ok(())
+    })
+    .await?;
+
     Ok(())
 }

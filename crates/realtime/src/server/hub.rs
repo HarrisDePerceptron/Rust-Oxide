@@ -1,6 +1,9 @@
 use std::{
     collections::{HashMap, HashSet},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     time::Instant,
 };
 
@@ -18,11 +21,29 @@ use super::{
 };
 
 const HUB_QUEUE_SIZE: usize = 4096;
+const INBOUND_QUEUE_SIZE: usize = 4096;
+
+pub type SubscriptionId = u64;
+type ChannelHandler = Arc<dyn Fn(Value) + Send + Sync>;
+type GlobalHandler = Arc<dyn Fn(String, Value) + Send + Sync>;
+type ChannelHandlers =
+    Arc<std::sync::Mutex<HashMap<String, HashMap<SubscriptionId, ChannelHandler>>>>;
+type GlobalHandlers = Arc<std::sync::Mutex<HashMap<SubscriptionId, GlobalHandler>>>;
+
+#[derive(Clone)]
+pub(crate) struct InboundMessage {
+    pub channel: String,
+    pub event: String,
+    pub payload: Value,
+}
 
 #[derive(Clone)]
 pub struct RealtimeHandle {
     config: RealtimeConfig,
     tx: Option<mpsc::Sender<HubCommand>>,
+    channel_handlers: ChannelHandlers,
+    global_handlers: GlobalHandlers,
+    next_subscription_id: Arc<AtomicU64>,
 }
 
 impl RealtimeHandle {
@@ -31,24 +52,49 @@ impl RealtimeHandle {
     }
 
     pub fn spawn_with_policy(config: RealtimeConfig, policy: Arc<dyn ChannelPolicy>) -> Self {
+        let channel_handlers: ChannelHandlers = Arc::new(std::sync::Mutex::new(HashMap::new()));
+        let global_handlers: GlobalHandlers = Arc::new(std::sync::Mutex::new(HashMap::new()));
+        let next_subscription_id = Arc::new(AtomicU64::new(1));
+
         if !config.enabled {
-            return Self { config, tx: None };
+            return Self {
+                config,
+                tx: None,
+                channel_handlers,
+                global_handlers,
+                next_subscription_id,
+            };
         }
 
         let (tx, rx) = mpsc::channel(HUB_QUEUE_SIZE);
-        let mut hub = RealtimeHub::new(config.clone(), rx, policy);
+        let (inbound_tx, inbound_rx) = mpsc::channel(INBOUND_QUEUE_SIZE);
+        let mut hub = RealtimeHub::new(config.clone(), rx, policy, Some(inbound_tx));
         tokio::spawn(async move {
             hub.run().await;
         });
+        spawn_inbound_dispatcher(
+            inbound_rx,
+            Arc::clone(&channel_handlers),
+            Arc::clone(&global_handlers),
+        );
 
         Self {
             config,
             tx: Some(tx),
+            channel_handlers,
+            global_handlers,
+            next_subscription_id,
         }
     }
 
     pub fn disabled(config: RealtimeConfig) -> Self {
-        Self { config, tx: None }
+        Self {
+            config,
+            tx: None,
+            channel_handlers: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            global_handlers: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            next_subscription_id: Arc::new(AtomicU64::new(1)),
+        }
     }
 
     pub fn is_enabled(&self) -> bool {
@@ -129,6 +175,59 @@ impl RealtimeHandle {
     ) -> Result<(), RealtimeError> {
         self.send_event_to_user(user_id, event, payload).await
     }
+
+    pub fn on_message<F>(&self, channel: &str, handler: F) -> SubscriptionId
+    where
+        F: Fn(Value) + Send + Sync + 'static,
+    {
+        let id = self.next_subscription_id.fetch_add(1, Ordering::Relaxed);
+        let mut handlers = self
+            .channel_handlers
+            .lock()
+            .expect("channel handler mutex poisoned");
+        handlers
+            .entry(channel.to_string())
+            .or_default()
+            .insert(id, Arc::new(handler));
+        id
+    }
+
+    pub fn on_messages<F>(&self, handler: F) -> SubscriptionId
+    where
+        F: Fn(String, Value) + Send + Sync + 'static,
+    {
+        let id = self.next_subscription_id.fetch_add(1, Ordering::Relaxed);
+        self.global_handlers
+            .lock()
+            .expect("global handler mutex poisoned")
+            .insert(id, Arc::new(handler));
+        id
+    }
+
+    pub fn off(&self, id: SubscriptionId) -> bool {
+        let mut removed = false;
+
+        let mut global = self
+            .global_handlers
+            .lock()
+            .expect("global handler mutex poisoned");
+        if global.remove(&id).is_some() {
+            removed = true;
+        }
+        drop(global);
+
+        let mut channels = self
+            .channel_handlers
+            .lock()
+            .expect("channel handler mutex poisoned");
+        for handlers in channels.values_mut() {
+            if handlers.remove(&id).is_some() {
+                removed = true;
+            }
+        }
+
+        removed
+    }
 }
 
 pub(crate) enum HubCommand {
@@ -177,6 +276,7 @@ struct RealtimeHub {
     config: RealtimeConfig,
     rx: mpsc::Receiver<HubCommand>,
     policy: Arc<dyn ChannelPolicy>,
+    inbound_tx: Option<mpsc::Sender<InboundMessage>>,
     connections: HashMap<ConnectionId, ConnectionState>,
     users: HashMap<String, HashSet<ConnectionId>>,
     channels: HashMap<ChannelName, HashSet<ConnectionId>>,
@@ -201,11 +301,13 @@ impl RealtimeHub {
         config: RealtimeConfig,
         rx: mpsc::Receiver<HubCommand>,
         policy: Arc<dyn ChannelPolicy>,
+        inbound_tx: Option<mpsc::Sender<InboundMessage>>,
     ) -> Self {
         Self {
             config,
             rx,
             policy,
+            inbound_tx,
             connections: HashMap::new(),
             users: HashMap::new(),
             channels: HashMap::new(),
@@ -530,6 +632,11 @@ impl RealtimeHub {
 
         let recipients = self.channels.get(&channel).cloned().unwrap_or_default();
         let include_sender = should_echo_to_sender(&channel);
+        self.publish_inbound(InboundMessage {
+            channel: channel.to_string(),
+            event: event.clone(),
+            payload: payload.clone(),
+        });
         let event_frame = ServerFrame::event(
             channel.to_string(),
             event,
@@ -570,6 +677,22 @@ impl RealtimeHub {
         let frame = ServerFrame::event(channel, event, payload, None);
         for conn_id in conn_ids {
             self.send_frame(conn_id, frame.clone());
+        }
+    }
+
+    fn publish_inbound(&mut self, message: InboundMessage) {
+        let Some(tx) = &self.inbound_tx else {
+            return;
+        };
+
+        match tx.try_send(message) {
+            Ok(_) => {}
+            Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
+                tracing::debug!("realtime inbound dispatch queue is full; dropping message");
+            }
+            Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
+                self.inbound_tx = None;
+            }
         }
     }
 
@@ -662,9 +785,64 @@ fn should_echo_to_sender(channel: &ChannelName) -> bool {
     channel.as_str().starts_with("echo:")
 }
 
+fn spawn_inbound_dispatcher(
+    mut inbound_rx: mpsc::Receiver<InboundMessage>,
+    channel_handlers: ChannelHandlers,
+    global_handlers: GlobalHandlers,
+) {
+    tokio::spawn(async move {
+        while let Some(message) = inbound_rx.recv().await {
+            if message.event != DEFAULT_EVENT {
+                continue;
+            }
+
+            dispatch_channel_handlers(&channel_handlers, &message.channel, &message.payload);
+            dispatch_global_handlers(&global_handlers, &message.channel, &message.payload);
+        }
+    });
+}
+
+fn dispatch_channel_handlers(handlers: &ChannelHandlers, channel: &str, message: &Value) {
+    let callbacks: Vec<ChannelHandler> = {
+        let guard = handlers.lock().expect("channel handler mutex poisoned");
+        guard
+            .get(channel)
+            .map(|entries| entries.values().cloned().collect())
+            .unwrap_or_default()
+    };
+
+    for callback in callbacks {
+        callback(message.clone());
+    }
+}
+
+fn dispatch_global_handlers(handlers: &GlobalHandlers, channel: &str, message: &Value) {
+    let callbacks: Vec<GlobalHandler> = {
+        let guard = handlers.lock().expect("global handler mutex poisoned");
+        guard.values().cloned().collect()
+    };
+
+    for callback in callbacks {
+        callback(channel.to_string(), message.clone());
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::should_echo_to_sender;
+    use std::{
+        collections::HashMap,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+    };
+
+    use serde_json::json;
+
+    use super::{
+        ChannelHandlers, GlobalHandlers, dispatch_channel_handlers, dispatch_global_handlers,
+        should_echo_to_sender,
+    };
     use crate::server::ChannelName;
 
     #[test]
@@ -677,5 +855,47 @@ mod tests {
     fn non_echo_channel_excludes_sender() {
         let channel = ChannelName::parse("public:lobby").expect("channel should parse");
         assert!(!should_echo_to_sender(&channel));
+    }
+
+    #[test]
+    fn dispatch_channel_handlers_only_targets_matching_channel() {
+        let handlers: ChannelHandlers = Arc::new(std::sync::Mutex::new(HashMap::new()));
+        let count = Arc::new(AtomicUsize::new(0));
+        let count_for_handler = Arc::clone(&count);
+        handlers
+            .lock()
+            .expect("channel handlers lock")
+            .entry("chat:room:1".to_string())
+            .or_default()
+            .insert(
+                1,
+                Arc::new(move |_| {
+                    count_for_handler.fetch_add(1, Ordering::Relaxed);
+                }),
+            );
+
+        dispatch_channel_handlers(&handlers, "chat:room:1", &json!({"text":"hello"}));
+        dispatch_channel_handlers(&handlers, "chat:room:2", &json!({"text":"hello"}));
+
+        assert_eq!(count.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn dispatch_global_handlers_receives_channel_and_message() {
+        let handlers: GlobalHandlers = Arc::new(std::sync::Mutex::new(HashMap::new()));
+        let count = Arc::new(AtomicUsize::new(0));
+        let count_for_handler = Arc::clone(&count);
+        handlers.lock().expect("global handlers lock").insert(
+            1,
+            Arc::new(move |channel, payload| {
+                assert_eq!(channel, "chat:room:1");
+                assert_eq!(payload["text"], "hello");
+                count_for_handler.fetch_add(1, Ordering::Relaxed);
+            }),
+        );
+
+        dispatch_global_handlers(&handlers, "chat:room:1", &json!({"text":"hello"}));
+
+        assert_eq!(count.load(Ordering::Relaxed), 1);
     }
 }
