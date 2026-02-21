@@ -1,4 +1,4 @@
-# realtime
+# Realtime Websockets
 
 Reusable realtime transport primitives for Axum servers and Rust websocket clients.
 
