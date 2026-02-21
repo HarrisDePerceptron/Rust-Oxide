@@ -1,7 +1,22 @@
 [package]
-name = "realtime"
+name = "rust-oxide-realtime"
 version = "0.1.0"
 edition = "2024"
+description = "Reusable realtime transport primitives for Axum servers and Rust websocket clients"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/HarrisDePerceptron/Rust-Oxide"
+homepage = "https://github.com/HarrisDePerceptron/Rust-Oxide"
+documentation = "https://docs.rs/rust-oxide-realtime"
+keywords = ["realtime", "websocket", "axum", "tokio"]
+categories = ["web-programming::websocket", "asynchronous", "network-programming"]
+include = [
+    "src/**",
+    "examples/**",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE-*",
+]
 
 [dependencies]
 axum = { version = "0.8.7", features = ["ws"] }

@@ -16,4 +16,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --check
       - run: cargo clippy -p rust_oxide --all-targets --all-features -- -D warnings
+      - run: cargo package -p rust-oxide-cli --no-verify
+      - run: cargo package -p rust-oxide-realtime --no-verify
       - run: cargo test --workspace
