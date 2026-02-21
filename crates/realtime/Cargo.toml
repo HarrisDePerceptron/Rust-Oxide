@@ -1,6 +1,6 @@
 [package]
 name = "rust-oxide-realtime"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Reusable realtime transport primitives for Axum servers and Rust websocket clients"
 readme = "README.md"
