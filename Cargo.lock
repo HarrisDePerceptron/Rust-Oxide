@@ -2573,6 +2573,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-oxide-realtime"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "rust_decimal"
 version = "1.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2607,6 +2623,7 @@ dependencies = [
  "quote",
  "rand 0.8.5",
  "reqwest",
+ "rust-oxide-realtime",
  "sea-orm",
  "serde",
  "serde_json",

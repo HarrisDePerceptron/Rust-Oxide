@@ -1,0 +1,152 @@
+        <section id="realtime" data-nav-title="Realtime" class="doc-section fade-2 mx-auto mt-14 max-w-3xl space-y-8">
+          <h2 class="flex items-center gap-3 font-display text-3xl leading-tight text-[color:var(--pine)] sm:text-4xl">
+            <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--clay)]"></span>
+            Realtime
+          </h2>
+          <h3 class="text-lg font-semibold leading-tight text-[color:var(--pine)] sm:text-xl">Channel-based websocket messaging with a simple API for server and Rust clients.</h3>
+          <p class="text-sm text-black/70">
+            The realtime endpoint is
+            <span class="font-semibold">/api/v1/realtime/socket</span>.
+            Channels control audience (for example <span class="font-semibold">room:lobby</span>),
+            while events control message type (for example <span class="font-semibold">message.created</span>,
+            <span class="font-semibold">presence.updated</span>, <span class="font-semibold">typing.changed</span>).
+          </p>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Quick start: minimal Axum integration (any app)</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>use std::sync::Arc;
+use axum::Router;
+use realtime::server::{
+    RealtimeConfig, RealtimeError, RealtimeHandle, RealtimeRuntimeState,
+    RealtimeTokenVerifier, SessionAuth,
+};
+
+struct MyVerifier;
+
+#[async_trait::async_trait]
+impl RealtimeTokenVerifier for MyVerifier {
+    async fn verify_token(&amp;self, token: &amp;str) -&gt; Result&lt;SessionAuth, RealtimeError&gt; {
+        // TODO: validate token in your app
+        let _ = token;
+        unimplemented!()
+    }
+}
+
+let handle = RealtimeHandle::spawn(RealtimeConfig::default());
+let runtime = Arc::new(RealtimeRuntimeState::new(handle, MyVerifier));
+
+// default websocket path: /realtime/socket
+let app = Router::new().merge(realtime::server::axum::router(runtime));</code></pre>
+            <p class="text-sm text-black/60">
+              This is the smallest server-side setup. Add
+              <span class="font-semibold">spawn_with_policy(...)</span> only if you need custom channel authorization rules.
+            </p>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Bare minimum router registration for /api/v1/realtime/socket</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// Default realtime route path is /realtime/socket
+let app = Router::new()
+    .nest(\"/api/v1\", realtime::server::axum::router(runtime));
+
+// Final endpoint becomes: /api/v1/realtime/socket</code></pre>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// Optional: customize realtime route options
+use realtime::server::RealtimeRouteOptions;
+
+let opts = RealtimeRouteOptions {
+    path: \"/realtime/socket\",
+    allow_query_token: true,
+    strict_header_precedence: true,
+};
+
+let app = Router::new().nest(
+    \"/api/v1\",
+    realtime::server::axum::router_with_options(runtime, opts),
+);</code></pre>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Quick start: Rust client connect + send</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>use realtime::client::RealtimeClient;
+use serde_json::json;
+
+let client = RealtimeClient::connect(
+    "ws://127.0.0.1:3000/api/v1/realtime/socket",
+    token,
+).await?;
+
+client.join("room:lobby").await?;
+client.send("room:lobby", json!({ "text": "hello" })).await?;
+client.send_event("room:lobby", "typing.changed", json!({ "typing": true })).await?;</code></pre>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Realtime crate: key structs and public methods</h3>
+            <ul class="list-disc space-y-1 pl-4 text-sm text-black/70">
+              <li><span class="font-semibold">RealtimeConfig</span>: limits, heartbeat, idle timeout, rates, queue sizing.</li>
+              <li><span class="font-semibold">RealtimeHandle</span>: low-level runtime handle.</li>
+              <li><span class="font-semibold">RealtimeRuntimeState</span>: app-friendly wrapper for send/subscribe + token verifier.</li>
+              <li><span class="font-semibold">RealtimeTokenVerifier</span>: verifies bearer/query token into <span class="font-semibold">SessionAuth</span>.</li>
+              <li><span class="font-semibold">ChannelPolicy</span>: authorization rules for join/publish.</li>
+              <li><span class="font-semibold">RealtimeClient</span>: Rust websocket client with join/leave/send/send_event/on/off.</li>
+            </ul>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// server-side helpers (event defaults to "message")
+runtime.send(channel, payload).await?;
+runtime.send_to_user(user_id, payload).await?;
+
+// explicit event variants
+runtime.handle.send_event(channel, event, payload).await?;
+runtime.handle.send_event_to_user(user_id, event, payload).await?;
+
+// inbound subscriptions
+runtime.on_message(channel, |payload| { ... });
+runtime.on_messages(|channel, payload| { ... });
+runtime.on_channel_event(channel, |event, payload| { ... });
+runtime.on_events(|channel, event, payload| { ... });</code></pre>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Communication modes</h3>
+            <div class="space-y-4 text-sm text-black/70">
+              <div>
+                <h4 class="text-sm font-semibold text-[color:var(--pine)]">1) Server to server (inside backend runtime)</h4>
+                <p>Use server subscriptions and publish through runtime/handle for in-process workflows.</p>
+                <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>runtime.on_events(|channel, event, payload| {
+    // consume realtime traffic in server logic
+});
+
+runtime.handle.send_event("ops:alerts", "alert.created", payload).await?;</code></pre>
+              </div>
+              <div>
+                <h4 class="text-sm font-semibold text-[color:var(--pine)]">2) Server to client</h4>
+                <p>Publish to a channel or directly to a user's private stream (<span class="font-semibold">user:&lt;id&gt;</span>).</p>
+                <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>runtime.handle.send_event("room:lobby", "presence.updated", payload).await?;
+runtime.handle.send_event_to_user(user_id, "notice.created", payload).await?;</code></pre>
+              </div>
+              <div>
+                <h4 class="text-sm font-semibold text-[color:var(--pine)]">3) Client to client via server</h4>
+                <p>Clients join the same channel, emit events, and hub policy/membership controls fanout.</p>
+                <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>// client A + B
+client.join("room:lobby").await?;
+
+// client A emits
+client.send_event("room:lobby", "message.created", payload).await?;
+
+// client B receives
+client.on_channel_event("room:lobby", |event, payload| {
+    // event == "message.created"
+});</code></pre>
+              </div>
+            </div>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6 text-xs text-black/70">
+            <h3 class="text-base font-semibold text-[color:var(--pine)] sm:text-lg">Auth and endpoint notes</h3>
+            <ul class="list-disc space-y-1 pl-4">
+              <li>Endpoint: <span class="font-semibold">/api/v1/realtime/socket</span>.</li>
+              <li>Token can be supplied via <span class="font-semibold">Authorization: Bearer ...</span> and (if enabled) query param <span class="font-semibold">?token=...</span>.</li>
+              <li>Header token takes precedence by default.</li>
+              <li>Each connection auto-joins its private channel: <span class="font-semibold">user:&lt;authenticated_user_id&gt;</span>.</li>
+            </ul>
+          </section>
+        </section>

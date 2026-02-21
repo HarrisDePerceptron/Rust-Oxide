@@ -22,12 +22,25 @@ CLI to scaffold new projects and CRUD APIs.
 crates/server/            # Main backend template
 crates/companion_cli/     # CLI (binary name: oxide)
 crates/base_entity_derive/# derive helpers 
+crates/realtime/          # Realtime transport crate + demo app
 ```
 
 ## Development Quick start (server)
 
 ```sh
 cargo run -p rust_oxide
+```
+
+## Realtime demo quick start
+
+```sh
+cargo run -p rust-oxide-realtime --example chat_demo
+```
+
+Install as a library from crates.io:
+
+```sh
+cargo add rust-oxide-realtime --rename realtime
 ```
 
 ## Docker
@@ -128,9 +141,9 @@ cargo test -p rust_oxide
 
 Note: DB-backed tests are currently `#[ignore]` until a real Postgres is wired.
 
-## Release flow (CLI)
+## Release flow (CLI + realtime)
 
-This repo uses release-please to automate versioning and tags for the CLI.
+This repo uses release-please to automate versioning and tags for publishable crates.
 Conventional Commits determine SemVer:
 
 - `feat:` -> minor
@@ -138,5 +151,7 @@ Conventional Commits determine SemVer:
 - `feat!:` or `BREAKING CHANGE:` -> major
 - `chore`:  Non source changes
 
-Merging a release-please PR creates a `vX.Y.Z` tag, which triggers the release
-workflow to build binaries and publish `rust-oxide-cli` to crates.io.
+Merging a release-please PR creates component tags and triggers publishing automation:
+
+- `rust-oxide-cli-vX.Y.Z`: builds release binaries and publishes `rust-oxide-cli`.
+- `rust-oxide-realtime-vX.Y.Z`: publishes `rust-oxide-realtime`.

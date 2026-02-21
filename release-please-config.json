@@ -3,11 +3,16 @@
     "crates/companion_cli": {
       "release-type": "rust",
       "package-name": "rust-oxide-cli",
-      "changelog-path": "crates/companion_cli/CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md"
+    },
+    "crates/realtime": {
+      "release-type": "rust",
+      "package-name": "rust-oxide-realtime",
+      "changelog-path": "CHANGELOG.md"
     }
   },
   "include-v-in-tag": true,
-  "include-component-in-tag": false,
+  "include-component-in-tag": true,
   "draft": false,
   "prerelease": false
 }

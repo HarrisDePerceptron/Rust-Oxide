@@ -17,6 +17,7 @@ use rust_oxide::{
         providers::AuthProviderId,
     },
     config::{AppConfig, AuthConfig},
+    realtime::{AppRealtimeVerifier, RealtimeHandle, RealtimeRuntimeState},
     routes::{API_PREFIX, router},
     services::ServiceContext,
     state::AppState,
@@ -55,11 +56,24 @@ fn build_state(cfg: AppConfig, db: DatabaseConnection) -> std::sync::Arc<AppStat
     AppState::new(cfg, db, providers)
 }
 
+fn realtime_runtime_for_state(
+    state: &std::sync::Arc<AppState>,
+) -> std::sync::Arc<RealtimeRuntimeState> {
+    let realtime = RealtimeHandle::spawn(state.config.realtime.clone());
+    std::sync::Arc::new(RealtimeRuntimeState::new(
+        realtime,
+        AppRealtimeVerifier::new(state.auth_providers.clone()),
+    ))
+}
+
 async fn send(
     state: &std::sync::Arc<AppState>,
     request: Request<Body>,
 ) -> axum::response::Response {
-    router(state.clone()).oneshot(request).await.unwrap()
+    router(state.clone(), realtime_runtime_for_state(state))
+        .oneshot(request)
+        .await
+        .unwrap()
 }
 
 async fn json_response(

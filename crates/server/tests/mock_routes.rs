@@ -17,6 +17,7 @@ use rust_oxide::{
         providers::AuthProviderId,
     },
     config::{AppConfig, AuthConfig},
+    realtime::{AppRealtimeVerifier, RealtimeHandle, RealtimeRuntimeState},
     routes::{
         API_PREFIX,
         middleware::{catch_panic_layer, json_error_middleware},
@@ -30,7 +31,12 @@ fn api_path(path: &str) -> String {
     format!("{API_PREFIX}{path}")
 }
 
-fn build_state(secret: &[u8]) -> std::sync::Arc<AppState> {
+fn build_state(
+    secret: &[u8],
+) -> (
+    std::sync::Arc<AppState>,
+    std::sync::Arc<RealtimeRuntimeState>,
+) {
     let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
     let mut cfg = AppConfig::from_env().expect("load app config");
     cfg.auth = Some(AuthConfig {
@@ -45,11 +51,18 @@ fn build_state(secret: &[u8]) -> std::sync::Arc<AppState> {
         &services,
     )
     .expect("create auth providers");
-    AppState::new(cfg, db, providers)
+    let realtime = RealtimeHandle::spawn(cfg.realtime.clone());
+    let realtime_runtime = std::sync::Arc::new(RealtimeRuntimeState::new(
+        realtime,
+        AppRealtimeVerifier::new(providers.clone()),
+    ));
+    let state = AppState::new(cfg, db, providers);
+    (state, realtime_runtime)
 }
 
 fn app(secret: &[u8]) -> Router {
-    router(build_state(secret))
+    let (state, realtime_runtime) = build_state(secret);
+    router(state, realtime_runtime)
         .layer(middleware::from_fn(json_error_middleware))
         .layer(catch_panic_layer())
 }
