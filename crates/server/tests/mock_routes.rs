@@ -17,7 +17,7 @@ use rust_oxide::{
         providers::AuthProviderId,
     },
     config::{AppConfig, AuthConfig},
-    realtime::{AppRealtimeVerifier, RealtimeHandle, RealtimeRuntimeState},
+    realtime::{AppRealtimeVerifier, SocketAppState, SocketServerHandle},
     routes::{
         API_PREFIX,
         middleware::{catch_panic_layer, json_error_middleware},
@@ -31,12 +31,7 @@ fn api_path(path: &str) -> String {
     format!("{API_PREFIX}{path}")
 }
 
-fn build_state(
-    secret: &[u8],
-) -> (
-    std::sync::Arc<AppState>,
-    std::sync::Arc<RealtimeRuntimeState>,
-) {
+fn build_state(secret: &[u8]) -> (std::sync::Arc<AppState>, std::sync::Arc<SocketAppState>) {
     let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
     let mut cfg = AppConfig::from_env().expect("load app config");
     cfg.auth = Some(AuthConfig {
@@ -51,8 +46,8 @@ fn build_state(
         &services,
     )
     .expect("create auth providers");
-    let realtime = RealtimeHandle::spawn(cfg.realtime.clone());
-    let realtime_runtime = std::sync::Arc::new(RealtimeRuntimeState::new(
+    let realtime = SocketServerHandle::spawn(cfg.realtime.clone());
+    let realtime_runtime = std::sync::Arc::new(SocketAppState::new(
         realtime,
         AppRealtimeVerifier::new(providers.clone()),
     ));

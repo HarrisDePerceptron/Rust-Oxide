@@ -3,7 +3,7 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use async_trait::async_trait;
 use axum::{Json, Router, response::Html, routing::get};
 use realtime::server::{
-    RealtimeError, RealtimeHandle, RealtimeRuntimeState, RealtimeTokenVerifier, SessionAuth,
+    RealtimeError, RealtimeTokenVerifier, SessionAuth, SocketAppState, SocketServerHandle,
 };
 use serde::Serialize;
 
@@ -68,15 +68,19 @@ impl RealtimeTokenVerifier for StaticTokenVerifier {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let users = demo_users();
     let verifier = StaticTokenVerifier::new(&users);
-    let runtime = Arc::new(RealtimeRuntimeState::new(
-        RealtimeHandle::spawn(Default::default()),
-        verifier,
-    ));
+
+    let server_handle = SocketServerHandle::spawn(Default::default());
+
+    server_handle.on_message("room:lobby", |payload| {
+        println!("Got the payload: {}", payload)
+    });
+
+    let socket_app_state = Arc::new(SocketAppState::new(server_handle, verifier));
 
     let app = Router::new()
         .route("/", get(index))
         .route("/demo/users", get(demo_users_handler))
-        .nest("/api/v1", realtime::server::axum::router(runtime));
+        .nest("/api/v1", realtime::server::axum::router(socket_app_state));
 
     let addr = demo_addr();
     println!("realtime demo listening on http://{addr}");

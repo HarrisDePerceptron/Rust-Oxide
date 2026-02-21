@@ -13,7 +13,7 @@ cargo add rust-oxide-realtime --rename realtime
 ```rust
 use std::sync::Arc;
 use axum::Router;
-use realtime::server::{RealtimeConfig, RealtimeHandle, RealtimeRuntimeState, RealtimeTokenVerifier, SessionAuth};
+use realtime::server::{RealtimeConfig, SocketServerHandle, SocketAppState, RealtimeTokenVerifier, SessionAuth};
 
 struct AllowAllVerifier;
 
@@ -28,8 +28,8 @@ impl RealtimeTokenVerifier for AllowAllVerifier {
     }
 }
 
-let handle = RealtimeHandle::spawn(RealtimeConfig::default());
-let runtime = Arc::new(RealtimeRuntimeState::new(handle, AllowAllVerifier));
+let handle = SocketServerHandle::spawn(RealtimeConfig::default());
+let runtime = Arc::new(SocketAppState::new(handle, AllowAllVerifier));
 let app = Router::new().nest("/api/v1", realtime::server::axum::router(runtime));
 ```
 

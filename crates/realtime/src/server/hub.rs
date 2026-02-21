@@ -8,14 +8,13 @@ use std::{
 };
 
 use chrono::Utc;
-use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::protocol::{DEFAULT_EVENT, ServerFrame};
 
 use super::{
-    ChannelName, ConnectionId, ConnectionMeta, DisconnectReason, RealtimeConfig, RealtimeError,
-    SessionAuth,
+    Channel, ChannelName, ConnectionId, ConnectionMeta, DisconnectReason, Event, Payload,
+    RealtimeConfig, RealtimeError, SessionAuth, UserId,
     policy::{ChannelPolicy, DefaultChannelPolicy},
     session,
 };
@@ -24,26 +23,26 @@ const HUB_QUEUE_SIZE: usize = 4096;
 const INBOUND_QUEUE_SIZE: usize = 4096;
 
 pub type SubscriptionId = u64;
-type ChannelHandler = Arc<dyn Fn(Value) + Send + Sync>;
-type GlobalHandler = Arc<dyn Fn(String, Value) + Send + Sync>;
-type ChannelEventHandler = Arc<dyn Fn(String, Value) + Send + Sync>;
-type GlobalEventHandler = Arc<dyn Fn(String, String, Value) + Send + Sync>;
+type ChannelHandler = Arc<dyn Fn(Payload) + Send + Sync>;
+type GlobalHandler = Arc<dyn Fn(Channel, Payload) + Send + Sync>;
+type ChannelEventHandler = Arc<dyn Fn(Event, Payload) + Send + Sync>;
+type GlobalEventHandler = Arc<dyn Fn(Channel, Event, Payload) + Send + Sync>;
 type ChannelHandlers =
-    Arc<std::sync::Mutex<HashMap<String, HashMap<SubscriptionId, ChannelHandler>>>>;
+    Arc<std::sync::Mutex<HashMap<Channel, HashMap<SubscriptionId, ChannelHandler>>>>;
 type GlobalHandlers = Arc<std::sync::Mutex<HashMap<SubscriptionId, GlobalHandler>>>;
 type ChannelEventHandlers =
-    Arc<std::sync::Mutex<HashMap<String, HashMap<SubscriptionId, ChannelEventHandler>>>>;
+    Arc<std::sync::Mutex<HashMap<Channel, HashMap<SubscriptionId, ChannelEventHandler>>>>;
 type GlobalEventHandlers = Arc<std::sync::Mutex<HashMap<SubscriptionId, GlobalEventHandler>>>;
 
 #[derive(Clone)]
 pub(crate) struct InboundMessage {
-    pub channel: String,
-    pub event: String,
-    pub payload: Value,
+    pub channel: Channel,
+    pub event: Event,
+    pub payload: Payload,
 }
 
 #[derive(Clone)]
-pub struct RealtimeHandle {
+pub struct SocketServerHandle {
     config: RealtimeConfig,
     tx: Option<mpsc::Sender<HubCommand>>,
     channel_handlers: ChannelHandlers,
@@ -53,7 +52,7 @@ pub struct RealtimeHandle {
     next_subscription_id: Arc<AtomicU64>,
 }
 
-impl RealtimeHandle {
+impl SocketServerHandle {
     pub fn spawn(config: RealtimeConfig) -> Self {
         Self::spawn_with_policy(config, Arc::new(DefaultChannelPolicy))
     }
@@ -81,7 +80,7 @@ impl RealtimeHandle {
 
         let (tx, rx) = mpsc::channel(HUB_QUEUE_SIZE);
         let (inbound_tx, inbound_rx) = mpsc::channel(INBOUND_QUEUE_SIZE);
-        let mut hub = RealtimeHub::new(config.clone(), rx, policy, Some(inbound_tx));
+        let mut hub = SocketServer::new(config.clone(), rx, policy, Some(inbound_tx));
         tokio::spawn(async move {
             hub.run().await;
         });
@@ -133,16 +132,16 @@ impl RealtimeHandle {
 
     pub async fn send(
         &self,
-        channel_name: impl Into<String>,
-        message: Value,
+        channel_name: impl Into<Channel>,
+        message: Payload,
     ) -> Result<(), RealtimeError> {
         self.send_event(channel_name, DEFAULT_EVENT, message).await
     }
 
     pub async fn send_to_user(
         &self,
-        user_id: impl Into<String>,
-        message: Value,
+        user_id: impl Into<UserId>,
+        message: Payload,
     ) -> Result<(), RealtimeError> {
         self.send_event_to_user(user_id, DEFAULT_EVENT, message)
             .await
@@ -150,9 +149,9 @@ impl RealtimeHandle {
 
     pub async fn send_event(
         &self,
-        channel_name: impl Into<String>,
-        event: impl Into<String>,
-        payload: Value,
+        channel_name: impl Into<Channel>,
+        event: impl Into<Event>,
+        payload: Payload,
     ) -> Result<(), RealtimeError> {
         let Some(tx) = &self.tx else {
             return Ok(());
@@ -170,9 +169,9 @@ impl RealtimeHandle {
 
     pub async fn send_event_to_user(
         &self,
-        user_id: impl Into<String>,
-        event: impl Into<String>,
-        payload: Value,
+        user_id: impl Into<UserId>,
+        event: impl Into<Event>,
+        payload: Payload,
     ) -> Result<(), RealtimeError> {
         let Some(tx) = &self.tx else {
             return Ok(());
@@ -188,16 +187,16 @@ impl RealtimeHandle {
 
     pub async fn emit_to_user(
         &self,
-        user_id: impl Into<String>,
-        event: impl Into<String>,
-        payload: Value,
+        user_id: impl Into<UserId>,
+        event: impl Into<Event>,
+        payload: Payload,
     ) -> Result<(), RealtimeError> {
         self.send_event_to_user(user_id, event, payload).await
     }
 
     pub fn on_message<F>(&self, channel: &str, handler: F) -> SubscriptionId
     where
-        F: Fn(Value) + Send + Sync + 'static,
+        F: Fn(Payload) + Send + Sync + 'static,
     {
         let id = self.next_subscription_id.fetch_add(1, Ordering::Relaxed);
         let mut handlers = self
@@ -213,7 +212,7 @@ impl RealtimeHandle {
 
     pub fn on_messages<F>(&self, handler: F) -> SubscriptionId
     where
-        F: Fn(String, Value) + Send + Sync + 'static,
+        F: Fn(Channel, Payload) + Send + Sync + 'static,
     {
         let id = self.next_subscription_id.fetch_add(1, Ordering::Relaxed);
         self.global_handlers
@@ -225,7 +224,7 @@ impl RealtimeHandle {
 
     pub fn on_channel_event<F>(&self, channel: &str, handler: F) -> SubscriptionId
     where
-        F: Fn(String, Value) + Send + Sync + 'static,
+        F: Fn(Event, Payload) + Send + Sync + 'static,
     {
         let id = self.next_subscription_id.fetch_add(1, Ordering::Relaxed);
         let mut handlers = self
@@ -241,7 +240,7 @@ impl RealtimeHandle {
 
     pub fn on_events<F>(&self, handler: F) -> SubscriptionId
     where
-        F: Fn(String, String, Value) + Send + Sync + 'static,
+        F: Fn(Channel, Event, Payload) + Send + Sync + 'static,
     {
         let id = self.next_subscription_id.fetch_add(1, Ordering::Relaxed);
         self.global_event_handlers
@@ -318,8 +317,8 @@ pub(crate) enum HubCommand {
     Emit {
         conn_id: ConnectionId,
         channel: ChannelName,
-        event: String,
-        payload: Value,
+        event: Event,
+        payload: Payload,
         req_id: String,
     },
     Ping {
@@ -328,23 +327,23 @@ pub(crate) enum HubCommand {
     },
     SendToChannel {
         channel: ChannelName,
-        event: String,
-        payload: Value,
+        event: Event,
+        payload: Payload,
     },
     SendToUser {
-        user_id: String,
-        event: String,
-        payload: Value,
+        user_id: UserId,
+        event: Event,
+        payload: Payload,
     },
 }
 
-struct RealtimeHub {
+struct SocketServer {
     config: RealtimeConfig,
     rx: mpsc::Receiver<HubCommand>,
     policy: Arc<dyn ChannelPolicy>,
     inbound_tx: Option<mpsc::Sender<InboundMessage>>,
     connections: HashMap<ConnectionId, ConnectionState>,
-    users: HashMap<String, HashSet<ConnectionId>>,
+    users: HashMap<UserId, HashSet<ConnectionId>>,
     channels: HashMap<ChannelName, HashSet<ConnectionId>>,
     connection_channels: HashMap<ConnectionId, HashSet<ChannelName>>,
 }
@@ -362,7 +361,7 @@ struct ConnectionRateState {
     emits_in_window: u32,
 }
 
-impl RealtimeHub {
+impl SocketServer {
     fn new(
         config: RealtimeConfig,
         rx: mpsc::Receiver<HubCommand>,
@@ -660,8 +659,8 @@ impl RealtimeHub {
         &mut self,
         conn_id: ConnectionId,
         channel: ChannelName,
-        event: String,
-        payload: Value,
+        event: Event,
+        payload: Payload,
         req_id: String,
     ) {
         if !self.check_emit_rate(conn_id) {
@@ -723,7 +722,7 @@ impl RealtimeHub {
         self.send_frame(conn_id, ServerFrame::pong(req_id));
     }
 
-    fn handle_send_to_channel(&mut self, channel: ChannelName, event: String, payload: Value) {
+    fn handle_send_to_channel(&mut self, channel: ChannelName, event: Event, payload: Payload) {
         let Some(conn_ids) = self.channels.get(&channel).cloned() else {
             return;
         };
@@ -734,7 +733,7 @@ impl RealtimeHub {
         }
     }
 
-    fn handle_send_to_user(&mut self, user_id: String, event: String, payload: Value) {
+    fn handle_send_to_user(&mut self, user_id: UserId, event: Event, payload: Payload) {
         let Some(conn_ids) = self.users.get(&user_id).cloned() else {
             return;
         };
@@ -878,7 +877,7 @@ fn spawn_inbound_dispatcher(
     });
 }
 
-fn dispatch_channel_handlers(handlers: &ChannelHandlers, channel: &str, message: &Value) {
+fn dispatch_channel_handlers(handlers: &ChannelHandlers, channel: &str, message: &Payload) {
     let callbacks: Vec<ChannelHandler> = {
         let guard = handlers.lock().expect("channel handler mutex poisoned");
         guard
@@ -892,7 +891,7 @@ fn dispatch_channel_handlers(handlers: &ChannelHandlers, channel: &str, message:
     }
 }
 
-fn dispatch_global_handlers(handlers: &GlobalHandlers, channel: &str, message: &Value) {
+fn dispatch_global_handlers(handlers: &GlobalHandlers, channel: &str, message: &Payload) {
     let callbacks: Vec<GlobalHandler> = {
         let guard = handlers.lock().expect("global handler mutex poisoned");
         guard.values().cloned().collect()
@@ -907,7 +906,7 @@ fn dispatch_channel_event_handlers(
     handlers: &ChannelEventHandlers,
     channel: &str,
     event: &str,
-    message: &Value,
+    message: &Payload,
 ) {
     let callbacks: Vec<ChannelEventHandler> = {
         let guard = handlers
@@ -928,7 +927,7 @@ fn dispatch_global_event_handlers(
     handlers: &GlobalEventHandlers,
     channel: &str,
     event: &str,
-    message: &Value,
+    message: &Payload,
 ) {
     let callbacks: Vec<GlobalEventHandler> = {
         let guard = handlers

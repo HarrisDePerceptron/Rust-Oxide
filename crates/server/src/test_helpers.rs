@@ -6,7 +6,7 @@ use sea_orm::{DatabaseBackend, MockDatabase};
 use crate::{
     auth::{bootstrap::build_providers, providers::AuthProviderId},
     config::{AppConfig, AuthConfig},
-    realtime::{AppRealtimeVerifier, RealtimeHandle, RealtimeRuntimeState},
+    realtime::{AppRealtimeVerifier, SocketAppState, SocketServerHandle},
     routes::router,
     services::ServiceContext,
     state::AppState,
@@ -27,8 +27,8 @@ pub fn test_router(secret: &[u8]) -> Router {
         &services,
     )
     .expect("create auth providers");
-    let realtime = RealtimeHandle::spawn(cfg.realtime.clone());
-    let realtime_runtime = Arc::new(RealtimeRuntimeState::new(
+    let realtime = SocketServerHandle::spawn(cfg.realtime.clone());
+    let realtime_runtime = Arc::new(SocketAppState::new(
         realtime,
         AppRealtimeVerifier::new(providers.clone()),
     ));

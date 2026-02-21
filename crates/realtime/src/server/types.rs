@@ -1,11 +1,15 @@
 use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use uuid::Uuid;
 
 use super::RealtimeError;
 
 pub type UserId = String;
+pub type Channel = String;
+pub type Event = String;
+pub type Payload = Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ConnectionId(pub Uuid);

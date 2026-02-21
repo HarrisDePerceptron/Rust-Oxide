@@ -17,7 +17,7 @@
             <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>use std::sync::Arc;
 use axum::Router;
 use realtime::server::{
-    RealtimeConfig, RealtimeError, RealtimeHandle, RealtimeRuntimeState,
+    RealtimeConfig, RealtimeError, SocketServerHandle, SocketAppState,
     RealtimeTokenVerifier, SessionAuth,
 };
 
@@ -32,8 +32,8 @@ impl RealtimeTokenVerifier for MyVerifier {
     }
 }
 
-let handle = RealtimeHandle::spawn(RealtimeConfig::default());
-let runtime = Arc::new(RealtimeRuntimeState::new(handle, MyVerifier));
+let handle = SocketServerHandle::spawn(RealtimeConfig::default());
+let runtime = Arc::new(SocketAppState::new(handle, MyVerifier));
 
 // default websocket path: /realtime/socket
 let app = Router::new().merge(realtime::server::axum::router(runtime));</code></pre>
@@ -84,25 +84,25 @@ client.send_event("room:lobby", "typing.changed", json!({ "typing": true })).awa
             <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Realtime crate: key structs and public methods</h3>
             <ul class="list-disc space-y-1 pl-4 text-sm text-black/70">
               <li><span class="font-semibold">RealtimeConfig</span>: limits, heartbeat, idle timeout, rates, queue sizing.</li>
-              <li><span class="font-semibold">RealtimeHandle</span>: low-level runtime handle.</li>
-              <li><span class="font-semibold">RealtimeRuntimeState</span>: app-friendly wrapper for send/subscribe + token verifier.</li>
+              <li><span class="font-semibold">SocketServerHandle</span>: low-level runtime handle.</li>
+              <li><span class="font-semibold">SocketAppState</span>: app wrapper that bundles realtime handle + token verifier.</li>
               <li><span class="font-semibold">RealtimeTokenVerifier</span>: verifies bearer/query token into <span class="font-semibold">SessionAuth</span>.</li>
               <li><span class="font-semibold">ChannelPolicy</span>: authorization rules for join/publish.</li>
               <li><span class="font-semibold">RealtimeClient</span>: Rust websocket client with join/leave/send/send_event/on/off.</li>
             </ul>
             <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// server-side helpers (event defaults to "message")
-runtime.send(channel, payload).await?;
-runtime.send_to_user(user_id, payload).await?;
+runtime.handle.send(channel, payload).await?;
+runtime.handle.send_to_user(user_id, payload).await?;
 
 // explicit event variants
 runtime.handle.send_event(channel, event, payload).await?;
 runtime.handle.send_event_to_user(user_id, event, payload).await?;
 
 // inbound subscriptions
-runtime.on_message(channel, |payload| { ... });
-runtime.on_messages(|channel, payload| { ... });
-runtime.on_channel_event(channel, |event, payload| { ... });
-runtime.on_events(|channel, event, payload| { ... });</code></pre>
+runtime.handle.on_message(channel, |payload| { ... });
+runtime.handle.on_messages(|channel, payload| { ... });
+runtime.handle.on_channel_event(channel, |event, payload| { ... });
+runtime.handle.on_events(|channel, event, payload| { ... });</code></pre>
           </section>
 
           <section class="space-y-3 border-t border-black/10 pt-6">
@@ -110,8 +110,8 @@ runtime.on_events(|channel, event, payload| { ... });</code></pre>
             <div class="space-y-4 text-sm text-black/70">
               <div>
                 <h4 class="text-sm font-semibold text-[color:var(--pine)]">1) Server to server (inside backend runtime)</h4>
-                <p>Use server subscriptions and publish through runtime/handle for in-process workflows.</p>
-                <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>runtime.on_events(|channel, event, payload| {
+                <p>Use server subscriptions and publish through the realtime handle for in-process workflows.</p>
+                <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>runtime.handle.on_events(|channel, event, payload| {
     // consume realtime traffic in server logic
 });
 

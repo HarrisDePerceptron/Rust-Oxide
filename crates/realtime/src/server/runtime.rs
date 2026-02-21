@@ -1,23 +1,33 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use serde_json::Value;
 
-use super::{RealtimeError, RealtimeHandle, SessionAuth, SubscriptionId};
+use super::{RealtimeError, SessionAuth, SocketServerHandle};
 
 #[async_trait]
 pub trait RealtimeTokenVerifier: Send + Sync + 'static {
+    /// Verify an access token and return authenticated session context.
+    ///
+    /// Returning `Err(RealtimeError::unauthorized(...))` denies websocket upgrade.
     async fn verify_token(&self, token: &str) -> Result<SessionAuth, RealtimeError>;
 }
 
+/// Shared application state for realtime HTTP integration.
+///
+/// This bundles:
+/// - `handle`: transport runtime and messaging API.
+/// - `verifier`: token verification used during websocket upgrade.
+///
+/// Use `state.handle` for send/subscribe operations.
 #[derive(Clone)]
-pub struct RealtimeRuntimeState {
-    pub handle: RealtimeHandle,
+pub struct SocketAppState {
+    pub handle: SocketServerHandle,
     pub verifier: Arc<dyn RealtimeTokenVerifier>,
 }
 
-impl RealtimeRuntimeState {
-    pub fn new<V>(handle: RealtimeHandle, verifier: V) -> Self
+impl SocketAppState {
+    /// Create runtime state from a realtime handle and concrete verifier.
+    pub fn new<V>(handle: SocketServerHandle, verifier: V) -> Self
     where
         V: RealtimeTokenVerifier,
     {
@@ -27,58 +37,11 @@ impl RealtimeRuntimeState {
         }
     }
 
+    /// Create runtime state from a realtime handle and shared verifier trait object.
     pub fn new_with_shared_verifier(
-        handle: RealtimeHandle,
+        handle: SocketServerHandle,
         verifier: Arc<dyn RealtimeTokenVerifier>,
     ) -> Self {
         Self { handle, verifier }
-    }
-
-    pub async fn send(
-        &self,
-        channel_name: impl Into<String>,
-        message: Value,
-    ) -> Result<(), RealtimeError> {
-        self.handle.send(channel_name, message).await
-    }
-
-    pub async fn send_to_user(
-        &self,
-        user_id: impl Into<String>,
-        message: Value,
-    ) -> Result<(), RealtimeError> {
-        self.handle.send_to_user(user_id, message).await
-    }
-
-    pub fn on_message<F>(&self, channel: &str, handler: F) -> SubscriptionId
-    where
-        F: Fn(Value) + Send + Sync + 'static,
-    {
-        self.handle.on_message(channel, handler)
-    }
-
-    pub fn on_messages<F>(&self, handler: F) -> SubscriptionId
-    where
-        F: Fn(String, Value) + Send + Sync + 'static,
-    {
-        self.handle.on_messages(handler)
-    }
-
-    pub fn on_channel_event<F>(&self, channel: &str, handler: F) -> SubscriptionId
-    where
-        F: Fn(String, Value) + Send + Sync + 'static,
-    {
-        self.handle.on_channel_event(channel, handler)
-    }
-
-    pub fn on_events<F>(&self, handler: F) -> SubscriptionId
-    where
-        F: Fn(String, String, Value) + Send + Sync + 'static,
-    {
-        self.handle.on_events(handler)
-    }
-
-    pub fn off(&self, id: SubscriptionId) -> bool {
-        self.handle.off(id)
     }
 }
