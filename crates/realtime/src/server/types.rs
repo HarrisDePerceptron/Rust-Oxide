@@ -16,6 +16,12 @@ impl ConnectionId {
     }
 }
 
+impl Default for ConnectionId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Display for ConnectionId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)

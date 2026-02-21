@@ -168,15 +168,14 @@ fn extract_access_token(
         }
     }
 
-    if options.allow_query_token {
-        if let Some(token) = query
+    if options.allow_query_token
+        && let Some(token) = query
             .token
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
-        {
-            return Ok(token.to_string());
-        }
+    {
+        return Ok(token.to_string());
     }
 
     Err(RealtimeHttpError::MissingToken)
