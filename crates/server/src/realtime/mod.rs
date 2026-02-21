@@ -1,7 +1,5 @@
-mod chat;
 mod verifier;
 
-pub use chat::{AppChannelPolicy, ChatRoomJoin, ChatRoomLeave, ChatRoomRegistry};
 pub use realtime::client;
 pub use realtime::protocol;
 pub use realtime::server::{

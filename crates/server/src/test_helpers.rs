@@ -1,15 +1,12 @@
 use std::sync::Arc;
 
-use axum::{Extension, Router};
+use axum::Router;
 use sea_orm::{DatabaseBackend, MockDatabase};
 
 use crate::{
     auth::{bootstrap::build_providers, providers::AuthProviderId},
     config::{AppConfig, AuthConfig},
-    realtime::{
-        AppChannelPolicy, AppRealtimeVerifier, ChatRoomRegistry, RealtimeHandle,
-        RealtimeRuntimeState,
-    },
+    realtime::{AppRealtimeVerifier, RealtimeHandle, RealtimeRuntimeState},
     routes::router,
     services::ServiceContext,
     state::AppState,
@@ -30,15 +27,11 @@ pub fn test_router(secret: &[u8]) -> Router {
         &services,
     )
     .expect("create auth providers");
-    let chat_rooms = ChatRoomRegistry::new();
-    let realtime = RealtimeHandle::spawn_with_policy(
-        cfg.realtime.clone(),
-        Arc::new(AppChannelPolicy::new(chat_rooms.clone())),
-    );
+    let realtime = RealtimeHandle::spawn(cfg.realtime.clone());
     let realtime_runtime = Arc::new(RealtimeRuntimeState::new(
         realtime,
         AppRealtimeVerifier::new(providers.clone()),
     ));
     let state = AppState::new(cfg, db, providers);
-    router(Arc::clone(&state), realtime_runtime).layer(Extension(chat_rooms))
+    router(Arc::clone(&state), realtime_runtime)
 }

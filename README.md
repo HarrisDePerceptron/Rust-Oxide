@@ -22,12 +22,19 @@ CLI to scaffold new projects and CRUD APIs.
 crates/server/            # Main backend template
 crates/companion_cli/     # CLI (binary name: oxide)
 crates/base_entity_derive/# derive helpers 
+crates/realtime/          # Realtime transport crate + demo app
 ```
 
 ## Development Quick start (server)
 
 ```sh
 cargo run -p rust_oxide
+```
+
+## Realtime demo quick start
+
+```sh
+cargo run -p realtime --example chat_demo
 ```
 
 ## Docker

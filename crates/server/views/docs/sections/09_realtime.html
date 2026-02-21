@@ -7,9 +7,9 @@
           <p class="text-sm text-black/70">
             The realtime endpoint is
             <span class="font-semibold">/api/v1/realtime/socket</span>.
-            Channels control audience (for example <span class="font-semibold">chat:room:alpha</span>),
-            while events control message type (for example <span class="font-semibold">chat.message</span>,
-            <span class="font-semibold">chat.typing</span>, <span class="font-semibold">chat.presence</span>).
+            Channels control audience (for example <span class="font-semibold">room:lobby</span>),
+            while events control message type (for example <span class="font-semibold">message.created</span>,
+            <span class="font-semibold">presence.updated</span>, <span class="font-semibold">typing.changed</span>).
           </p>
 
           <section class="space-y-3 border-t border-black/10 pt-6">
@@ -75,9 +75,9 @@ let client = RealtimeClient::connect(
     token,
 ).await?;
 
-client.join("chat:room:alpha").await?;
-client.send("chat:room:alpha", json!({ "text": "hello" })).await?;
-client.send_event("chat:room:alpha", "chat.typing", json!({ "typing": true })).await?;</code></pre>
+client.join("room:lobby").await?;
+client.send("room:lobby", json!({ "text": "hello" })).await?;
+client.send_event("room:lobby", "typing.changed", json!({ "typing": true })).await?;</code></pre>
           </section>
 
           <section class="space-y-3 border-t border-black/10 pt-6">
@@ -120,21 +120,21 @@ runtime.handle.send_event("ops:alerts", "alert.created", payload).await?;</code>
               <div>
                 <h4 class="text-sm font-semibold text-[color:var(--pine)]">2) Server to client</h4>
                 <p>Publish to a channel or directly to a user's private stream (<span class="font-semibold">user:&lt;id&gt;</span>).</p>
-                <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>runtime.handle.send_event("chat:room:alpha", "chat.presence", payload).await?;
-runtime.handle.send_event_to_user(user_id, "chat.notice", payload).await?;</code></pre>
+                <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>runtime.handle.send_event("room:lobby", "presence.updated", payload).await?;
+runtime.handle.send_event_to_user(user_id, "notice.created", payload).await?;</code></pre>
               </div>
               <div>
                 <h4 class="text-sm font-semibold text-[color:var(--pine)]">3) Client to client via server</h4>
                 <p>Clients join the same channel, emit events, and hub policy/membership controls fanout.</p>
                 <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>// client A + B
-client.join("chat:room:alpha").await?;
+client.join("room:lobby").await?;
 
 // client A emits
-client.send_event("chat:room:alpha", "chat.message", payload).await?;
+client.send_event("room:lobby", "message.created", payload).await?;
 
 // client B receives
-client.on_channel_event("chat:room:alpha", |event, payload| {
-    // event == "chat.message"
+client.on_channel_event("room:lobby", |event, payload| {
+    // event == "message.created"
 });</code></pre>
               </div>
             </div>

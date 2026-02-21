@@ -1,0 +1,793 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Realtime Demo Chat</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;650&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --sand: #050505;
+        --clay: #f0f0f0;
+        --pine: #080808;
+        --ink: #f5f5f5;
+        --mist: #f3f3f3;
+        --bg-0: #050505;
+        --bg-1: #0b0b0b;
+        --bg-2: #111111;
+        --bg-3: #181818;
+        --line: rgba(255, 255, 255, 0.16);
+        --line-strong: rgba(255, 255, 255, 0.32);
+        --muted: #b5b5b5;
+        --muted-soft: #919191;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        font-family: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        background:
+          radial-gradient(
+            1200px 700px at 8% -16%,
+            rgba(255, 255, 255, 0.1) 0%,
+            transparent 56%
+          ),
+          radial-gradient(
+            860px 620px at 92% 2%,
+            rgba(255, 255, 255, 0.06) 0%,
+            transparent 62%
+          ),
+          linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 38%, var(--bg-0) 100%);
+      }
+
+      .shell {
+        max-width: 1060px;
+        margin: 0 auto;
+        padding: 28px 20px 36px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-family: "Fraunces", ui-serif, serif;
+        font-size: clamp(2rem, 2.8vw, 3rem);
+        line-height: 1.08;
+        color: var(--ink);
+      }
+
+      h3 {
+        margin: 0 0 10px;
+        font-family: "Fraunces", ui-serif, serif;
+        font-size: 1.25rem;
+        color: var(--ink);
+      }
+
+      p {
+        color: var(--muted);
+      }
+
+      .shell > p {
+        margin: 0 0 16px;
+      }
+
+      .card {
+        background: var(--bg-2);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 16px;
+        box-shadow: 0 18px 36px rgba(0, 0, 0, 0.42);
+      }
+
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      .col {
+        flex: 1 1 240px;
+        min-width: 240px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--muted-soft);
+      }
+
+      input,
+      select,
+      button {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        padding: 11px 10px;
+        font-size: 14px;
+      }
+
+      input,
+      select {
+        background: var(--bg-3);
+        color: var(--ink);
+      }
+
+      input::placeholder {
+        color: var(--muted-soft);
+      }
+
+      input:focus,
+      select:focus {
+        border-color: var(--line-strong);
+        outline: 0;
+      }
+
+      button {
+        cursor: pointer;
+        background: #f5f5f5;
+        border-color: #f5f5f5;
+        color: #080808;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 18px rgba(0, 0, 0, 0.35);
+      }
+
+      button.alt {
+        background: rgba(255, 255, 255, 0.06);
+        color: #f3f3f3;
+        border-color: rgba(255, 255, 255, 0.28);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .actions button {
+        flex: 1 1 140px;
+      }
+
+      .panels {
+        margin-top: 14px;
+      }
+
+      .message-panel {
+        flex: 1.7 1 620px;
+        min-width: 420px;
+      }
+
+      .events-panel {
+        flex: 0.9 1 280px;
+        min-width: 260px;
+      }
+
+      .status {
+        margin: 10px 0 0;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted-soft);
+      }
+
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+      }
+
+      #messages,
+      #events {
+        overflow: auto;
+        background: var(--bg-3);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px;
+      }
+
+      #messages {
+        height: clamp(380px, 58vh, 620px);
+      }
+
+      #events {
+        height: 320px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11px;
+        line-height: 1.45;
+      }
+
+      #messages p {
+        margin: 0 0 9px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: var(--muted);
+      }
+
+      .event-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 6px;
+        padding: 4px 0;
+        border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
+        color: var(--muted);
+      }
+
+      .event-row:last-child {
+        border-bottom: 0;
+      }
+
+      .event-time {
+        color: var(--muted-soft);
+      }
+
+      .event-badge {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 1px 6px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #ffffff;
+      }
+
+      .badge-in {
+        border-color: rgba(255, 255, 255, 0.28);
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .badge-out {
+        border-color: rgba(59, 130, 246, 0.55);
+        background: rgba(59, 130, 246, 0.2);
+      }
+
+      .badge-sys {
+        border-color: rgba(255, 255, 255, 0.22);
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .badge-err {
+        border-color: rgba(239, 68, 68, 0.55);
+        background: rgba(239, 68, 68, 0.2);
+      }
+
+      .event-op {
+        color: #ffffff;
+        font-weight: 700;
+      }
+
+      .event-details {
+        color: var(--muted-soft);
+      }
+
+      .event-payload {
+        color: var(--muted);
+        flex-basis: 100%;
+      }
+
+      .msg-user {
+        color: #ffffff;
+        font-weight: 700;
+      }
+
+      .msg-time {
+        margin-left: 6px;
+        color: var(--muted-soft);
+        font-size: 11px;
+      }
+
+      .hint {
+        margin-top: 10px;
+        font-size: 12px;
+        color: var(--muted-soft);
+      }
+
+      .typing-indicator {
+        min-height: 20px;
+        margin: 6px 0 10px;
+        font-size: 12px;
+        color: var(--muted-soft);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <h1>Realtime Demo Chat</h1>
+      <p>Choose a demo user, connect to <span class="mono">/api/v1/realtime/socket</span>, join a room, and exchange events. Token is derived from the selected user.</p>
+
+      <div class="card">
+        <div class="row">
+          <div class="col">
+            <label for="user">Demo User</label>
+            <select id="user"></select>
+          </div>
+          <div class="col">
+            <label for="room">Room Channel</label>
+            <input id="room" value="room:lobby" />
+          </div>
+        </div>
+        <div class="actions">
+          <button id="connect">Connect + Join</button>
+          <button id="disconnect" class="alt">Disconnect</button>
+        </div>
+        <p id="status" class="status">Socket: disconnected</p>
+      </div>
+
+      <div class="row panels">
+        <div class="col card message-panel">
+          <h3>Messages</h3>
+          <p id="typing-indicator" class="typing-indicator"></p>
+          <div id="messages"></div>
+          <div class="row" style="margin-top: 10px; margin-bottom: 0;">
+            <div class="col" style="flex: 1 1 auto;">
+              <input id="message" placeholder="Type a message" />
+            </div>
+            <div style="width: 150px;">
+              <button id="send">Send</button>
+            </div>
+          </div>
+        </div>
+        <div class="col card events-panel">
+          <h3>Events</h3>
+          <div id="events"></div>
+          <p class="hint">Frame format follows realtime protocol (<span class="mono">op=channel_join</span>, <span class="mono">op=channel_emit</span>, etc.).</p>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (() => {
+        const state = { ws: null, userId: "", token: "", room: "room:lobby", seq: 0, users: [] };
+        const userSelect = document.getElementById("user");
+        const roomInput = document.getElementById("room");
+        const messageInput = document.getElementById("message");
+        const statusEl = document.getElementById("status");
+        const typingIndicatorEl = document.getElementById("typing-indicator");
+        const messagesEl = document.getElementById("messages");
+        const eventsEl = document.getElementById("events");
+        const peerTyping = new Map();
+        const peerTypingTimers = new Map();
+        let selfTyping = false;
+        let selfTypingStopTimer = null;
+        const MAX_EVENT_ROWS = 220;
+
+        const byId = (id) => document.getElementById(id);
+        const nextId = () => `req-${Date.now()}-${++state.seq}`;
+        const wsUrl = (token) => {
+          const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+          return `${protocol}://${window.location.host}/api/v1/realtime/socket?token=${encodeURIComponent(token)}`;
+        };
+
+        function formatMessageTime(ts) {
+          const opts = { hour: "numeric", minute: "2-digit", hour12: true };
+          if (typeof ts === "number" && Number.isFinite(ts)) {
+            const millis = ts > 1_000_000_000_000 ? ts : ts * 1000;
+            return new Date(millis).toLocaleTimeString([], opts);
+          }
+          return new Date().toLocaleTimeString([], opts);
+        }
+
+        function truncate(value, max) {
+          const text = String(value ?? "");
+          return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+        }
+
+        function shortId(value) {
+          const id = String(value ?? "").trim();
+          if (!id) return "";
+          if (id.length <= 12) return id;
+          return `${id.slice(0, 6)}…${id.slice(-4)}`;
+        }
+
+        function payloadPreview(payload) {
+          if (payload === undefined) return "";
+          if (payload === null) return "payload:null";
+          if (typeof payload === "string") return `payload:"${truncate(payload, 72)}"`;
+          if (typeof payload === "object") {
+            if (typeof payload.text === "string") {
+              return `payload:"${truncate(payload.text, 72)}"`;
+            }
+            try {
+              return `payload:${truncate(JSON.stringify(payload), 96)}`;
+            } catch (_) {
+              return "payload:[unserializable]";
+            }
+          }
+          return `payload:${truncate(payload, 96)}`;
+        }
+
+        function shouldStickToBottom(el) {
+          return el.scrollTop + el.clientHeight >= el.scrollHeight - 24;
+        }
+
+        function appendEventRow(row) {
+          const stick = shouldStickToBottom(eventsEl);
+          eventsEl.appendChild(row);
+          while (eventsEl.childElementCount > MAX_EVENT_ROWS) {
+            eventsEl.removeChild(eventsEl.firstElementChild);
+          }
+          if (stick) {
+            eventsEl.scrollTop = eventsEl.scrollHeight;
+          }
+        }
+
+        function logEvent({ kind = "sys", op = "info", channel = "", event = "", from = "", id = "", ok, error = "", payload, text = "", ts = Date.now() }) {
+          const row = document.createElement("div");
+          row.className = "event-row";
+
+          const timeEl = document.createElement("span");
+          timeEl.className = "event-time";
+          timeEl.textContent = formatMessageTime(ts);
+
+          const badgeEl = document.createElement("span");
+          badgeEl.className = `event-badge badge-${kind}`;
+          badgeEl.textContent = kind.toUpperCase();
+
+          const opEl = document.createElement("span");
+          opEl.className = "event-op";
+          opEl.textContent = op;
+
+          const details = [];
+          if (channel) details.push(channel);
+          if (event) details.push(`event:${event}`);
+          if (from) details.push(`from:${from}`);
+          if (id) details.push(`id:${shortId(id)}`);
+          if (ok === true) details.push("ok");
+          if (ok === false) details.push("failed");
+          if (error) details.push(`error:${truncate(error, 64)}`);
+          if (text) details.push(truncate(text, 80));
+
+          const detailsEl = document.createElement("span");
+          detailsEl.className = "event-details";
+          detailsEl.textContent = details.join(" · ");
+
+          row.appendChild(timeEl);
+          row.appendChild(badgeEl);
+          row.appendChild(opEl);
+          if (details.length > 0) {
+            row.appendChild(detailsEl);
+          }
+
+          const payloadText = payloadPreview(payload);
+          if (payloadText) {
+            const payloadEl = document.createElement("span");
+            payloadEl.className = "event-payload";
+            payloadEl.textContent = payloadText;
+            row.appendChild(payloadEl);
+          }
+
+          appendEventRow(row);
+        }
+
+        function appendMessage(from, text, ts) {
+          const p = document.createElement("p");
+          const who = document.createElement("span");
+          who.className = "msg-user";
+          who.textContent = from;
+
+          const time = document.createElement("span");
+          time.className = "msg-time";
+          time.textContent = formatMessageTime(ts);
+
+          const body = document.createElement("span");
+          body.textContent = `: ${text}`;
+
+          p.appendChild(who);
+          p.appendChild(time);
+          p.appendChild(body);
+          messagesEl.appendChild(p);
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        function setStatus(text) {
+          statusEl.textContent = `Socket: ${text}`;
+        }
+
+        function connected() {
+          return state.ws && state.ws.readyState === WebSocket.OPEN;
+        }
+
+        function sendFrame(frame) {
+          if (!connected()) {
+            throw new Error("Socket is not connected");
+          }
+          state.ws.send(JSON.stringify(frame));
+          logEvent({
+            kind: "out",
+            op: frame.op || "frame",
+            channel: frame.channel || "",
+            event: frame.event || "",
+            id: frame.id || "",
+            payload: frame.data,
+          });
+        }
+
+        function renderTypingIndicator() {
+          if (peerTyping.size === 0) {
+            typingIndicatorEl.textContent = "";
+            return;
+          }
+          const labels = Array.from(peerTyping.values());
+          typingIndicatorEl.textContent =
+            labels.length === 1
+              ? `${labels[0]} is typing...`
+              : `${labels.join(", ")} are typing...`;
+        }
+
+        function setPeerTyping(userId, isTyping) {
+          if (!userId || userId === state.userId) return;
+          if (isTyping) {
+            const label = state.users.find((u) => u.user_id === userId)?.label || userId;
+            peerTyping.set(userId, label);
+            const oldTimer = peerTypingTimers.get(userId);
+            if (oldTimer) clearTimeout(oldTimer);
+            const timer = setTimeout(() => {
+              peerTyping.delete(userId);
+              peerTypingTimers.delete(userId);
+              renderTypingIndicator();
+            }, 2000);
+            peerTypingTimers.set(userId, timer);
+          } else {
+            peerTyping.delete(userId);
+            const oldTimer = peerTypingTimers.get(userId);
+            if (oldTimer) clearTimeout(oldTimer);
+            peerTypingTimers.delete(userId);
+          }
+          renderTypingIndicator();
+        }
+
+        function clearTypingState() {
+          for (const timer of peerTypingTimers.values()) {
+            clearTimeout(timer);
+          }
+          peerTypingTimers.clear();
+          peerTyping.clear();
+          renderTypingIndicator();
+        }
+
+        function emitTyping(isTyping) {
+          if (!connected()) return;
+          const channel = state.room || roomInput.value.trim();
+          if (!channel) return;
+          sendFrame({
+            op: "channel_emit",
+            id: nextId(),
+            channel,
+            event: "typing.changed",
+            data: { typing: Boolean(isTyping) },
+          });
+        }
+
+        async function loadUsers() {
+          const res = await fetch("/demo/users");
+          const users = await res.json();
+          state.users = users;
+          userSelect.innerHTML = "";
+          for (const user of users) {
+            const opt = document.createElement("option");
+            opt.value = user.user_id;
+            opt.textContent = `${user.label} (${user.user_id})`;
+            userSelect.appendChild(opt);
+          }
+          if (users[0]) {
+            userSelect.value = users[0].user_id;
+            state.userId = users[0].user_id;
+            state.token = users[0].token;
+          }
+        }
+
+        userSelect.addEventListener("change", () => {
+          const selected = state.users.find((user) => user.user_id === userSelect.value);
+          if (!selected) return;
+          state.userId = selected.user_id;
+          state.token = selected.token;
+        });
+
+        roomInput.addEventListener("input", () => {
+          state.room = roomInput.value.trim();
+        });
+
+        byId("connect").addEventListener("click", () => {
+          const targetRoom = roomInput.value.trim();
+          if (!targetRoom) {
+            logEvent({ kind: "err", op: "client.validate", text: "missing room" });
+            return;
+          }
+          state.room = targetRoom;
+          if (!state.token.trim()) {
+            logEvent({ kind: "err", op: "client.validate", text: "missing token" });
+            return;
+          }
+          const previous = state.ws;
+          if (previous) {
+            previous.close();
+          }
+          const socket = new WebSocket(wsUrl(state.token));
+          state.ws = socket;
+          setStatus("connecting");
+
+          socket.addEventListener("open", () => {
+            if (state.ws !== socket) return;
+            setStatus("connected");
+            logEvent({ kind: "sys", op: "socket.open" });
+            sendFrame({ op: "channel_join", id: nextId(), channel: state.room });
+          });
+
+          socket.addEventListener("message", (event) => {
+            if (state.ws !== socket) return;
+            try {
+              const frame = JSON.parse(event.data);
+              logEvent({
+                kind: frame.op === "ack" && frame.ok === false ? "err" : "in",
+                op: frame.op || "frame",
+                channel: frame.channel || "",
+                event: frame.event || "",
+                from: frame.from_user || "",
+                id: frame.id || "",
+                ok: typeof frame.ok === "boolean" ? frame.ok : undefined,
+                error: frame?.error?.message || "",
+                payload: frame.data,
+                ts: frame.ts,
+              });
+              if (frame.op === "event") {
+                const channel = typeof frame.channel === "string" ? frame.channel : "";
+                const activeRoom = roomInput.value.trim();
+                const shouldRender =
+                  !activeRoom ||
+                  channel === activeRoom ||
+                  channel.startsWith("room:") ||
+                  channel.startsWith("echo:");
+                if (shouldRender) {
+                  if (frame.event === "typing.changed") {
+                    setPeerTyping(frame.from_user || "", Boolean(frame.data?.typing));
+                  } else {
+                    const text = typeof frame.data?.text === "string"
+                      ? frame.data.text
+                      : JSON.stringify(frame.data);
+                    const sender = frame.from_user || "system";
+                    appendMessage(`${sender} @ ${channel || "unknown"}`, text, frame.ts);
+                  }
+                }
+              }
+            } catch (_) {
+              logEvent({
+                kind: "err",
+                op: "socket.message.parse",
+                text: truncate(event.data, 120),
+              });
+            }
+          });
+
+          socket.addEventListener("close", () => {
+            if (state.ws !== socket) return;
+            setStatus("disconnected");
+            logEvent({ kind: "sys", op: "socket.close" });
+            state.ws = null;
+            clearTypingState();
+          });
+
+          socket.addEventListener("error", () => {
+            if (state.ws !== socket) return;
+            logEvent({ kind: "err", op: "socket.error" });
+          });
+        });
+
+        byId("disconnect").addEventListener("click", () => {
+          if (selfTyping) {
+            try {
+              emitTyping(false);
+            } catch (_) {}
+          }
+          clearTypingState();
+          if (!state.ws) return;
+          state.ws.close();
+        });
+
+        byId("send").addEventListener("click", () => {
+          const text = messageInput.value.trim();
+          if (!text) return;
+          try {
+            const channel = state.room || roomInput.value.trim();
+            sendFrame({
+              op: "channel_emit",
+              id: nextId(),
+              channel,
+              event: "message.created",
+              data: { text, sender: state.userId },
+            });
+            if (!channel.startsWith("echo:")) {
+              appendMessage(`${state.userId || "you"} @ ${channel}`, text, Date.now());
+            }
+            if (selfTyping) {
+              emitTyping(false);
+              selfTyping = false;
+            }
+            if (selfTypingStopTimer) {
+              clearTimeout(selfTypingStopTimer);
+              selfTypingStopTimer = null;
+            }
+            messageInput.value = "";
+          } catch (err) {
+            logEvent({
+              kind: "err",
+              op: "send.message",
+              text: err.message || String(err),
+            });
+          }
+        });
+
+        messageInput.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          byId("send").click();
+        });
+
+        messageInput.addEventListener("input", () => {
+          if (!connected()) return;
+          const hasText = messageInput.value.trim().length > 0;
+          if (hasText && !selfTyping) {
+            selfTyping = true;
+            try {
+              emitTyping(true);
+            } catch (_) {}
+          }
+          if (!hasText && selfTyping) {
+            selfTyping = false;
+            try {
+              emitTyping(false);
+            } catch (_) {}
+          }
+          if (selfTypingStopTimer) clearTimeout(selfTypingStopTimer);
+          if (selfTyping) {
+            selfTypingStopTimer = setTimeout(() => {
+              if (!selfTyping) return;
+              selfTyping = false;
+              try {
+                emitTyping(false);
+              } catch (_) {}
+            }, 1200);
+          }
+        });
+
+        messageInput.addEventListener("blur", () => {
+          if (!selfTyping) return;
+          selfTyping = false;
+          if (selfTypingStopTimer) {
+            clearTimeout(selfTypingStopTimer);
+            selfTypingStopTimer = null;
+          }
+          try {
+            emitTyping(false);
+          } catch (_) {}
+        });
+
+        loadUsers().catch((err) =>
+          logEvent({
+            kind: "err",
+            op: "load.users",
+            text: String(err),
+          })
+        );
+      })();
+    </script>
+  </body>
+</html>
