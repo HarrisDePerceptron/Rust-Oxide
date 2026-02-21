@@ -17,7 +17,20 @@ pub struct RealtimeRuntimeState {
 }
 
 impl RealtimeRuntimeState {
-    pub fn new(handle: RealtimeHandle, verifier: Arc<dyn RealtimeTokenVerifier>) -> Self {
+    pub fn new<V>(handle: RealtimeHandle, verifier: V) -> Self
+    where
+        V: RealtimeTokenVerifier,
+    {
+        Self {
+            handle,
+            verifier: Arc::new(verifier),
+        }
+    }
+
+    pub fn new_with_shared_verifier(
+        handle: RealtimeHandle,
+        verifier: Arc<dyn RealtimeTokenVerifier>,
+    ) -> Self {
         Self { handle, verifier }
     }
 
@@ -49,6 +62,20 @@ impl RealtimeRuntimeState {
         F: Fn(String, Value) + Send + Sync + 'static,
     {
         self.handle.on_messages(handler)
+    }
+
+    pub fn on_channel_event<F>(&self, channel: &str, handler: F) -> SubscriptionId
+    where
+        F: Fn(String, Value) + Send + Sync + 'static,
+    {
+        self.handle.on_channel_event(channel, handler)
+    }
+
+    pub fn on_events<F>(&self, handler: F) -> SubscriptionId
+    where
+        F: Fn(String, String, Value) + Send + Sync + 'static,
+    {
+        self.handle.on_events(handler)
     }
 
     pub fn off(&self, id: SubscriptionId) -> bool {

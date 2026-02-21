@@ -62,7 +62,7 @@ fn realtime_runtime_for_state(
     let realtime = RealtimeHandle::spawn(state.config.realtime.clone());
     std::sync::Arc::new(RealtimeRuntimeState::new(
         realtime,
-        std::sync::Arc::new(AppRealtimeVerifier::new(state.auth_providers.clone())),
+        AppRealtimeVerifier::new(state.auth_providers.clone()),
     ))
 }
 

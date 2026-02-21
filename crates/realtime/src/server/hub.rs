@@ -26,9 +26,14 @@ const INBOUND_QUEUE_SIZE: usize = 4096;
 pub type SubscriptionId = u64;
 type ChannelHandler = Arc<dyn Fn(Value) + Send + Sync>;
 type GlobalHandler = Arc<dyn Fn(String, Value) + Send + Sync>;
+type ChannelEventHandler = Arc<dyn Fn(String, Value) + Send + Sync>;
+type GlobalEventHandler = Arc<dyn Fn(String, String, Value) + Send + Sync>;
 type ChannelHandlers =
     Arc<std::sync::Mutex<HashMap<String, HashMap<SubscriptionId, ChannelHandler>>>>;
 type GlobalHandlers = Arc<std::sync::Mutex<HashMap<SubscriptionId, GlobalHandler>>>;
+type ChannelEventHandlers =
+    Arc<std::sync::Mutex<HashMap<String, HashMap<SubscriptionId, ChannelEventHandler>>>>;
+type GlobalEventHandlers = Arc<std::sync::Mutex<HashMap<SubscriptionId, GlobalEventHandler>>>;
 
 #[derive(Clone)]
 pub(crate) struct InboundMessage {
@@ -43,6 +48,8 @@ pub struct RealtimeHandle {
     tx: Option<mpsc::Sender<HubCommand>>,
     channel_handlers: ChannelHandlers,
     global_handlers: GlobalHandlers,
+    channel_event_handlers: ChannelEventHandlers,
+    global_event_handlers: GlobalEventHandlers,
     next_subscription_id: Arc<AtomicU64>,
 }
 
@@ -54,6 +61,10 @@ impl RealtimeHandle {
     pub fn spawn_with_policy(config: RealtimeConfig, policy: Arc<dyn ChannelPolicy>) -> Self {
         let channel_handlers: ChannelHandlers = Arc::new(std::sync::Mutex::new(HashMap::new()));
         let global_handlers: GlobalHandlers = Arc::new(std::sync::Mutex::new(HashMap::new()));
+        let channel_event_handlers: ChannelEventHandlers =
+            Arc::new(std::sync::Mutex::new(HashMap::new()));
+        let global_event_handlers: GlobalEventHandlers =
+            Arc::new(std::sync::Mutex::new(HashMap::new()));
         let next_subscription_id = Arc::new(AtomicU64::new(1));
 
         if !config.enabled {
@@ -62,6 +73,8 @@ impl RealtimeHandle {
                 tx: None,
                 channel_handlers,
                 global_handlers,
+                channel_event_handlers,
+                global_event_handlers,
                 next_subscription_id,
             };
         }
@@ -76,6 +89,8 @@ impl RealtimeHandle {
             inbound_rx,
             Arc::clone(&channel_handlers),
             Arc::clone(&global_handlers),
+            Arc::clone(&channel_event_handlers),
+            Arc::clone(&global_event_handlers),
         );
 
         Self {
@@ -83,6 +98,8 @@ impl RealtimeHandle {
             tx: Some(tx),
             channel_handlers,
             global_handlers,
+            channel_event_handlers,
+            global_event_handlers,
             next_subscription_id,
         }
     }
@@ -93,6 +110,8 @@ impl RealtimeHandle {
             tx: None,
             channel_handlers: Arc::new(std::sync::Mutex::new(HashMap::new())),
             global_handlers: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            channel_event_handlers: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            global_event_handlers: Arc::new(std::sync::Mutex::new(HashMap::new())),
             next_subscription_id: Arc::new(AtomicU64::new(1)),
         }
     }
@@ -204,6 +223,34 @@ impl RealtimeHandle {
         id
     }
 
+    pub fn on_channel_event<F>(&self, channel: &str, handler: F) -> SubscriptionId
+    where
+        F: Fn(String, Value) + Send + Sync + 'static,
+    {
+        let id = self.next_subscription_id.fetch_add(1, Ordering::Relaxed);
+        let mut handlers = self
+            .channel_event_handlers
+            .lock()
+            .expect("channel event handler mutex poisoned");
+        handlers
+            .entry(channel.to_string())
+            .or_default()
+            .insert(id, Arc::new(handler));
+        id
+    }
+
+    pub fn on_events<F>(&self, handler: F) -> SubscriptionId
+    where
+        F: Fn(String, String, Value) + Send + Sync + 'static,
+    {
+        let id = self.next_subscription_id.fetch_add(1, Ordering::Relaxed);
+        self.global_event_handlers
+            .lock()
+            .expect("global event handler mutex poisoned")
+            .insert(id, Arc::new(handler));
+        id
+    }
+
     pub fn off(&self, id: SubscriptionId) -> bool {
         let mut removed = false;
 
@@ -221,6 +268,25 @@ impl RealtimeHandle {
             .lock()
             .expect("channel handler mutex poisoned");
         for handlers in channels.values_mut() {
+            if handlers.remove(&id).is_some() {
+                removed = true;
+            }
+        }
+
+        let mut global_events = self
+            .global_event_handlers
+            .lock()
+            .expect("global event handler mutex poisoned");
+        if global_events.remove(&id).is_some() {
+            removed = true;
+        }
+        drop(global_events);
+
+        let mut channel_events = self
+            .channel_event_handlers
+            .lock()
+            .expect("channel event handler mutex poisoned");
+        for handlers in channel_events.values_mut() {
             if handlers.remove(&id).is_some() {
                 removed = true;
             }
@@ -789,15 +855,25 @@ fn spawn_inbound_dispatcher(
     mut inbound_rx: mpsc::Receiver<InboundMessage>,
     channel_handlers: ChannelHandlers,
     global_handlers: GlobalHandlers,
+    channel_event_handlers: ChannelEventHandlers,
+    global_event_handlers: GlobalEventHandlers,
 ) {
     tokio::spawn(async move {
         while let Some(message) = inbound_rx.recv().await {
-            if message.event != DEFAULT_EVENT {
-                continue;
-            }
-
             dispatch_channel_handlers(&channel_handlers, &message.channel, &message.payload);
             dispatch_global_handlers(&global_handlers, &message.channel, &message.payload);
+            dispatch_channel_event_handlers(
+                &channel_event_handlers,
+                &message.channel,
+                &message.event,
+                &message.payload,
+            );
+            dispatch_global_event_handlers(
+                &global_event_handlers,
+                &message.channel,
+                &message.event,
+                &message.payload,
+            );
         }
     });
 }
@@ -827,6 +903,45 @@ fn dispatch_global_handlers(handlers: &GlobalHandlers, channel: &str, message: &
     }
 }
 
+fn dispatch_channel_event_handlers(
+    handlers: &ChannelEventHandlers,
+    channel: &str,
+    event: &str,
+    message: &Value,
+) {
+    let callbacks: Vec<ChannelEventHandler> = {
+        let guard = handlers
+            .lock()
+            .expect("channel event handler mutex poisoned");
+        guard
+            .get(channel)
+            .map(|entries| entries.values().cloned().collect())
+            .unwrap_or_default()
+    };
+
+    for callback in callbacks {
+        callback(event.to_string(), message.clone());
+    }
+}
+
+fn dispatch_global_event_handlers(
+    handlers: &GlobalEventHandlers,
+    channel: &str,
+    event: &str,
+    message: &Value,
+) {
+    let callbacks: Vec<GlobalEventHandler> = {
+        let guard = handlers
+            .lock()
+            .expect("global event handler mutex poisoned");
+        guard.values().cloned().collect()
+    };
+
+    for callback in callbacks {
+        callback(channel.to_string(), event.to_string(), message.clone());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -840,8 +955,9 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        ChannelHandlers, GlobalHandlers, dispatch_channel_handlers, dispatch_global_handlers,
-        should_echo_to_sender,
+        ChannelEventHandlers, ChannelHandlers, GlobalEventHandlers, GlobalHandlers,
+        dispatch_channel_event_handlers, dispatch_channel_handlers, dispatch_global_event_handlers,
+        dispatch_global_handlers, should_echo_to_sender,
     };
     use crate::server::ChannelName;
 
@@ -895,6 +1011,60 @@ mod tests {
         );
 
         dispatch_global_handlers(&handlers, "chat:room:1", &json!({"text":"hello"}));
+
+        assert_eq!(count.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn dispatch_channel_event_handlers_receives_event_name() {
+        let handlers: ChannelEventHandlers = Arc::new(std::sync::Mutex::new(HashMap::new()));
+        let count = Arc::new(AtomicUsize::new(0));
+        let count_for_handler = Arc::clone(&count);
+        handlers
+            .lock()
+            .expect("channel event handlers lock")
+            .entry("chat:room:1".to_string())
+            .or_default()
+            .insert(
+                1,
+                Arc::new(move |event, payload| {
+                    assert_eq!(event, "chat.typing");
+                    assert_eq!(payload["typing"], true);
+                    count_for_handler.fetch_add(1, Ordering::Relaxed);
+                }),
+            );
+
+        dispatch_channel_event_handlers(
+            &handlers,
+            "chat:room:1",
+            "chat.typing",
+            &json!({"typing": true}),
+        );
+
+        assert_eq!(count.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn dispatch_global_event_handlers_receives_channel_event_and_message() {
+        let handlers: GlobalEventHandlers = Arc::new(std::sync::Mutex::new(HashMap::new()));
+        let count = Arc::new(AtomicUsize::new(0));
+        let count_for_handler = Arc::clone(&count);
+        handlers.lock().expect("global event handlers lock").insert(
+            1,
+            Arc::new(move |channel, event, payload| {
+                assert_eq!(channel, "chat:room:1");
+                assert_eq!(event, "chat.message");
+                assert_eq!(payload["text"], "hello");
+                count_for_handler.fetch_add(1, Ordering::Relaxed);
+            }),
+        );
+
+        dispatch_global_event_handlers(
+            &handlers,
+            "chat:room:1",
+            "chat.message",
+            &json!({"text":"hello"}),
+        );
 
         assert_eq!(count.load(Ordering::Relaxed), 1);
     }

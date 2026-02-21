@@ -82,7 +82,7 @@ fn build_state(
     let realtime = RealtimeHandle::spawn(cfg.realtime.clone());
     let realtime_runtime = std::sync::Arc::new(RealtimeRuntimeState::new(
         realtime,
-        std::sync::Arc::new(AppRealtimeVerifier::new(providers.clone())),
+        AppRealtimeVerifier::new(providers.clone()),
     ));
     let state = AppState::new(cfg, db, providers);
     (state, realtime_runtime)

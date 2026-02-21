@@ -57,7 +57,7 @@ async fn run() -> anyhow::Result<()> {
     );
     let realtime_runtime = Arc::new(RealtimeRuntimeState::new(
         realtime.clone(),
-        Arc::new(AppRealtimeVerifier::new(providers.clone())),
+        AppRealtimeVerifier::new(providers.clone()),
     ));
 
     let state = AppState::new(cfg, db, providers);

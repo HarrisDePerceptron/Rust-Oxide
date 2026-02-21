@@ -28,10 +28,15 @@ pub type ClientResult<T> = std::result::Result<T, String>;
 pub type SubscriptionId = u64;
 type ChannelHandler = Arc<dyn Fn(Value) + Send + Sync>;
 type GlobalHandler = Arc<dyn Fn(String, Value) + Send + Sync>;
+type ChannelEventHandler = Arc<dyn Fn(String, Value) + Send + Sync>;
+type GlobalEventHandler = Arc<dyn Fn(String, String, Value) + Send + Sync>;
 type PendingAcks = Arc<Mutex<HashMap<String, oneshot::Sender<ClientResult<()>>>>>;
 type ChannelHandlers =
     Arc<std::sync::Mutex<HashMap<String, HashMap<SubscriptionId, ChannelHandler>>>>;
 type GlobalHandlers = Arc<std::sync::Mutex<HashMap<SubscriptionId, GlobalHandler>>>;
+type ChannelEventHandlers =
+    Arc<std::sync::Mutex<HashMap<String, HashMap<SubscriptionId, ChannelEventHandler>>>>;
+type GlobalEventHandlers = Arc<std::sync::Mutex<HashMap<SubscriptionId, GlobalEventHandler>>>;
 type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
 type WsWriter = SplitSink<WsStream, Message>;
 type WsReader = SplitStream<WsStream>;
@@ -42,6 +47,8 @@ pub struct RealtimeClient {
     pending_acks: PendingAcks,
     channel_handlers: ChannelHandlers,
     global_handlers: GlobalHandlers,
+    channel_event_handlers: ChannelEventHandlers,
+    global_event_handlers: GlobalEventHandlers,
     next_subscription_id: Arc<AtomicU64>,
     cfg: ClientConfig,
 }
@@ -63,6 +70,10 @@ impl RealtimeClient {
         let pending_acks: PendingAcks = Arc::new(Mutex::new(HashMap::new()));
         let channel_handlers: ChannelHandlers = Arc::new(std::sync::Mutex::new(HashMap::new()));
         let global_handlers: GlobalHandlers = Arc::new(std::sync::Mutex::new(HashMap::new()));
+        let channel_event_handlers: ChannelEventHandlers =
+            Arc::new(std::sync::Mutex::new(HashMap::new()));
+        let global_event_handlers: GlobalEventHandlers =
+            Arc::new(std::sync::Mutex::new(HashMap::new()));
 
         Self::spawn_writer_task(write, outbound_rx);
         Self::spawn_reader_task(
@@ -70,6 +81,8 @@ impl RealtimeClient {
             Arc::clone(&pending_acks),
             Arc::clone(&channel_handlers),
             Arc::clone(&global_handlers),
+            Arc::clone(&channel_event_handlers),
+            Arc::clone(&global_event_handlers),
         );
         Self::spawn_ping_task(outbound_tx.clone(), cfg.ping_interval);
 
@@ -78,6 +91,8 @@ impl RealtimeClient {
             pending_acks,
             channel_handlers,
             global_handlers,
+            channel_event_handlers,
+            global_event_handlers,
             next_subscription_id: Arc::new(AtomicU64::new(1)),
             cfg,
         })
@@ -153,6 +168,34 @@ impl RealtimeClient {
         id
     }
 
+    pub fn on_channel_event<F>(&self, channel: &str, handler: F) -> SubscriptionId
+    where
+        F: Fn(String, Value) + Send + Sync + 'static,
+    {
+        let id = self.next_subscription_id.fetch_add(1, Ordering::Relaxed);
+        let mut guard = self
+            .channel_event_handlers
+            .lock()
+            .expect("channel event handler mutex poisoned");
+        guard
+            .entry(channel.to_string())
+            .or_default()
+            .insert(id, Arc::new(handler));
+        id
+    }
+
+    pub fn on_events<F>(&self, handler: F) -> SubscriptionId
+    where
+        F: Fn(String, String, Value) + Send + Sync + 'static,
+    {
+        let id = self.next_subscription_id.fetch_add(1, Ordering::Relaxed);
+        self.global_event_handlers
+            .lock()
+            .expect("global event handler mutex poisoned")
+            .insert(id, Arc::new(handler));
+        id
+    }
+
     pub fn off(&self, id: SubscriptionId) -> bool {
         let mut removed = false;
 
@@ -170,6 +213,25 @@ impl RealtimeClient {
             .lock()
             .expect("channel handler mutex poisoned");
         for handlers in channels.values_mut() {
+            if handlers.remove(&id).is_some() {
+                removed = true;
+            }
+        }
+
+        let mut global_events = self
+            .global_event_handlers
+            .lock()
+            .expect("global event handler mutex poisoned");
+        if global_events.remove(&id).is_some() {
+            removed = true;
+        }
+        drop(global_events);
+
+        let mut channel_events = self
+            .channel_event_handlers
+            .lock()
+            .expect("channel event handler mutex poisoned");
+        for handlers in channel_events.values_mut() {
             if handlers.remove(&id).is_some() {
                 removed = true;
             }
@@ -209,6 +271,8 @@ impl RealtimeClient {
         pending_acks: PendingAcks,
         channel_handlers: ChannelHandlers,
         global_handlers: GlobalHandlers,
+        channel_event_handlers: ChannelEventHandlers,
+        global_event_handlers: GlobalEventHandlers,
     ) {
         tokio::spawn(async move {
             while let Some(next) = read.next().await {
@@ -225,6 +289,8 @@ impl RealtimeClient {
                     &pending_acks,
                     &channel_handlers,
                     &global_handlers,
+                    &channel_event_handlers,
+                    &global_event_handlers,
                 )
                 .await;
                 if !keep_reading {
@@ -241,6 +307,8 @@ impl RealtimeClient {
         pending_acks: &PendingAcks,
         channel_handlers: &ChannelHandlers,
         global_handlers: &GlobalHandlers,
+        channel_event_handlers: &ChannelEventHandlers,
+        global_event_handlers: &GlobalEventHandlers,
     ) -> bool {
         let text = match msg {
             Message::Text(text) => text,
@@ -256,7 +324,15 @@ impl RealtimeClient {
             }
         };
 
-        Self::handle_server_frame(frame, pending_acks, channel_handlers, global_handlers).await;
+        Self::handle_server_frame(
+            frame,
+            pending_acks,
+            channel_handlers,
+            global_handlers,
+            channel_event_handlers,
+            global_event_handlers,
+        )
+        .await;
         true
     }
 
@@ -265,6 +341,8 @@ impl RealtimeClient {
         pending_acks: &PendingAcks,
         channel_handlers: &ChannelHandlers,
         global_handlers: &GlobalHandlers,
+        channel_event_handlers: &ChannelEventHandlers,
+        global_event_handlers: &GlobalEventHandlers,
     ) {
         match frame {
             ServerFrame::Connected {
@@ -284,11 +362,10 @@ impl RealtimeClient {
                 data,
                 ..
             } => {
-                if event != DEFAULT_EVENT {
-                    return;
-                }
                 dispatch_channel_handlers(channel_handlers, &channel, &data);
                 dispatch_global_handlers(global_handlers, &channel, &data);
+                dispatch_channel_event_handlers(channel_event_handlers, &channel, &event, &data);
+                dispatch_global_event_handlers(global_event_handlers, &channel, &event, &data);
             }
             ServerFrame::Ack {
                 for_id, ok, error, ..
@@ -394,6 +471,45 @@ fn dispatch_global_handlers(handlers: &GlobalHandlers, channel: &str, message: &
 
     for callback in callbacks {
         callback(channel.to_string(), message.clone());
+    }
+}
+
+fn dispatch_channel_event_handlers(
+    handlers: &ChannelEventHandlers,
+    channel: &str,
+    event: &str,
+    message: &Value,
+) {
+    let callbacks: Vec<ChannelEventHandler> = {
+        let guard = handlers
+            .lock()
+            .expect("channel event handler mutex poisoned");
+        guard
+            .get(channel)
+            .map(|entries| entries.values().cloned().collect())
+            .unwrap_or_default()
+    };
+
+    for callback in callbacks {
+        callback(event.to_string(), message.clone());
+    }
+}
+
+fn dispatch_global_event_handlers(
+    handlers: &GlobalEventHandlers,
+    channel: &str,
+    event: &str,
+    message: &Value,
+) {
+    let callbacks: Vec<GlobalEventHandler> = {
+        let guard = handlers
+            .lock()
+            .expect("global event handler mutex poisoned");
+        guard.values().cloned().collect()
+    };
+
+    for callback in callbacks {
+        callback(channel.to_string(), event.to_string(), message.clone());
     }
 }
 

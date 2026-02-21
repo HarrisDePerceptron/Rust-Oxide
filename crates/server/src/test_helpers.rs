@@ -37,7 +37,7 @@ pub fn test_router(secret: &[u8]) -> Router {
     );
     let realtime_runtime = Arc::new(RealtimeRuntimeState::new(
         realtime,
-        Arc::new(AppRealtimeVerifier::new(providers.clone())),
+        AppRealtimeVerifier::new(providers.clone()),
     ));
     let state = AppState::new(cfg, db, providers);
     router(Arc::clone(&state), realtime_runtime).layer(Extension(chat_rooms))
