@@ -28,7 +28,7 @@ crates/realtime/          # Realtime transport crate + demo app
 ## Development Quick start (server)
 
 ```sh
-cargo run -p rust_oxide
+cargo run -p rust-oxide
 ```
 
 ## Realtime demo quick start
@@ -136,7 +136,7 @@ oxide api remove todo_item
 ## Tests
 
 ```sh
-cargo test -p rust_oxide
+cargo test -p rust-oxide
 ```
 
 Note: DB-backed tests are currently `#[ignore]` until a real Postgres is wired.

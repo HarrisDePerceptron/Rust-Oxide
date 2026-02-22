@@ -13,8 +13,8 @@ COPY . .
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target \
-    cargo build --locked --profile release-server -p rust_oxide \
-    && cp /app/target/release-server/rust_oxide /tmp/rust_oxide
+    cargo build --locked --profile release-server -p rust-oxide \
+    && cp /app/target/release-server/rust-oxide /tmp/rust-oxide
 
 FROM debian:bookworm-slim AS runtime
 
@@ -25,7 +25,7 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY --from=builder /tmp/rust_oxide /usr/local/bin/rust_oxide
+COPY --from=builder /tmp/rust-oxide /usr/local/bin/rust-oxide
 COPY --from=builder /app/crates/server/public /app/public
 
 ENV APP_GENERAL__HOST=0.0.0.0 \
@@ -35,4 +35,4 @@ EXPOSE 3000
 
 USER appuser:appuser
 
-CMD ["/usr/local/bin/rust_oxide"]
+CMD ["/usr/local/bin/rust-oxide"]

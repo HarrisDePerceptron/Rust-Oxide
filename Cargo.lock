@@ -2557,6 +2557,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-oxide"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "argon2",
+ "askama",
+ "async-trait",
+ "axum",
+ "base_entity_derive",
+ "chrono",
+ "config",
+ "dotenvy",
+ "futures-util",
+ "jsonwebtoken",
+ "proc-macro2",
+ "quote",
+ "rand 0.8.5",
+ "reqwest",
+ "rust-oxide-realtime",
+ "sea-orm",
+ "serde",
+ "serde_json",
+ "syn 2.0.114",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "rust-oxide-cli"
 version = "0.7.0"
 dependencies = [
@@ -2602,39 +2635,6 @@ dependencies = [
  "rkyv",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "rust_oxide"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "argon2",
- "askama",
- "async-trait",
- "axum",
- "base_entity_derive",
- "chrono",
- "config",
- "dotenvy",
- "futures-util",
- "jsonwebtoken",
- "proc-macro2",
- "quote",
- "rand 0.8.5",
- "reqwest",
- "rust-oxide-realtime",
- "sea-orm",
- "serde",
- "serde_json",
- "syn 2.0.114",
- "thiserror",
- "tokio",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]

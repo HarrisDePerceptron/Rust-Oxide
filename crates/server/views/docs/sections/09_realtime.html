@@ -32,11 +32,15 @@ impl RealtimeTokenVerifier for MyVerifier {
     }
 }
 
-let handle = SocketServerHandle::spawn(RealtimeConfig::default());
-let runtime = Arc::new(SocketAppState::new(handle, MyVerifier));
+let socket_server_handle = SocketServerHandle::spawn(RealtimeConfig::default());
+let socket_app_state = Arc::new(SocketAppState::new(socket_server_handle.clone(), MyVerifier));
+
+socket_server_handle.on_channel_event("room:lobby", |event, payload| {
+    println!("room:lobby event={event} payload={payload}");
+});
 
 // default websocket path: /realtime/socket
-let app = Router::new().merge(realtime::server::axum::router(runtime));</code></pre>
+let app = Router::new().merge(realtime::server::axum::router(socket_app_state));</code></pre>
             <p class="text-sm text-black/60">
               This is the smallest server-side setup. Add
               <span class="font-semibold">spawn_with_policy(...)</span> only if you need custom channel authorization rules.
@@ -47,7 +51,7 @@ let app = Router::new().merge(realtime::server::axum::router(runtime));</code></
             <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Bare minimum router registration for /api/v1/realtime/socket</h3>
             <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// Default realtime route path is /realtime/socket
 let app = Router::new()
-    .nest(\"/api/v1\", realtime::server::axum::router(runtime));
+    .nest(\"/api/v1\", realtime::server::axum::router(socket_app_state));
 
 // Final endpoint becomes: /api/v1/realtime/socket</code></pre>
             <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// Optional: customize realtime route options
@@ -61,7 +65,7 @@ let opts = RealtimeRouteOptions {
 
 let app = Router::new().nest(
     \"/api/v1\",
-    realtime::server::axum::router_with_options(runtime, opts),
+    realtime::server::axum::router_with_options(socket_app_state, opts),
 );</code></pre>
           </section>
 
@@ -86,23 +90,50 @@ client.send_event("room:lobby", "typing.changed", json!({ "typing": true })).awa
               <li><span class="font-semibold">RealtimeConfig</span>: limits, heartbeat, idle timeout, rates, queue sizing.</li>
               <li><span class="font-semibold">SocketServerHandle</span>: low-level runtime handle.</li>
               <li><span class="font-semibold">SocketAppState</span>: app wrapper that bundles realtime handle + token verifier.</li>
+              <li><span class="font-semibold">Channel / Event / Payload / UserId</span>: semantic aliases used in callbacks and send APIs.</li>
               <li><span class="font-semibold">RealtimeTokenVerifier</span>: verifies bearer/query token into <span class="font-semibold">SessionAuth</span>.</li>
               <li><span class="font-semibold">ChannelPolicy</span>: authorization rules for join/publish.</li>
               <li><span class="font-semibold">RealtimeClient</span>: Rust websocket client with join/leave/send/send_event/on/off.</li>
             </ul>
-            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// server-side helpers (event defaults to "message")
-runtime.handle.send(channel, payload).await?;
-runtime.handle.send_to_user(user_id, payload).await?;
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>use realtime::server::{Channel, Event, Payload, UserId};
+
+// server-side helpers (event defaults to "message")
+socket_server_handle.send(channel, payload).await?;
+socket_server_handle.send_to_user(user_id, payload).await?;
 
 // explicit event variants
-runtime.handle.send_event(channel, event, payload).await?;
-runtime.handle.send_event_to_user(user_id, event, payload).await?;
+socket_server_handle.send_event(channel, event, payload).await?;
+socket_server_handle.send_event_to_user(user_id, event, payload).await?;
 
 // inbound subscriptions
-runtime.handle.on_message(channel, |payload| { ... });
-runtime.handle.on_messages(|channel, payload| { ... });
-runtime.handle.on_channel_event(channel, |event, payload| { ... });
-runtime.handle.on_events(|channel, event, payload| { ... });</code></pre>
+socket_server_handle.on_message("room:lobby", |payload: Payload| { ... });
+socket_server_handle.on_messages(|channel: Channel, payload: Payload| { ... });
+socket_server_handle.on_channel_event("room:lobby", |event: Event, payload: Payload| { ... });
+socket_server_handle.on_events(|channel: Channel, event: Event, payload: Payload| { ... });</code></pre>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Server template wiring: where to keep the handle</h3>
+            <p class="text-sm text-black/70">
+              In the server template, keep one cloned <span class="font-semibold">SocketServerHandle</span> where you need publish/subscribe (services, jobs, route handlers),
+              and pass <span class="font-semibold">SocketAppState</span> only to the websocket router.
+            </p>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// main.rs
+let socket_server_handle = SocketServerHandle::spawn(cfg.realtime.clone());
+let socket_app_state = Arc::new(SocketAppState::new(
+    socket_server_handle.clone(),
+    AppRealtimeVerifier::new(providers.clone()),
+));
+
+let app = Router::new()
+    .merge(router(Arc::clone(&state), Arc::clone(&socket_app_state)));
+
+let notices = NoticeService::new(socket_server_handle.clone());
+notices.broadcast_startup().await?;</code></pre>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// any service or handler that receives SocketServerHandle
+socket_server_handle
+    .send_event("room:lobby", "typing.changed", payload)
+    .await?;</code></pre>
           </section>
 
           <section class="space-y-3 border-t border-black/10 pt-6">
@@ -111,17 +142,17 @@ runtime.handle.on_events(|channel, event, payload| { ... });</code></pre>
               <div>
                 <h4 class="text-sm font-semibold text-[color:var(--pine)]">1) Server to server (inside backend runtime)</h4>
                 <p>Use server subscriptions and publish through the realtime handle for in-process workflows.</p>
-                <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>runtime.handle.on_events(|channel, event, payload| {
+                <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>socket_server_handle.on_events(|channel, event, payload| {
     // consume realtime traffic in server logic
 });
 
-runtime.handle.send_event("ops:alerts", "alert.created", payload).await?;</code></pre>
+socket_server_handle.send_event("ops:alerts", "alert.created", payload).await?;</code></pre>
               </div>
               <div>
                 <h4 class="text-sm font-semibold text-[color:var(--pine)]">2) Server to client</h4>
                 <p>Publish to a channel or directly to a user's private stream (<span class="font-semibold">user:&lt;id&gt;</span>).</p>
-                <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>runtime.handle.send_event("room:lobby", "presence.updated", payload).await?;
-runtime.handle.send_event_to_user(user_id, "notice.created", payload).await?;</code></pre>
+                <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-3 text-xs text-[color:var(--pine)]"><code>socket_server_handle.send_event("room:lobby", "presence.updated", payload).await?;
+socket_server_handle.send_event_to_user(user_id, "notice.created", payload).await?;</code></pre>
               </div>
               <div>
                 <h4 class="text-sm font-semibold text-[color:var(--pine)]">3) Client to client via server</h4>

@@ -10,7 +10,7 @@
 ## Workspace Structure
 - Workspace manifest: `Cargo.toml`.
 - Members:
-  - `crates/server` (`rust_oxide`): Axum + SeaORM backend template.
+  - `crates/server` (`rust-oxide`): Axum + SeaORM backend template.
   - `crates/companion_cli` (`rust-oxide-cli`, binary `oxide`): project/API scaffolding CLI.
   - `crates/base_entity_derive` (`base_entity_derive`): proc-macro crate used by server entities.
 - Default workspace member: `crates/server`.
@@ -23,9 +23,9 @@
 
 ## Crate-Specific Commands
 - Server:
-  - `cargo run -p rust_oxide`
-  - `cargo test -p rust_oxide`
-  - `cargo run -p rust_oxide --example client`
+  - `cargo run -p rust-oxide`
+  - `cargo test -p rust-oxide`
+  - `cargo run -p rust-oxide --example client`
 - Companion CLI:
   - `cargo run -p rust-oxide-cli -- --help`
   - `cargo run -p rust-oxide-cli -- init my_app`

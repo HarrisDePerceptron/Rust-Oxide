@@ -103,7 +103,7 @@
 
 
 ## Commands (workspace root)
-- `cargo run -p rust_oxide`
-- `cargo test -p rust_oxide`
+- `cargo run -p rust-oxide`
+- `cargo test -p rust-oxide`
 - `cargo clippy --all-targets --all-features`
 - `cargo fmt`
