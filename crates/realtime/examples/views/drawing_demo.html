@@ -177,7 +177,7 @@
         border-radius: 12px;
         background: #f8fafc;
         display: grid;
-        grid-template-columns: 1.1fr 1fr 1fr;
+        grid-template-columns: 1fr 1fr 0.9fr 0.9fr 0.9fr;
         gap: 10px;
       }
 
@@ -189,6 +189,31 @@
 
       .tool-field label {
         margin-bottom: 5px;
+      }
+
+      .tool-icons {
+        display: flex;
+        gap: 8px;
+      }
+
+      .tool-icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #ffffff;
+        color: #111827;
+        font-size: 0.85rem;
+        padding: 9px 10px;
+        cursor: pointer;
+      }
+
+      .tool-icon-btn.active {
+        border-color: #111827;
+        background: #111827;
+        color: #ffffff;
       }
 
       .swatches {
@@ -230,7 +255,9 @@
       }
 
       #board,
-      #board-preview {
+      #board-preview,
+      #text-layer,
+      #board-cursors {
         position: absolute;
         inset: 0;
         width: 100%;
@@ -251,6 +278,54 @@
 
       #board-preview {
         pointer-events: none;
+      }
+
+      #text-layer {
+        pointer-events: none;
+      }
+
+      #board-cursors {
+        pointer-events: none;
+      }
+
+      .text-node {
+        position: absolute;
+        min-width: 22px;
+        min-height: 20px;
+        padding: 4px 6px;
+        border: 1px dashed transparent;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.72);
+        line-height: 1.25;
+        white-space: pre-wrap;
+        word-break: break-word;
+        cursor: move;
+        pointer-events: auto;
+        user-select: none;
+      }
+
+      .text-node:hover {
+        border-color: rgba(15, 23, 42, 0.28);
+      }
+
+      .text-node.is-active {
+        border-color: rgba(15, 23, 42, 0.42);
+        background: rgba(255, 255, 255, 0.9);
+      }
+
+      .text-editor {
+        position: absolute;
+        min-width: 120px;
+        min-height: 36px;
+        padding: 6px 7px;
+        border: 1px solid rgba(15, 23, 42, 0.4);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.96);
+        resize: both;
+        overflow: auto;
+        outline: none;
+        line-height: 1.25;
+        pointer-events: auto;
       }
 
       .events {
@@ -292,7 +367,7 @@
     <div class="shell">
       <h1>Realtime Drawing Demo</h1>
       <p class="sub">
-        Join the same board channel from multiple tabs and draw black free strokes in real time via
+        Join the same board channel from multiple tabs and draw, shape, and annotate in real time via
         <code>/api/v1/realtime/socket</code>.
       </p>
 
@@ -334,6 +409,14 @@
               </select>
             </div>
             <div class="tool-field">
+              <label>Actions</label>
+              <div class="tool-icons">
+                <button id="tool-move" class="tool-icon-btn" type="button" title="Move shape">↔ Move</button>
+                <button id="tool-eraser" class="tool-icon-btn" type="button" title="Erase shape">⌫ Erase</button>
+                <button id="tool-text" class="tool-icon-btn" type="button" title="Add text">T Text</button>
+              </div>
+            </div>
+            <div class="tool-field">
               <label>Color</label>
               <div class="swatches">
                 <button id="color-black" class="swatch swatch-black active" data-color="#000000" aria-label="Black"></button>
@@ -350,10 +433,22 @@
                 <option value="8">8 px</option>
               </select>
             </div>
+            <div class="tool-field">
+              <label for="font-size">Font Size</label>
+              <select id="font-size">
+                <option value="14">14 px</option>
+                <option value="18">18 px</option>
+                <option value="24">24 px</option>
+                <option value="32">32 px</option>
+                <option value="40">40 px</option>
+              </select>
+            </div>
           </div>
           <div class="board-canvas-stack">
             <canvas id="board"></canvas>
             <canvas id="board-preview"></canvas>
+            <div id="text-layer"></div>
+            <canvas id="board-cursors"></canvas>
           </div>
         </div>
         <div class="card events">
@@ -361,7 +456,7 @@
           <div id="events"></div>
           <p class="hint">
             Events: <code>stroke.chunk</code>, <code>board.cleared</code>, <code>board.sync.request</code>,
-            <code>board.sync.snapshot</code>. Points are normalized in <code>[0..1]</code>.
+            <code>board.sync.snapshot</code>, <code>cursor.updated</code>. Points are normalized in <code>[0..1]</code>.
           </p>
         </div>
       </section>
@@ -373,12 +468,30 @@
         const BOARD_CLEARED_EVENT = "board.cleared";
         const SYNC_REQUEST_EVENT = "board.sync.request";
         const SYNC_SNAPSHOT_EVENT = "board.sync.snapshot";
+        const CURSOR_EVENT = "cursor.updated";
         const TOOL_PEN = "pen";
-        const ALLOWED_TOOLS = new Set(["pen", "rectangle", "square", "circle", "triangle", "arrow"]);
+        const TOOL_MOVE = "move";
+        const TOOL_ERASER = "eraser";
+        const TOOL_TEXT = "text";
+        const ALLOWED_TOOLS = new Set([
+          "pen",
+          "move",
+          "eraser",
+          "rectangle",
+          "square",
+          "circle",
+          "triangle",
+          "arrow",
+          "text",
+        ]);
         const ALLOWED_COLORS = new Set(["#000000", "#dc2626", "#16a34a"]);
         const MAX_EVENT_LINES = 260;
         const FLUSH_INTERVAL_MS = 28;
         const MIN_POINT_DELTA = 0.0008;
+        const CURSOR_SEND_INTERVAL_MS = 55;
+        const CURSOR_IDLE_MS = 2200;
+        const SHAPE_MOVE_SEND_INTERVAL_MS = 38;
+        const MAX_TEXT_CHARS = 400;
 
         const state = {
           ws: null,
@@ -390,8 +503,10 @@
           syncReady: false,
           seq: 0,
           tool: TOOL_PEN,
+          drawTool: TOOL_PEN,
           color: "#000000",
           strokeWidth: 2,
+          fontSize: 24,
           drawing: false,
           pointerId: null,
           strokeId: "",
@@ -400,23 +515,37 @@
           shapeStart: null,
           pendingPoints: [],
           flushTimer: null,
-          remoteLastByStroke: new Map(),
+          shapeObjects: new Map(),
+          remoteCursors: new Map(),
+          cursorLastSentAt: 0,
           activeStyle: null,
+          textObjects: new Map(),
+          activeTextEditId: null,
+          activeTextEditor: null,
+          textDrag: null,
+          shapeDrag: null,
         };
 
         const byId = (id) => document.getElementById(id);
         const userSelect = byId("user");
         const boardInput = byId("board-channel");
         const toolSelect = byId("tool-select");
+        const toolMoveButton = byId("tool-move");
+        const toolEraserButton = byId("tool-eraser");
+        const toolTextButton = byId("tool-text");
         const strokeWidthSelect = byId("stroke-width");
+        const fontSizeSelect = byId("font-size");
         const statusEl = byId("status");
         const boardMetaEl = byId("board-meta");
         const eventsEl = byId("events");
         const swatches = Array.from(document.querySelectorAll(".swatch"));
         const canvas = byId("board");
         const previewCanvas = byId("board-preview");
+        const textLayer = byId("text-layer");
+        const cursorCanvas = byId("board-cursors");
         const ctx = canvas.getContext("2d");
         const previewCtx = previewCanvas.getContext("2d");
+        const cursorCtx = cursorCanvas.getContext("2d");
 
         function nextId() {
           state.seq += 1;
@@ -466,13 +595,18 @@
             return `cleared_by=${payload.cleared_by}`;
           }
           const stroke = typeof payload.stroke_id === "string" ? payload.stroke_id.slice(0, 8) : "unknown";
+          const action = typeof payload.action === "string" ? payload.action : "draw";
           const points = Array.isArray(payload.points) ? payload.points.length : 0;
           const tool = typeof payload.tool === "string" ? payload.tool : TOOL_PEN;
           const color = typeof payload.color === "string" ? payload.color : "#000000";
           const width = Number(payload.stroke_width);
           const widthLabel = Number.isFinite(width) ? width : 2;
+          const text =
+            typeof payload.text === "string" && payload.text.trim().length > 0
+              ? ` text="${payload.text.slice(0, 24)}"`
+              : "";
           const ended = payload.ended === true ? " ended" : "";
-          return `stroke=${stroke} tool=${tool} color=${color} width=${widthLabel} points=${points}${ended}`;
+          return `stroke=${stroke} action=${action} tool=${tool} color=${color} width=${widthLabel} points=${points}${text}${ended}`;
         }
 
         function logEvent(message) {
@@ -491,10 +625,12 @@
             throw new Error("Socket is not connected");
           }
           state.ws.send(JSON.stringify(frame));
-          const op = frame.op || "frame";
-          const channel = frame.channel ? ` channel=${frame.channel}` : "";
-          const event = frame.event ? ` event=${frame.event}` : "";
-          logEvent(`OUT op=${op}${channel}${event}`);
+          if (frame.event !== CURSOR_EVENT) {
+            const op = frame.op || "frame";
+            const channel = frame.channel ? ` channel=${frame.channel}` : "";
+            const event = frame.event ? ` event=${frame.event}` : "";
+            logEvent(`OUT op=${op}${channel}${event}`);
+          }
         }
 
         function clamp01(value) {
@@ -508,14 +644,19 @@
           canvas.height = Math.max(1, Math.round(rect.height * dpr));
           previewCanvas.width = canvas.width;
           previewCanvas.height = canvas.height;
+          cursorCanvas.width = canvas.width;
+          cursorCanvas.height = canvas.height;
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
           previewCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          cursorCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
           ctx.lineCap = "round";
           ctx.lineJoin = "round";
           previewCtx.lineCap = "round";
           previewCtx.lineJoin = "round";
-          paintBoardBackground();
+          renderShapeObjects();
           clearPreview();
+          renderTextLayer();
+          renderRemoteCursors();
         }
 
         function paintBoardBackground() {
@@ -546,8 +687,11 @@
 
         function applyBoardClear(sourceLabel) {
           stopLocalStroke();
-          state.remoteLastByStroke.clear();
-          clearBoard();
+          state.shapeObjects.clear();
+          state.shapeDrag = null;
+          clearTextObjects();
+          renderShapeObjects();
+          clearPreview();
           if (sourceLabel) {
             logEvent(`SYS board cleared by ${sourceLabel}`);
           }
@@ -564,10 +708,20 @@
           previewCtx.clearRect(0, 0, previewCanvas.clientWidth, previewCanvas.clientHeight);
         }
 
+        function clearCursorLayer() {
+          cursorCtx.clearRect(0, 0, cursorCanvas.clientWidth, cursorCanvas.clientHeight);
+        }
+
         function clampStrokeWidth(value) {
           const width = Number(value);
           if (!Number.isFinite(width)) return 2;
           return Math.max(1, Math.min(14, Math.round(width)));
+        }
+
+        function clampFontSize(value) {
+          const size = Number(value);
+          if (!Number.isFinite(size)) return 24;
+          return Math.max(10, Math.min(96, Math.round(size)));
         }
 
         function clampColor(value) {
@@ -585,6 +739,7 @@
             tool: clampTool(state.tool),
             color: clampColor(state.color),
             stroke_width: clampStrokeWidth(state.strokeWidth),
+            font_size: clampFontSize(state.fontSize),
           };
         }
 
@@ -593,7 +748,15 @@
             tool: clampTool(payload?.tool),
             color: clampColor(payload?.color),
             stroke_width: clampStrokeWidth(payload?.stroke_width),
+            font_size: clampFontSize(payload?.font_size),
           };
+        }
+
+        function sanitizeText(value) {
+          const text = String(value || "").replace(/\r\n/g, "\n");
+          const limited = text.slice(0, MAX_TEXT_CHARS);
+          const trimmed = limited.replace(/[ \t]+\n/g, "\n").trim();
+          return trimmed;
         }
 
         function drawSegmentOn(targetCtx, from, to, style) {
@@ -621,6 +784,408 @@
 
         function drawDot(point, style) {
           drawDotOn(ctx, point, style);
+        }
+
+        function pxToNorm(x, y) {
+          const width = Math.max(1, canvas.clientWidth);
+          const height = Math.max(1, canvas.clientHeight);
+          return [clamp01(x / width), clamp01(y / height)];
+        }
+
+        function renderShapeObjects() {
+          paintBoardBackground();
+          for (const shape of state.shapeObjects.values()) {
+            if (!shape || !Array.isArray(shape.points) || shape.points.length === 0) continue;
+            const style = {
+              tool: clampTool(shape.tool),
+              color: clampColor(shape.color),
+              stroke_width: clampStrokeWidth(shape.strokeWidth),
+              font_size: clampFontSize(shape.fontSize),
+            };
+            strokePolylineOn(ctx, shape.points, style);
+          }
+        }
+
+        function applyShapePayload(payload) {
+          const strokeId = String(payload?.stroke_id || "").trim();
+          if (!strokeId) return;
+          const action = String(payload?.action || "draw").trim().toLowerCase();
+
+          if (action === "delete") {
+            state.shapeObjects.delete(strokeId);
+            renderShapeObjects();
+            return;
+          }
+
+          if (action === "move") {
+            const target = state.shapeObjects.get(strokeId);
+            if (!target || !Array.isArray(target.points) || target.points.length === 0) return;
+            const dx = Number(payload?.dx);
+            const dy = Number(payload?.dy);
+            if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+            target.points = target.points.map((pt) => normalizedPoint(pt[0] + dx, pt[1] + dy));
+            target.updatedAt = Date.now();
+            renderShapeObjects();
+            return;
+          }
+
+          const style = styleFromPayload(payload);
+          if (style.tool === TOOL_TEXT) return;
+          const points = parsePoints(payload?.points);
+          if (points.length === 0) return;
+
+          let target = state.shapeObjects.get(strokeId);
+          if (!target) {
+            target = {
+              id: strokeId,
+              tool: style.tool,
+              color: style.color,
+              strokeWidth: style.stroke_width,
+              fontSize: style.font_size,
+              points: [],
+              updatedAt: Date.now(),
+            };
+            state.shapeObjects.set(strokeId, target);
+          }
+
+          target.tool = style.tool;
+          target.color = style.color;
+          target.strokeWidth = style.stroke_width;
+          target.fontSize = style.font_size;
+          target.updatedAt = Date.now();
+          if (style.tool === TOOL_PEN) {
+            target.points.push(...points);
+          } else {
+            target.points = points;
+          }
+          renderShapeObjects();
+        }
+
+        function textObjectFromPayload(payload) {
+          const textId = String(payload?.text_id || payload?.stroke_id || "").trim();
+          if (!textId) return null;
+          const point = parsePoints(payload?.points)[0];
+          if (!point) return null;
+          return {
+            id: textId,
+            x: point[0],
+            y: point[1],
+            text: sanitizeText(payload?.text || ""),
+            color: clampColor(payload?.color),
+            fontSize: clampFontSize(payload?.font_size),
+            deleted: payload?.deleted === true,
+            updatedAt: Date.now(),
+          };
+        }
+
+        function updateToolbarFromTextObject(textObject) {
+          state.color = clampColor(textObject.color);
+          state.fontSize = clampFontSize(textObject.fontSize);
+          state.tool = TOOL_TEXT;
+          fontSizeSelect.value = String(state.fontSize);
+          renderToolModeControls();
+          renderColorSelection();
+        }
+
+        function updateActiveEditorStyleFromToolbar() {
+          if (!state.activeTextEditor) return;
+          state.activeTextEditor.style.color = clampColor(state.color);
+          state.activeTextEditor.style.fontSize = `${clampFontSize(state.fontSize)}px`;
+        }
+
+        function textNodeSizeHint(text, fontSize) {
+          const lines = String(text || "").split("\n");
+          const widest = lines.reduce((acc, line) => Math.max(acc, line.length), 1);
+          const width = Math.max(120, Math.min(540, Math.round(widest * fontSize * 0.62 + 20)));
+          const height = Math.max(42, Math.round(lines.length * fontSize * 1.35 + 16));
+          return { width, height };
+        }
+
+        function autosizeEditor(editor) {
+          if (!editor) return;
+          editor.style.height = "auto";
+          const minH = 42;
+          editor.style.height = `${Math.max(minH, editor.scrollHeight + 2)}px`;
+        }
+
+        function clearActiveTextEditor(commit) {
+          const editor = state.activeTextEditor;
+          const textId = state.activeTextEditId;
+          if (!editor || !textId) {
+            state.activeTextEditor = null;
+            state.activeTextEditId = null;
+            return;
+          }
+
+          const text = sanitizeText(editor.value);
+          const existing = state.textObjects.get(textId);
+          if (commit && existing) {
+            if (!text) {
+              state.textObjects.delete(textId);
+              emitTextObject({ ...existing, text: "", deleted: true });
+            } else {
+              const updated = {
+                ...existing,
+                text,
+                color: clampColor(state.color),
+                fontSize: clampFontSize(state.fontSize),
+                deleted: false,
+                updatedAt: Date.now(),
+              };
+              state.textObjects.set(textId, updated);
+              emitTextObject(updated);
+            }
+          } else if (!existing?.text) {
+            state.textObjects.delete(textId);
+          }
+
+          editor.remove();
+          state.activeTextEditor = null;
+          state.activeTextEditId = null;
+          renderTextLayer();
+        }
+
+        function startTextEdit(textId, options = {}) {
+          clearActiveTextEditor(true);
+          const textObject = state.textObjects.get(textId);
+          if (!textObject) return;
+
+          const editor = document.createElement("textarea");
+          editor.className = "text-editor";
+          const anchor = normToPx([textObject.x, textObject.y]);
+          editor.style.left = `${anchor.x}px`;
+          editor.style.top = `${anchor.y}px`;
+          const hint = textNodeSizeHint(textObject.text || " ", textObject.fontSize);
+          editor.style.width = `${hint.width}px`;
+          editor.style.minHeight = `${hint.height}px`;
+          editor.value = textObject.text || "";
+
+          updateToolbarFromTextObject(textObject);
+          updateActiveEditorStyleFromToolbar();
+          editor.style.color = clampColor(state.color);
+          editor.style.fontSize = `${clampFontSize(state.fontSize)}px`;
+
+          editor.addEventListener("input", () => {
+            if (editor.value.length > MAX_TEXT_CHARS) {
+              editor.value = editor.value.slice(0, MAX_TEXT_CHARS);
+            }
+            autosizeEditor(editor);
+          });
+          editor.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              clearActiveTextEditor(false);
+            }
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              editor.blur();
+            }
+          });
+          editor.addEventListener("blur", () => {
+            clearActiveTextEditor(true);
+          });
+          editor.addEventListener("pointerdown", (event) => {
+            event.stopPropagation();
+          });
+
+          textLayer.appendChild(editor);
+          state.activeTextEditor = editor;
+          state.activeTextEditId = textId;
+          renderTextLayer();
+          autosizeEditor(editor);
+          editor.focus();
+          if (options.selectAll) {
+            editor.setSelectionRange(0, editor.value.length);
+          } else {
+            const end = editor.value.length;
+            editor.setSelectionRange(end, end);
+          }
+        }
+
+        function createTextObjectAt(point) {
+          const textId = makeStrokeId();
+          const style = getCurrentStyle();
+          const textObject = {
+            id: textId,
+            x: point[0],
+            y: point[1],
+            text: "",
+            color: style.color,
+            fontSize: style.font_size,
+            deleted: false,
+            updatedAt: Date.now(),
+          };
+          state.textObjects.set(textId, textObject);
+          renderTextLayer();
+          startTextEdit(textId, { selectAll: true });
+        }
+
+        function emitTextObject(textObject) {
+          if (!canDraw()) return;
+          const point = [Number(textObject.x.toFixed(5)), Number(textObject.y.toFixed(5))];
+          const payload = {
+            stroke_id: textObject.id,
+            text_id: textObject.id,
+            sender_user_id: state.userId,
+            tool: TOOL_TEXT,
+            color: clampColor(textObject.color),
+            font_size: clampFontSize(textObject.fontSize),
+            text: sanitizeText(textObject.text),
+            deleted: textObject.deleted === true,
+            seq: 0,
+            points: [point],
+            ended: true,
+          };
+          try {
+            sendFrame({
+              op: "channel_emit",
+              id: nextId(),
+              channel: state.boardChannel,
+              event: STROKE_EVENT,
+              data: payload,
+            });
+          } catch (err) {
+            logEvent(`ERR send.text ${String(err)}`);
+          }
+        }
+
+        function applyTextPayload(payload) {
+          const textObject = textObjectFromPayload(payload);
+          if (!textObject) return;
+          if (textObject.deleted || !textObject.text) {
+            state.textObjects.delete(textObject.id);
+            if (state.activeTextEditId === textObject.id) {
+              clearActiveTextEditor(false);
+            }
+          } else {
+            state.textObjects.set(textObject.id, textObject);
+          }
+          renderTextLayer();
+        }
+
+        function clearTextObjects() {
+          clearActiveTextEditor(false);
+          state.textObjects.clear();
+          state.textDrag = null;
+          renderTextLayer();
+        }
+
+        function renderTextLayer() {
+          const activeId = state.activeTextEditId;
+          textLayer.innerHTML = "";
+
+          const textObjects = Array.from(state.textObjects.values()).filter((item) => !item.deleted);
+          textObjects.sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0));
+          for (const textObject of textObjects) {
+            if (!textObject.text || textObject.id === activeId) {
+              continue;
+            }
+            const node = document.createElement("div");
+            node.className = "text-node";
+            node.dataset.textId = textObject.id;
+            node.textContent = textObject.text;
+            node.style.left = `${normToPx([textObject.x, textObject.y]).x}px`;
+            node.style.top = `${normToPx([textObject.x, textObject.y]).y}px`;
+            node.style.color = clampColor(textObject.color);
+            node.style.fontSize = `${clampFontSize(textObject.fontSize)}px`;
+            const activeTool = clampTool(state.tool);
+            node.style.pointerEvents =
+              activeTool === TOOL_TEXT || activeTool === TOOL_MOVE || activeTool === TOOL_ERASER
+                ? "auto"
+                : "none";
+
+            let pointerStartX = 0;
+            let pointerStartY = 0;
+            let moved = false;
+
+            node.addEventListener("pointerdown", (event) => {
+              if (!canDraw()) return;
+              const tool = clampTool(state.tool);
+              if (tool !== TOOL_TEXT && tool !== TOOL_MOVE && tool !== TOOL_ERASER) return;
+              event.stopPropagation();
+              clearPreview();
+              clearActiveTextEditor(true);
+              const targetObj = state.textObjects.get(textObject.id);
+              if (!targetObj) return;
+
+              if (tool === TOOL_ERASER) {
+                state.textObjects.delete(textObject.id);
+                emitTextObject({ ...targetObj, text: "", deleted: true });
+                renderTextLayer();
+                return;
+              }
+
+              state.textDrag = {
+                id: textObject.id,
+                pointerId: event.pointerId,
+                startClientX: event.clientX,
+                startClientY: event.clientY,
+                startX: targetObj.x,
+                startY: targetObj.y,
+                mode: tool,
+              };
+              pointerStartX = event.clientX;
+              pointerStartY = event.clientY;
+              moved = false;
+              node.classList.add("is-active");
+              try {
+                node.setPointerCapture(event.pointerId);
+              } catch (_) {}
+            });
+
+            node.addEventListener("pointermove", (event) => {
+              if (!state.textDrag) return;
+              if (state.textDrag.pointerId !== event.pointerId || state.textDrag.id !== textObject.id) return;
+              const targetObj = state.textObjects.get(textObject.id);
+              if (!targetObj) return;
+              const dx = event.clientX - state.textDrag.startClientX;
+              const dy = event.clientY - state.textDrag.startClientY;
+              const nextNorm = pxToNorm(
+                state.textDrag.startX * canvas.clientWidth + dx,
+                state.textDrag.startY * canvas.clientHeight + dy
+              );
+              targetObj.x = nextNorm[0];
+              targetObj.y = nextNorm[1];
+              targetObj.updatedAt = Date.now();
+              emitCursor(nextNorm, true, false);
+              node.style.left = `${normToPx([targetObj.x, targetObj.y]).x}px`;
+              node.style.top = `${normToPx([targetObj.x, targetObj.y]).y}px`;
+              if (!moved) {
+                moved = Math.abs(event.clientX - pointerStartX) + Math.abs(event.clientY - pointerStartY) > 4;
+              }
+            });
+
+            node.addEventListener("pointerup", (event) => {
+              if (!state.textDrag || state.textDrag.id !== textObject.id || state.textDrag.pointerId !== event.pointerId) {
+                return;
+              }
+              event.stopPropagation();
+              const targetObj = state.textObjects.get(textObject.id);
+              if (targetObj && moved) {
+                emitTextObject(targetObj);
+                emitCursor([targetObj.x, targetObj.y], true, true);
+              } else if (state.textDrag.mode === TOOL_TEXT) {
+                startTextEdit(textObject.id, { selectAll: false });
+              }
+              state.textDrag = null;
+              node.classList.remove("is-active");
+              try {
+                node.releasePointerCapture(event.pointerId);
+              } catch (_) {}
+            });
+
+            node.addEventListener("pointercancel", () => {
+              state.textDrag = null;
+              node.classList.remove("is-active");
+            });
+
+            textLayer.appendChild(node);
+          }
+
+          if (state.activeTextEditor) {
+            textLayer.appendChild(state.activeTextEditor);
+            updateActiveEditorStyleFromToolbar();
+          }
         }
 
         function eventToPoint(event) {
@@ -744,6 +1309,131 @@
           }
         }
 
+        function distancePointToSegmentPx(pointPx, aPx, bPx) {
+          const vx = bPx.x - aPx.x;
+          const vy = bPx.y - aPx.y;
+          const wx = pointPx.x - aPx.x;
+          const wy = pointPx.y - aPx.y;
+          const c1 = vx * wx + vy * wy;
+          if (c1 <= 0) {
+            const dx = pointPx.x - aPx.x;
+            const dy = pointPx.y - aPx.y;
+            return Math.sqrt(dx * dx + dy * dy);
+          }
+          const c2 = vx * vx + vy * vy;
+          if (c2 <= c1) {
+            const dx = pointPx.x - bPx.x;
+            const dy = pointPx.y - bPx.y;
+            return Math.sqrt(dx * dx + dy * dy);
+          }
+          const t = c1 / c2;
+          const projX = aPx.x + t * vx;
+          const projY = aPx.y + t * vy;
+          const dx = pointPx.x - projX;
+          const dy = pointPx.y - projY;
+          return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function pointInPolygonPx(pointPx, polygonPx) {
+          let inside = false;
+          for (let i = 0, j = polygonPx.length - 1; i < polygonPx.length; j = i, i += 1) {
+            const xi = polygonPx[i].x;
+            const yi = polygonPx[i].y;
+            const xj = polygonPx[j].x;
+            const yj = polygonPx[j].y;
+            const intersects =
+              yi > pointPx.y !== yj > pointPx.y &&
+              pointPx.x < ((xj - xi) * (pointPx.y - yi)) / (yj - yi + Number.EPSILON) + xi;
+            if (intersects) inside = !inside;
+          }
+          return inside;
+        }
+
+        function hitTestShape(shape, pointNorm) {
+          if (!shape || !Array.isArray(shape.points) || shape.points.length === 0) return false;
+          const pointPx = normToPx(pointNorm);
+          const ptsPx = shape.points.map((pt) => normToPx(pt));
+          const thickness = Math.max(7, clampStrokeWidth(shape.strokeWidth) + 4);
+
+          if (ptsPx.length >= 3) {
+            const tool = clampTool(shape.tool);
+            const fillLike =
+              tool === "rectangle" || tool === "square" || tool === "triangle" || tool === "circle";
+            if (fillLike && pointInPolygonPx(pointPx, ptsPx)) {
+              return true;
+            }
+          }
+
+          if (ptsPx.length === 1) {
+            const dx = ptsPx[0].x - pointPx.x;
+            const dy = ptsPx[0].y - pointPx.y;
+            return Math.sqrt(dx * dx + dy * dy) <= thickness;
+          }
+
+          for (let i = 1; i < ptsPx.length; i += 1) {
+            if (distancePointToSegmentPx(pointPx, ptsPx[i - 1], ptsPx[i]) <= thickness) {
+              return true;
+            }
+          }
+          return false;
+        }
+
+        function hitTestTopShape(pointNorm) {
+          const entries = Array.from(state.shapeObjects.values());
+          for (let i = entries.length - 1; i >= 0; i -= 1) {
+            if (hitTestShape(entries[i], pointNorm)) {
+              return entries[i];
+            }
+          }
+          return null;
+        }
+
+        function emitShapeDelete(shapeId) {
+          if (!canDraw()) return;
+          const payload = {
+            stroke_id: shapeId,
+            action: "delete",
+            ended: true,
+            points: [],
+          };
+          try {
+            sendFrame({
+              op: "channel_emit",
+              id: nextId(),
+              channel: state.boardChannel,
+              event: STROKE_EVENT,
+              data: payload,
+            });
+          } catch (err) {
+            logEvent(`ERR send.delete ${String(err)}`);
+          }
+        }
+
+        function emitShapeMove(shapeId, dx, dy) {
+          if (!canDraw()) return;
+          if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+          if (Math.abs(dx) < 0.000001 && Math.abs(dy) < 0.000001) return;
+          const payload = {
+            stroke_id: shapeId,
+            action: "move",
+            dx: Number(dx.toFixed(6)),
+            dy: Number(dy.toFixed(6)),
+            ended: true,
+            points: [],
+          };
+          try {
+            sendFrame({
+              op: "channel_emit",
+              id: nextId(),
+              channel: state.boardChannel,
+              event: STROKE_EVENT,
+              data: payload,
+            });
+          } catch (err) {
+            logEvent(`ERR send.move ${String(err)}`);
+          }
+        }
+
         function strokePolylineOn(targetCtx, points, style) {
           if (!Array.isArray(points) || points.length === 0) return;
           if (points.length === 1) {
@@ -838,6 +1528,7 @@
             ended: Boolean(ended),
           };
           state.strokeSeq += 1;
+          applyShapePayload(payload);
 
           try {
             sendFrame({
@@ -865,6 +1556,7 @@
             points,
             ended: true,
           };
+          applyShapePayload(payload);
           try {
             sendFrame({
               op: "channel_emit",
@@ -878,9 +1570,104 @@
           }
         }
 
+        function emitCursor(point, visible, force) {
+          if (!connected() || !state.joinedBoard) return;
+          const now = Date.now();
+          if (!force && now - state.cursorLastSentAt < CURSOR_SEND_INTERVAL_MS) return;
+          state.cursorLastSentAt = now;
+          try {
+            sendFrame({
+              op: "channel_emit",
+              id: nextId(),
+              channel: state.boardChannel,
+              event: CURSOR_EVENT,
+              data: {
+                visible: Boolean(visible),
+                x: point ? Number(point[0].toFixed(5)) : null,
+                y: point ? Number(point[1].toFixed(5)) : null,
+                color: clampColor(state.color),
+                label: state.userId,
+              },
+            });
+          } catch (_) {}
+        }
+
+        function renderRemoteCursors() {
+          clearCursorLayer();
+          for (const cursor of state.remoteCursors.values()) {
+            const pos = normToPx([cursor.x, cursor.y]);
+            const color = clampColor(cursor.color);
+            const label = String(cursor.label || "user");
+
+            cursorCtx.save();
+            cursorCtx.fillStyle = color;
+            cursorCtx.beginPath();
+            cursorCtx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
+            cursorCtx.fill();
+
+            const text = label.slice(0, 18);
+            cursorCtx.font = '12px "Space Grotesk", "IBM Plex Sans", "Segoe UI", sans-serif';
+            cursorCtx.textBaseline = "middle";
+            const padX = 7;
+            const padY = 4;
+            const textW = cursorCtx.measureText(text).width;
+            const boxX = pos.x + 10;
+            const boxY = pos.y - 9;
+            const boxW = textW + padX * 2;
+            const boxH = 18;
+
+            cursorCtx.fillStyle = "rgba(17, 24, 39, 0.92)";
+            cursorCtx.fillRect(boxX, boxY, boxW, boxH);
+
+            cursorCtx.fillStyle = "#ffffff";
+            cursorCtx.fillText(text, boxX + padX, boxY + boxH / 2);
+            cursorCtx.restore();
+          }
+        }
+
+        function handleRemoteCursor(userId, payload) {
+          const normalizedUser = String(userId || "").trim();
+          if (!normalizedUser || normalizedUser === state.userId) return;
+          const visible = payload?.visible !== false;
+          if (!visible) {
+            state.remoteCursors.delete(normalizedUser);
+            renderRemoteCursors();
+            return;
+          }
+
+          const x = Number(payload?.x);
+          const y = Number(payload?.y);
+          if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+          state.remoteCursors.set(normalizedUser, {
+            x: clamp01(x),
+            y: clamp01(y),
+            color: clampColor(payload?.color),
+            label:
+              typeof payload?.label === "string" && payload.label.trim().length > 0
+                ? payload.label.trim()
+                : normalizedUser,
+            seenAt: Date.now(),
+          });
+          renderRemoteCursors();
+        }
+
+        function pruneRemoteCursors() {
+          const now = Date.now();
+          let changed = false;
+          for (const [userId, cursor] of state.remoteCursors.entries()) {
+            if (now - cursor.seenAt > CURSOR_IDLE_MS) {
+              state.remoteCursors.delete(userId);
+              changed = true;
+            }
+          }
+          if (changed) {
+            renderRemoteCursors();
+          }
+        }
+
         function stopLocalStroke() {
           if (!state.drawing) return;
-          if (state.tool === TOOL_PEN) {
+          if ((state.activeStyle?.tool || state.tool) === TOOL_PEN) {
             if (state.flushTimer) {
               clearTimeout(state.flushTimer);
               state.flushTimer = null;
@@ -911,38 +1698,15 @@
           return points;
         }
 
-        function remoteStrokeKey(fromUser, strokeId) {
-          return `${fromUser}:${strokeId}`;
-        }
-
         function applyRemoteChunk(data, fromUser) {
           const strokeId = typeof data?.stroke_id === "string" ? data.stroke_id : "";
           if (!strokeId) return;
-          const points = parsePoints(data.points);
           const style = styleFromPayload(data);
-          const ended = data.ended === true;
-          const key = remoteStrokeKey(fromUser || "unknown", strokeId);
-          let last = state.remoteLastByStroke.get(key) || null;
 
-          if (points.length === 0 && ended) {
-            state.remoteLastByStroke.delete(key);
-            return;
-          }
-
-          for (let i = 0; i < points.length; i += 1) {
-            const point = points[i];
-            if (last) {
-              drawSegment(last, point, style);
-            } else {
-              drawDot(point, style);
-            }
-            last = point;
-          }
-
-          if (ended) {
-            state.remoteLastByStroke.delete(key);
-          } else if (last) {
-            state.remoteLastByStroke.set(key, last);
+          if (style.tool === TOOL_TEXT) {
+            applyTextPayload(data);
+          } else {
+            applyShapePayload(data);
           }
         }
 
@@ -960,7 +1724,9 @@
         function applySnapshot(snapshot) {
           const chunks = Array.isArray(snapshot?.chunks) ? snapshot.chunks : [];
           clearBoard();
-          state.remoteLastByStroke.clear();
+          state.shapeObjects.clear();
+          state.shapeDrag = null;
+          clearTextObjects();
           for (let i = 0; i < chunks.length; i += 1) {
             const chunk = chunks[i];
             if (!chunk || typeof chunk !== "object") continue;
@@ -978,8 +1744,13 @@
         function resetBoardSessionState() {
           state.joinedBoard = false;
           state.syncReady = false;
-          state.remoteLastByStroke.clear();
+          state.shapeObjects.clear();
+          state.shapeDrag = null;
+          clearTextObjects();
+          state.remoteCursors.clear();
+          state.cursorLastSentAt = 0;
           stopLocalStroke();
+          renderRemoteCursors();
           setBoardMeta("Not joined");
         }
 
@@ -1019,18 +1790,100 @@
           }
         }
 
+        function renderToolModeControls() {
+          if (toolSelect.querySelector(`option[value="${state.drawTool}"]`)) {
+            toolSelect.value = state.drawTool;
+          } else {
+            toolSelect.value = TOOL_PEN;
+          }
+          const isMove = state.tool === TOOL_MOVE;
+          const isEraser = state.tool === TOOL_ERASER;
+          const isText = state.tool === TOOL_TEXT;
+          toolMoveButton.classList.toggle("active", isMove);
+          toolEraserButton.classList.toggle("active", isEraser);
+          toolTextButton.classList.toggle("active", isText);
+          toolMoveButton.setAttribute("aria-pressed", String(isMove));
+          toolEraserButton.setAttribute("aria-pressed", String(isEraser));
+          toolTextButton.setAttribute("aria-pressed", String(isText));
+        }
+
+        function setActiveTool(nextTool) {
+          const normalized = clampTool(nextTool);
+          state.tool = normalized;
+          if (normalized !== TOOL_MOVE && normalized !== TOOL_ERASER && normalized !== TOOL_TEXT) {
+            state.drawTool = normalized;
+          }
+          renderToolModeControls();
+        }
+
         toolSelect.addEventListener("change", () => {
-          state.tool = clampTool(toolSelect.value);
+          clearActiveTextEditor(true);
+          setActiveTool(toolSelect.value);
+          clearPreview();
+          renderTextLayer();
+        });
+
+        toolMoveButton.addEventListener("click", () => {
+          clearActiveTextEditor(true);
+          if (state.tool === TOOL_MOVE) {
+            setActiveTool(state.drawTool);
+          } else {
+            setActiveTool(TOOL_MOVE);
+          }
+          clearPreview();
+          renderTextLayer();
+        });
+
+        toolEraserButton.addEventListener("click", () => {
+          clearActiveTextEditor(true);
+          if (state.tool === TOOL_ERASER) {
+            setActiveTool(state.drawTool);
+          } else {
+            setActiveTool(TOOL_ERASER);
+          }
+          clearPreview();
+          renderTextLayer();
+        });
+
+        toolTextButton.addEventListener("click", () => {
+          clearActiveTextEditor(true);
+          if (state.tool === TOOL_TEXT) {
+            setActiveTool(state.drawTool);
+          } else {
+            setActiveTool(TOOL_TEXT);
+          }
+          clearPreview();
+          renderTextLayer();
         });
 
         strokeWidthSelect.addEventListener("change", () => {
           state.strokeWidth = clampStrokeWidth(strokeWidthSelect.value);
         });
 
+        fontSizeSelect.addEventListener("change", () => {
+          state.fontSize = clampFontSize(fontSizeSelect.value);
+          updateActiveEditorStyleFromToolbar();
+          if (state.activeTextEditId) {
+            const editing = state.textObjects.get(state.activeTextEditId);
+            if (editing) {
+              editing.fontSize = state.fontSize;
+              renderTextLayer();
+            }
+          }
+        });
+
         for (const swatch of swatches) {
           swatch.addEventListener("click", () => {
             state.color = clampColor(swatch.dataset.color);
             renderColorSelection();
+            updateActiveEditorStyleFromToolbar();
+            if (state.activeTextEditId) {
+              const editing = state.textObjects.get(state.activeTextEditId);
+              if (editing) {
+                editing.color = state.color;
+                renderTextLayer();
+              }
+            }
           });
         }
 
@@ -1078,7 +1931,10 @@
               const ev = frame.event ? ` event=${frame.event}` : "";
               const from = frame.from_user ? ` from=${frame.from_user}` : "";
               const payloadInfo = frame.data ? ` ${previewPayload(frame.data)}` : "";
-              if (op === "ack" && frame.ok === false) {
+              const isCursorFrame = frame.op === "event" && frame.event === CURSOR_EVENT;
+              if (isCursorFrame) {
+                // Cursor frames are high-frequency; keep event log signal clean.
+              } else if (op === "ack" && frame.ok === false) {
                 const reason = frame?.error?.message || "unknown";
                 logEvent(`ERR IN op=ack fail=${reason}`);
               } else {
@@ -1101,6 +1957,10 @@
               if (frame.op === "event" && frame.channel === state.boardChannel && frame.event === STROKE_EVENT) {
                 if ((frame.from_user || "") === state.userId) return;
                 applyRemoteChunk(frame.data, frame.from_user || "peer");
+              }
+
+              if (frame.op === "event" && frame.channel === state.boardChannel && frame.event === CURSOR_EVENT) {
+                handleRemoteCursor(frame.from_user || "", frame.data || {});
               }
 
               if (
@@ -1144,6 +2004,9 @@
         });
 
         byId("disconnect").addEventListener("click", () => {
+          if (connected() && state.joinedBoard) {
+            emitCursor(null, false, true);
+          }
           if (!state.ws) return;
           state.ws.close();
         });
@@ -1180,13 +2043,57 @@
 
           const point = eventToPoint(event);
           if (!point) return;
+          emitCursor(point, true, true);
+          const style = getCurrentStyle();
+          clearPreview();
+
+          if (style.tool === TOOL_TEXT) {
+            createTextObjectAt(point);
+            event.preventDefault();
+            return;
+          }
+
+          if (style.tool === TOOL_ERASER) {
+            clearActiveTextEditor(true);
+            const hit = hitTestTopShape(point);
+            if (hit) {
+              state.shapeObjects.delete(hit.id);
+              renderShapeObjects();
+              emitShapeDelete(hit.id);
+            }
+            event.preventDefault();
+            return;
+          }
+
+          if (style.tool === TOOL_MOVE) {
+            clearActiveTextEditor(true);
+            const hit = hitTestTopShape(point);
+            if (hit) {
+              state.shapeDrag = {
+                id: hit.id,
+                pointerId: event.pointerId,
+                lastPoint: point,
+                pendingDx: 0,
+                pendingDy: 0,
+                lastSentAt: 0,
+              };
+              try {
+                canvas.setPointerCapture(event.pointerId);
+              } catch (_) {}
+            }
+            event.preventDefault();
+            return;
+          }
+
+          clearActiveTextEditor(true);
+
           state.drawing = true;
           state.pointerId = event.pointerId;
           state.strokeId = makeStrokeId();
           state.strokeSeq = 0;
           state.localLast = null;
           state.shapeStart = null;
-          state.activeStyle = getCurrentStyle();
+          state.activeStyle = style;
           state.pendingPoints = [];
 
           try {
@@ -1203,9 +2110,42 @@
         });
 
         canvas.addEventListener("pointermove", (event) => {
-          if (!state.drawing || state.pointerId !== event.pointerId) return;
           const point = eventToPoint(event);
           if (!point) return;
+          emitCursor(point, true, false);
+
+          if (state.shapeDrag && state.shapeDrag.pointerId === event.pointerId) {
+            const target = state.shapeObjects.get(state.shapeDrag.id);
+            if (!target) return;
+            const dx = point[0] - state.shapeDrag.lastPoint[0];
+            const dy = point[1] - state.shapeDrag.lastPoint[1];
+            if (Math.abs(dx) + Math.abs(dy) < 0.000001) return;
+            applyShapePayload({
+              stroke_id: target.id,
+              action: "move",
+              dx,
+              dy,
+              points: [],
+              ended: true,
+            });
+            state.shapeDrag.pendingDx += dx;
+            state.shapeDrag.pendingDy += dy;
+            state.shapeDrag.lastPoint = point;
+            const now = Date.now();
+            if (now - state.shapeDrag.lastSentAt >= SHAPE_MOVE_SEND_INTERVAL_MS) {
+              emitShapeMove(state.shapeDrag.id, state.shapeDrag.pendingDx, state.shapeDrag.pendingDy);
+              state.shapeDrag.pendingDx = 0;
+              state.shapeDrag.pendingDy = 0;
+              state.shapeDrag.lastSentAt = now;
+            }
+            event.preventDefault();
+            return;
+          }
+
+          if (!state.drawing) {
+            return;
+          }
+          if (state.pointerId !== event.pointerId) return;
           if ((state.activeStyle?.tool || TOOL_PEN) === TOOL_PEN) {
             addLocalPoint(point);
           } else if (state.shapeStart) {
@@ -1216,8 +2156,23 @@
         });
 
         function finalizePointer(event) {
+          if (state.shapeDrag && state.shapeDrag.pointerId === event.pointerId) {
+            if (Math.abs(state.shapeDrag.pendingDx) + Math.abs(state.shapeDrag.pendingDy) > 0.000001) {
+              emitShapeMove(state.shapeDrag.id, state.shapeDrag.pendingDx, state.shapeDrag.pendingDy);
+            }
+            state.shapeDrag = null;
+            try {
+              canvas.releasePointerCapture(event.pointerId);
+            } catch (_) {}
+            event.preventDefault();
+            return;
+          }
+
           if (!state.drawing || state.pointerId !== event.pointerId) return;
           const point = eventToPoint(event);
+          if (point) {
+            emitCursor(point, true, true);
+          }
           const style = state.activeStyle || getCurrentStyle();
           if (style.tool === TOOL_PEN) {
             if (point) addLocalPoint(point);
@@ -1226,7 +2181,6 @@
             if (point && state.shapeStart) {
               const points = shapePoints(style.tool, state.shapeStart, point);
               clearPreview();
-              strokePolylineOn(ctx, points, style);
               emitShape(points, style);
             }
             stopLocalStroke();
@@ -1240,8 +2194,17 @@
         canvas.addEventListener("pointerup", finalizePointer);
         canvas.addEventListener("pointercancel", finalizePointer);
         canvas.addEventListener("pointerleave", (event) => {
-          if (!state.drawing || state.pointerId !== event.pointerId) return;
+          if (connected() && state.joinedBoard) {
+            emitCursor(null, false, true);
+          }
           clearPreview();
+          if (state.shapeDrag && state.shapeDrag.pointerId === event.pointerId) {
+            if (Math.abs(state.shapeDrag.pendingDx) + Math.abs(state.shapeDrag.pendingDy) > 0.000001) {
+              emitShapeMove(state.shapeDrag.id, state.shapeDrag.pendingDx, state.shapeDrag.pendingDy);
+            }
+            state.shapeDrag = null;
+          }
+          if (!state.drawing || state.pointerId !== event.pointerId) return;
           stopLocalStroke();
           event.preventDefault();
         });
@@ -1251,8 +2214,10 @@
           logEvent("SYS canvas resized, local view reset");
         });
 
-        toolSelect.value = state.tool;
+        setInterval(pruneRemoteCursors, 500);
+        renderToolModeControls();
         strokeWidthSelect.value = String(state.strokeWidth);
+        fontSizeSelect.value = String(state.fontSize);
         renderColorSelection();
         setCanvasMetrics();
         setStatus("disconnected");
