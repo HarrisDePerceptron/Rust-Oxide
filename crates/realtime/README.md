@@ -61,3 +61,11 @@ Optional:
 ```sh
 REALTIME_DEMO_ADDR=127.0.0.1:5001 cargo run -p rust-oxide-realtime --example chat_demo
 ```
+
+Collaborative drawing board demo:
+
+```sh
+cargo run -p rust-oxide-realtime --example drawing_demo
+```
+
+Then open `http://127.0.0.1:4002`.
