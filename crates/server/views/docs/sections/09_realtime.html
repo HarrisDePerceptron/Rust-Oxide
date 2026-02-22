@@ -70,6 +70,73 @@ let app = Router::new().nest(
           </section>
 
           <section class="space-y-3 border-t border-black/10 pt-6">
+            <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Quick start: Browser WebSocket (bare minimum)</h3>
+            <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>// Browser bare minimum (no framework)
+const token = "YOUR_ACCESS_TOKEN";
+const channel = "room:lobby";
+const eventName = "message.created";
+
+let seq = 0;
+const nextId = () => `req-${Date.now()}-${++seq}`;
+
+const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
+const wsUrl =
+  `${wsProtocol}://${window.location.host}/api/v1/realtime/socket?token=${encodeURIComponent(token)}`;
+
+const ws = new WebSocket(wsUrl);
+
+function send(frame) {
+  ws.send(JSON.stringify(frame));
+}
+
+ws.addEventListener("open", () => {
+  // 1) join channel
+  send({
+    op: "channel_join",
+    id: nextId(),
+    channel,
+  });
+
+  // 2) emit one event
+  send({
+    op: "channel_emit",
+    id: nextId(),
+    channel,
+    event: eventName,
+    data: { text: "hello from browser" },
+  });
+});
+
+ws.addEventListener("message", (event) => {
+  const frame = JSON.parse(event.data);
+
+  if (frame.op === "event") {
+    console.log("event:", frame.channel, frame.event, frame.from_user, frame.data);
+    return;
+  }
+
+  if (frame.op === "ack") {
+    if (!frame.ok) {
+      console.error("ack failed:", frame.error);
+    }
+    return;
+  }
+
+  if (frame.op === "error") {
+    console.error("socket error:", frame.error);
+  }
+});
+
+// Optional cleanup:
+// ws.close();</code></pre>
+            <ul class="list-disc space-y-1 pl-4 text-sm text-black/70">
+              <li>Browser WebSocket cannot set custom Authorization headers directly, so query token is the minimal approach.</li>
+              <li>Normal channels (for example <span class="font-semibold">room:lobby</span>) do not echo your own event back to your connection.</li>
+              <li>Use an <span class="font-semibold">echo:</span> channel prefix if you want sender echo behavior while testing.</li>
+            </ul>
+          </section>
+
+          <section class="space-y-3 border-t border-black/10 pt-6">
             <h3 class="text-base font-semibold tracking-[0.06em] text-[color:var(--pine)] sm:text-lg">Quick start: Rust client connect + send</h3>
             <pre class="overflow-x-auto rounded-2xl bg-[color:var(--mist)] p-4 text-xs text-[color:var(--pine)]"><code>use realtime::client::RealtimeClient;
 use serde_json::json;
