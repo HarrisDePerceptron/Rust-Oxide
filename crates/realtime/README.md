@@ -13,7 +13,7 @@ cargo add rust-oxide-realtime --rename realtime
 ```rust
 use std::sync::Arc;
 use axum::Router;
-use realtime::server::{RealtimeConfig, RealtimeHandle, RealtimeRuntimeState, RealtimeTokenVerifier, SessionAuth};
+use realtime::server::{RealtimeConfig, SocketServerHandle, SocketAppState, RealtimeTokenVerifier, SessionAuth};
 
 struct AllowAllVerifier;
 
@@ -28,8 +28,8 @@ impl RealtimeTokenVerifier for AllowAllVerifier {
     }
 }
 
-let handle = RealtimeHandle::spawn(RealtimeConfig::default());
-let runtime = Arc::new(RealtimeRuntimeState::new(handle, AllowAllVerifier));
+let handle = SocketServerHandle::spawn(RealtimeConfig::default());
+let runtime = Arc::new(SocketAppState::new(handle, AllowAllVerifier));
 let app = Router::new().nest("/api/v1", realtime::server::axum::router(runtime));
 ```
 
@@ -61,3 +61,11 @@ Optional:
 ```sh
 REALTIME_DEMO_ADDR=127.0.0.1:5001 cargo run -p rust-oxide-realtime --example chat_demo
 ```
+
+Collaborative drawing board demo:
+
+```sh
+cargo run -p rust-oxide-realtime --example drawing_demo
+```
+
+Then open `http://127.0.0.1:4002`.

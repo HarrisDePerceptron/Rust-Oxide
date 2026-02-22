@@ -9,7 +9,7 @@ use rust_oxide::{
     config::AppConfig,
     db::connection,
     logging::init_tracing,
-    realtime::{AppRealtimeVerifier, RealtimeRuntimeState},
+    realtime::{AppRealtimeVerifier, SocketAppState},
     routes::{
         middleware::{catch_panic_layer, json_error_middleware},
         router,
@@ -49,8 +49,8 @@ async fn run() -> anyhow::Result<()> {
     let services = ServiceContext::new(&db);
 
     let providers = init_providers(auth_cfg, &services).await?;
-    let realtime = rust_oxide::realtime::RealtimeHandle::spawn(cfg.realtime.clone());
-    let realtime_runtime = Arc::new(RealtimeRuntimeState::new(
+    let realtime = rust_oxide::realtime::SocketServerHandle::spawn(cfg.realtime.clone());
+    let realtime_runtime = Arc::new(SocketAppState::new(
         realtime.clone(),
         AppRealtimeVerifier::new(providers.clone()),
     ));

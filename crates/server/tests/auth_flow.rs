@@ -16,7 +16,7 @@ use rust_oxide::{
     },
     config::{AppConfig, AuthConfig},
     db::dao::DaoContext,
-    realtime::{AppRealtimeVerifier, RealtimeHandle, RealtimeRuntimeState},
+    realtime::{AppRealtimeVerifier, SocketAppState, SocketServerHandle},
     routes::{API_PREFIX, router},
     services::ServiceContext,
     state::AppState,
@@ -40,10 +40,7 @@ fn api_path(path: &str) -> String {
     format!("{API_PREFIX}{path}")
 }
 
-async fn app_with_db() -> (
-    std::sync::Arc<AppState>,
-    std::sync::Arc<RealtimeRuntimeState>,
-) {
+async fn app_with_db() -> (std::sync::Arc<AppState>, std::sync::Arc<SocketAppState>) {
     let cfg = AppConfig::from_env().expect("load app config");
     let db_cfg = cfg
         .database
@@ -69,18 +66,15 @@ async fn app_with_db() -> (
 fn build_state(
     cfg: AppConfig,
     db: DatabaseConnection,
-) -> (
-    std::sync::Arc<AppState>,
-    std::sync::Arc<RealtimeRuntimeState>,
-) {
+) -> (std::sync::Arc<AppState>, std::sync::Arc<SocketAppState>) {
     let services = ServiceContext::new(&db);
     let providers = build_providers(
         cfg.auth.as_ref().expect("auth config should be present"),
         &services,
     )
     .expect("create auth providers");
-    let realtime = RealtimeHandle::spawn(cfg.realtime.clone());
-    let realtime_runtime = std::sync::Arc::new(RealtimeRuntimeState::new(
+    let realtime = SocketServerHandle::spawn(cfg.realtime.clone());
+    let realtime_runtime = std::sync::Arc::new(SocketAppState::new(
         realtime,
         AppRealtimeVerifier::new(providers.clone()),
     ));

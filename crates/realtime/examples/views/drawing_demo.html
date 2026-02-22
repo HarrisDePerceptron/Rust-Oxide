@@ -1,0 +1,1263 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Realtime Drawing Demo</title>
+    <style>
+      :root {
+        --bg: #f5f6f8;
+        --panel: #ffffff;
+        --ink: #111827;
+        --muted: #5b6472;
+        --line: #d9dee8;
+        --line-strong: #c2cad8;
+        --brand: #111827;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(980px 420px at 10% -15%, rgba(17, 24, 39, 0.1), transparent 60%),
+          radial-gradient(800px 380px at 95% 0%, rgba(15, 23, 42, 0.07), transparent 56%),
+          var(--bg);
+      }
+
+      .shell {
+        width: min(1160px, 100%);
+        margin: 0 auto;
+        padding: 20px 16px 24px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(1.75rem, 3vw, 2.4rem);
+        letter-spacing: -0.03em;
+      }
+
+      .sub {
+        margin: 8px 0 18px;
+        color: var(--muted);
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--panel);
+        box-shadow: 0 14px 35px rgba(15, 23, 42, 0.08);
+      }
+
+      .controls {
+        padding: 14px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      @media (max-width: 860px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      label {
+        display: block;
+        margin: 0 0 6px;
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--muted);
+      }
+
+      input,
+      select,
+      button {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 11px;
+        font-size: 0.94rem;
+      }
+
+      input,
+      select {
+        color: var(--ink);
+        background: #fbfcff;
+      }
+
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: var(--line-strong);
+      }
+
+      .button-row {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      @media (max-width: 860px) {
+        .button-row {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      button {
+        cursor: pointer;
+        font-weight: 700;
+        background: #ffffff;
+        color: var(--ink);
+      }
+
+      button.primary {
+        border-color: #111827;
+        background: #111827;
+        color: #ffffff;
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+      }
+
+      .status {
+        margin: 12px 0 0;
+        padding: 10px 11px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        color: #0f172a;
+        font-size: 0.85rem;
+        background: #f9fafb;
+      }
+
+      .layout {
+        margin-top: 14px;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+
+      .board-wrap {
+        padding: 14px;
+      }
+
+      .board-header {
+        margin-bottom: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+      }
+
+      .board-header h2 {
+        margin: 0;
+        font-size: 1.1rem;
+      }
+
+      .board-meta {
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      .board-toolbar {
+        margin: 0 0 10px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #f8fafc;
+        display: grid;
+        grid-template-columns: 1.1fr 1fr 1fr;
+        gap: 10px;
+      }
+
+      @media (max-width: 860px) {
+        .board-toolbar {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .tool-field label {
+        margin-bottom: 5px;
+      }
+
+      .swatches {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .swatch {
+        width: 30px;
+        height: 30px;
+        border-radius: 999px;
+        border: 2px solid rgba(15, 23, 42, 0.16);
+        cursor: pointer;
+        padding: 0;
+      }
+
+      .swatch.active {
+        border-color: #111827;
+        box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.2);
+      }
+
+      .swatch-black {
+        background: #000000;
+      }
+
+      .swatch-red {
+        background: #dc2626;
+      }
+
+      .swatch-green {
+        background: #16a34a;
+      }
+
+      .board-canvas-stack {
+        position: relative;
+        width: 100%;
+        height: clamp(360px, 68vh, 760px);
+      }
+
+      #board,
+      #board-preview {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+        cursor: crosshair;
+      }
+
+      #board {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background:
+          linear-gradient(transparent 23px, #f0f3f8 24px, transparent 24px),
+          linear-gradient(90deg, transparent 23px, #f0f3f8 24px, transparent 24px),
+          #ffffff;
+        background-size: 24px 24px;
+      }
+
+      #board-preview {
+        pointer-events: none;
+      }
+
+      .events {
+        padding: 14px;
+      }
+
+      .events h2 {
+        margin: 0 0 8px;
+        font-size: 1.1rem;
+      }
+
+      #events {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fcfdff;
+        padding: 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.75rem;
+        line-height: 1.45;
+        color: #1f2937;
+        height: clamp(220px, 40vh, 540px);
+        overflow: auto;
+      }
+
+      .event-line {
+        margin: 0 0 6px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .hint {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <h1>Realtime Drawing Demo</h1>
+      <p class="sub">
+        Join the same board channel from multiple tabs and draw black free strokes in real time via
+        <code>/api/v1/realtime/socket</code>.
+      </p>
+
+      <section class="card controls">
+        <div class="grid">
+          <div>
+            <label for="user">Demo User</label>
+            <select id="user"></select>
+          </div>
+          <div>
+            <label for="board-channel">Board Channel</label>
+            <input id="board-channel" value="board:lobby" />
+          </div>
+        </div>
+        <div class="button-row">
+          <button id="connect" class="primary">Connect + Join Board</button>
+          <button id="disconnect">Disconnect</button>
+          <button id="clear-local">Clear Board (All Users)</button>
+        </div>
+        <p id="status" class="status">Socket: disconnected</p>
+      </section>
+
+      <section class="layout">
+        <div class="card board-wrap">
+          <div class="board-header">
+            <h2>Board</h2>
+            <div id="board-meta" class="board-meta">Not joined</div>
+          </div>
+          <div class="board-toolbar">
+            <div class="tool-field">
+              <label for="tool-select">Tool</label>
+              <select id="tool-select">
+                <option value="pen">Free Draw</option>
+                <option value="rectangle">Rectangle</option>
+                <option value="square">Square</option>
+                <option value="circle">Circle</option>
+                <option value="triangle">Triangle</option>
+                <option value="arrow">Arrow</option>
+              </select>
+            </div>
+            <div class="tool-field">
+              <label>Color</label>
+              <div class="swatches">
+                <button id="color-black" class="swatch swatch-black active" data-color="#000000" aria-label="Black"></button>
+                <button id="color-red" class="swatch swatch-red" data-color="#dc2626" aria-label="Red"></button>
+                <button id="color-green" class="swatch swatch-green" data-color="#16a34a" aria-label="Green"></button>
+              </div>
+            </div>
+            <div class="tool-field">
+              <label for="stroke-width">Stroke Width</label>
+              <select id="stroke-width">
+                <option value="2">2 px</option>
+                <option value="4">4 px</option>
+                <option value="6">6 px</option>
+                <option value="8">8 px</option>
+              </select>
+            </div>
+          </div>
+          <div class="board-canvas-stack">
+            <canvas id="board"></canvas>
+            <canvas id="board-preview"></canvas>
+          </div>
+        </div>
+        <div class="card events">
+          <h2>Events</h2>
+          <div id="events"></div>
+          <p class="hint">
+            Events: <code>stroke.chunk</code>, <code>board.cleared</code>, <code>board.sync.request</code>,
+            <code>board.sync.snapshot</code>. Points are normalized in <code>[0..1]</code>.
+          </p>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      (() => {
+        const STROKE_EVENT = "stroke.chunk";
+        const BOARD_CLEARED_EVENT = "board.cleared";
+        const SYNC_REQUEST_EVENT = "board.sync.request";
+        const SYNC_SNAPSHOT_EVENT = "board.sync.snapshot";
+        const TOOL_PEN = "pen";
+        const ALLOWED_TOOLS = new Set(["pen", "rectangle", "square", "circle", "triangle", "arrow"]);
+        const ALLOWED_COLORS = new Set(["#000000", "#dc2626", "#16a34a"]);
+        const MAX_EVENT_LINES = 260;
+        const FLUSH_INTERVAL_MS = 28;
+        const MIN_POINT_DELTA = 0.0008;
+
+        const state = {
+          ws: null,
+          token: "",
+          userId: "",
+          users: [],
+          boardChannel: "board:lobby",
+          joinedBoard: false,
+          syncReady: false,
+          seq: 0,
+          tool: TOOL_PEN,
+          color: "#000000",
+          strokeWidth: 2,
+          drawing: false,
+          pointerId: null,
+          strokeId: "",
+          strokeSeq: 0,
+          localLast: null,
+          shapeStart: null,
+          pendingPoints: [],
+          flushTimer: null,
+          remoteLastByStroke: new Map(),
+          activeStyle: null,
+        };
+
+        const byId = (id) => document.getElementById(id);
+        const userSelect = byId("user");
+        const boardInput = byId("board-channel");
+        const toolSelect = byId("tool-select");
+        const strokeWidthSelect = byId("stroke-width");
+        const statusEl = byId("status");
+        const boardMetaEl = byId("board-meta");
+        const eventsEl = byId("events");
+        const swatches = Array.from(document.querySelectorAll(".swatch"));
+        const canvas = byId("board");
+        const previewCanvas = byId("board-preview");
+        const ctx = canvas.getContext("2d");
+        const previewCtx = previewCanvas.getContext("2d");
+
+        function nextId() {
+          state.seq += 1;
+          return `req-${Date.now()}-${state.seq}`;
+        }
+
+        function wsUrl(token) {
+          const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+          return `${protocol}://${window.location.host}/api/v1/realtime/socket?token=${encodeURIComponent(token)}`;
+        }
+
+        function makeStrokeId() {
+          if (window.crypto && typeof window.crypto.randomUUID === "function") {
+            return window.crypto.randomUUID();
+          }
+          return `stroke-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+        }
+
+        function setStatus(text) {
+          statusEl.textContent = `Socket: ${text}`;
+        }
+
+        function setBoardMeta(text) {
+          boardMetaEl.textContent = text;
+        }
+
+        function connected() {
+          return state.ws && state.ws.readyState === WebSocket.OPEN;
+        }
+
+        function canDraw() {
+          return connected() && state.joinedBoard && state.syncReady;
+        }
+
+        function nowTime() {
+          return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+        }
+
+        function previewPayload(payload) {
+          if (!payload || typeof payload !== "object") {
+            return "";
+          }
+          if (Array.isArray(payload.chunks)) {
+            return `snapshot chunks=${payload.chunks.length}`;
+          }
+          if (typeof payload.cleared_by === "string") {
+            return `cleared_by=${payload.cleared_by}`;
+          }
+          const stroke = typeof payload.stroke_id === "string" ? payload.stroke_id.slice(0, 8) : "unknown";
+          const points = Array.isArray(payload.points) ? payload.points.length : 0;
+          const tool = typeof payload.tool === "string" ? payload.tool : TOOL_PEN;
+          const color = typeof payload.color === "string" ? payload.color : "#000000";
+          const width = Number(payload.stroke_width);
+          const widthLabel = Number.isFinite(width) ? width : 2;
+          const ended = payload.ended === true ? " ended" : "";
+          return `stroke=${stroke} tool=${tool} color=${color} width=${widthLabel} points=${points}${ended}`;
+        }
+
+        function logEvent(message) {
+          const line = document.createElement("p");
+          line.className = "event-line";
+          line.textContent = `${nowTime()} ${message}`;
+          eventsEl.appendChild(line);
+          while (eventsEl.childElementCount > MAX_EVENT_LINES) {
+            eventsEl.removeChild(eventsEl.firstElementChild);
+          }
+          eventsEl.scrollTop = eventsEl.scrollHeight;
+        }
+
+        function sendFrame(frame) {
+          if (!connected()) {
+            throw new Error("Socket is not connected");
+          }
+          state.ws.send(JSON.stringify(frame));
+          const op = frame.op || "frame";
+          const channel = frame.channel ? ` channel=${frame.channel}` : "";
+          const event = frame.event ? ` event=${frame.event}` : "";
+          logEvent(`OUT op=${op}${channel}${event}`);
+        }
+
+        function clamp01(value) {
+          return Math.max(0, Math.min(1, value));
+        }
+
+        function setCanvasMetrics() {
+          const dpr = Math.max(1, window.devicePixelRatio || 1);
+          const rect = canvas.getBoundingClientRect();
+          canvas.width = Math.max(1, Math.round(rect.width * dpr));
+          canvas.height = Math.max(1, Math.round(rect.height * dpr));
+          previewCanvas.width = canvas.width;
+          previewCanvas.height = canvas.height;
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          previewCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          previewCtx.lineCap = "round";
+          previewCtx.lineJoin = "round";
+          paintBoardBackground();
+          clearPreview();
+        }
+
+        function paintBoardBackground() {
+          const width = canvas.clientWidth;
+          const height = canvas.clientHeight;
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, width, height);
+          ctx.strokeStyle = "#edf1f7";
+          ctx.lineWidth = 1;
+          for (let x = 24; x < width; x += 24) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+            ctx.stroke();
+          }
+          for (let y = 24; y < height; y += 24) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+          }
+        }
+
+        function clearBoard() {
+          paintBoardBackground();
+          clearPreview();
+        }
+
+        function applyBoardClear(sourceLabel) {
+          stopLocalStroke();
+          state.remoteLastByStroke.clear();
+          clearBoard();
+          if (sourceLabel) {
+            logEvent(`SYS board cleared by ${sourceLabel}`);
+          }
+        }
+
+        function normToPx(point) {
+          return {
+            x: clamp01(point[0]) * canvas.clientWidth,
+            y: clamp01(point[1]) * canvas.clientHeight,
+          };
+        }
+
+        function clearPreview() {
+          previewCtx.clearRect(0, 0, previewCanvas.clientWidth, previewCanvas.clientHeight);
+        }
+
+        function clampStrokeWidth(value) {
+          const width = Number(value);
+          if (!Number.isFinite(width)) return 2;
+          return Math.max(1, Math.min(14, Math.round(width)));
+        }
+
+        function clampColor(value) {
+          const color = String(value || "").trim().toLowerCase();
+          return ALLOWED_COLORS.has(color) ? color : "#000000";
+        }
+
+        function clampTool(value) {
+          const tool = String(value || "").trim().toLowerCase();
+          return ALLOWED_TOOLS.has(tool) ? tool : TOOL_PEN;
+        }
+
+        function getCurrentStyle() {
+          return {
+            tool: clampTool(state.tool),
+            color: clampColor(state.color),
+            stroke_width: clampStrokeWidth(state.strokeWidth),
+          };
+        }
+
+        function styleFromPayload(payload) {
+          return {
+            tool: clampTool(payload?.tool),
+            color: clampColor(payload?.color),
+            stroke_width: clampStrokeWidth(payload?.stroke_width),
+          };
+        }
+
+        function drawSegmentOn(targetCtx, from, to, style) {
+          const a = normToPx(from);
+          const b = normToPx(to);
+          targetCtx.strokeStyle = style.color;
+          targetCtx.lineWidth = style.stroke_width;
+          targetCtx.beginPath();
+          targetCtx.moveTo(a.x, a.y);
+          targetCtx.lineTo(b.x, b.y);
+          targetCtx.stroke();
+        }
+
+        function drawDotOn(targetCtx, point, style) {
+          const p = normToPx(point);
+          targetCtx.fillStyle = style.color;
+          targetCtx.beginPath();
+          targetCtx.arc(p.x, p.y, Math.max(1.4, style.stroke_width * 0.7), 0, Math.PI * 2);
+          targetCtx.fill();
+        }
+
+        function drawSegment(from, to, style) {
+          drawSegmentOn(ctx, from, to, style);
+        }
+
+        function drawDot(point, style) {
+          drawDotOn(ctx, point, style);
+        }
+
+        function eventToPoint(event) {
+          const rect = canvas.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) return null;
+          return [
+            clamp01((event.clientX - rect.left) / rect.width),
+            clamp01((event.clientY - rect.top) / rect.height),
+          ];
+        }
+
+        function pointDistance(a, b) {
+          const dx = a[0] - b[0];
+          const dy = a[1] - b[1];
+          return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function normalizedPoint(x, y) {
+          return [clamp01(x), clamp01(y)];
+        }
+
+        function rectanglePoints(a, b) {
+          const left = Math.min(a[0], b[0]);
+          const right = Math.max(a[0], b[0]);
+          const top = Math.min(a[1], b[1]);
+          const bottom = Math.max(a[1], b[1]);
+          return [
+            normalizedPoint(left, top),
+            normalizedPoint(right, top),
+            normalizedPoint(right, bottom),
+            normalizedPoint(left, bottom),
+            normalizedPoint(left, top),
+          ];
+        }
+
+        function squarePoints(a, b) {
+          const dx = b[0] - a[0];
+          const dy = b[1] - a[1];
+          const side = Math.max(Math.abs(dx), Math.abs(dy));
+          const endX = a[0] + (dx >= 0 ? side : -side);
+          const endY = a[1] + (dy >= 0 ? side : -side);
+          return rectanglePoints(a, normalizedPoint(endX, endY));
+        }
+
+        function trianglePoints(a, b) {
+          const left = Math.min(a[0], b[0]);
+          const right = Math.max(a[0], b[0]);
+          const top = Math.min(a[1], b[1]);
+          const bottom = Math.max(a[1], b[1]);
+          const apex = normalizedPoint((left + right) / 2, top);
+          const rightBase = normalizedPoint(right, bottom);
+          const leftBase = normalizedPoint(left, bottom);
+          return [apex, rightBase, leftBase, apex];
+        }
+
+        function circlePoints(a, b) {
+          const cx = (a[0] + b[0]) / 2;
+          const cy = (a[1] + b[1]) / 2;
+          const radiusX = Math.max(0.001, Math.abs(b[0] - a[0]) / 2);
+          const radiusY = Math.max(0.001, Math.abs(b[1] - a[1]) / 2);
+          const segments = 40;
+          const points = [];
+          for (let i = 0; i <= segments; i += 1) {
+            const t = (Math.PI * 2 * i) / segments;
+            points.push(
+              normalizedPoint(
+                cx + Math.cos(t) * radiusX,
+                cy + Math.sin(t) * radiusY
+              )
+            );
+          }
+          return points;
+        }
+
+        function arrowPoints(a, b) {
+          const dx = b[0] - a[0];
+          const dy = b[1] - a[1];
+          const length = Math.sqrt(dx * dx + dy * dy);
+          if (!Number.isFinite(length) || length < 0.0012) {
+            return [normalizedPoint(a[0], a[1])];
+          }
+
+          const ux = dx / length;
+          const uy = dy / length;
+          const headLen = Math.min(0.06, Math.max(0.018, length * 0.35));
+          const side = headLen * 0.6;
+          const px = -uy;
+          const py = ux;
+          const tip = normalizedPoint(b[0], b[1]);
+          const left = normalizedPoint(
+            b[0] - ux * headLen + px * side,
+            b[1] - uy * headLen + py * side
+          );
+          const right = normalizedPoint(
+            b[0] - ux * headLen - px * side,
+            b[1] - uy * headLen - py * side
+          );
+          return [
+            normalizedPoint(a[0], a[1]),
+            tip,
+            left,
+            tip,
+            right,
+          ];
+        }
+
+        function shapePoints(tool, start, end) {
+          switch (tool) {
+            case "rectangle":
+              return rectanglePoints(start, end);
+            case "square":
+              return squarePoints(start, end);
+            case "circle":
+              return circlePoints(start, end);
+            case "triangle":
+              return trianglePoints(start, end);
+            case "arrow":
+              return arrowPoints(start, end);
+            default:
+              return [];
+          }
+        }
+
+        function strokePolylineOn(targetCtx, points, style) {
+          if (!Array.isArray(points) || points.length === 0) return;
+          if (points.length === 1) {
+            drawDotOn(targetCtx, points[0], style);
+            return;
+          }
+          for (let i = 1; i < points.length; i += 1) {
+            drawSegmentOn(targetCtx, points[i - 1], points[i], style);
+          }
+        }
+
+        function renderShapePreview(points, style) {
+          clearPreview();
+          if (!Array.isArray(points) || points.length === 0) return;
+
+          previewCtx.save();
+          previewCtx.strokeStyle = style.color;
+          previewCtx.lineWidth = style.stroke_width;
+          previewCtx.setLineDash([8, 5]);
+          previewCtx.globalAlpha = 0.95;
+
+          if (points.length > 1) {
+            const first = normToPx(points[0]);
+            previewCtx.beginPath();
+            previewCtx.moveTo(first.x, first.y);
+            for (let i = 1; i < points.length; i += 1) {
+              const p = normToPx(points[i]);
+              previewCtx.lineTo(p.x, p.y);
+            }
+            previewCtx.stroke();
+          } else {
+            drawDotOn(previewCtx, points[0], style);
+          }
+
+          const fillable =
+            style.tool === "rectangle" ||
+            style.tool === "square" ||
+            style.tool === "triangle" ||
+            style.tool === "circle";
+          if (fillable && points.length >= 3) {
+            const first = normToPx(points[0]);
+            previewCtx.globalAlpha = 0.12;
+            previewCtx.fillStyle = style.color;
+            previewCtx.beginPath();
+            previewCtx.moveTo(first.x, first.y);
+            for (let i = 1; i < points.length; i += 1) {
+              const p = normToPx(points[i]);
+              previewCtx.lineTo(p.x, p.y);
+            }
+            previewCtx.closePath();
+            previewCtx.fill();
+          }
+          previewCtx.restore();
+        }
+
+        function addLocalPoint(point) {
+          const style = state.activeStyle || getCurrentStyle();
+          if (state.localLast) {
+            if (pointDistance(state.localLast, point) < MIN_POINT_DELTA) return;
+            drawSegment(state.localLast, point, style);
+          } else {
+            drawDot(point, style);
+          }
+          state.localLast = point;
+          state.pendingPoints.push([Number(point[0].toFixed(5)), Number(point[1].toFixed(5))]);
+          scheduleFlush();
+        }
+
+        function scheduleFlush() {
+          if (state.flushTimer) return;
+          state.flushTimer = setTimeout(() => {
+            state.flushTimer = null;
+            flushChunk(false);
+          }, FLUSH_INTERVAL_MS);
+        }
+
+        function flushChunk(ended) {
+          if (!state.strokeId) return;
+          if (!canDraw()) return;
+          if (state.pendingPoints.length === 0 && !ended) return;
+
+          const points = state.pendingPoints.splice(0, state.pendingPoints.length);
+          const style = state.activeStyle || getCurrentStyle();
+          const payload = {
+            stroke_id: state.strokeId,
+            sender_user_id: state.userId,
+            tool: style.tool,
+            color: style.color,
+            stroke_width: style.stroke_width,
+            seq: state.strokeSeq,
+            points,
+            ended: Boolean(ended),
+          };
+          state.strokeSeq += 1;
+
+          try {
+            sendFrame({
+              op: "channel_emit",
+              id: nextId(),
+              channel: state.boardChannel,
+              event: STROKE_EVENT,
+              data: payload,
+            });
+          } catch (err) {
+            logEvent(`ERR send.stroke ${String(err)}`);
+          }
+        }
+
+        function emitShape(points, style) {
+          if (!state.strokeId || !canDraw()) return;
+          if (!Array.isArray(points) || points.length === 0) return;
+          const payload = {
+            stroke_id: state.strokeId,
+            sender_user_id: state.userId,
+            tool: style.tool,
+            color: style.color,
+            stroke_width: style.stroke_width,
+            seq: 0,
+            points,
+            ended: true,
+          };
+          try {
+            sendFrame({
+              op: "channel_emit",
+              id: nextId(),
+              channel: state.boardChannel,
+              event: STROKE_EVENT,
+              data: payload,
+            });
+          } catch (err) {
+            logEvent(`ERR send.shape ${String(err)}`);
+          }
+        }
+
+        function stopLocalStroke() {
+          if (!state.drawing) return;
+          if (state.tool === TOOL_PEN) {
+            if (state.flushTimer) {
+              clearTimeout(state.flushTimer);
+              state.flushTimer = null;
+            }
+            flushChunk(true);
+          }
+          state.drawing = false;
+          state.pointerId = null;
+          state.localLast = null;
+          state.shapeStart = null;
+          state.activeStyle = null;
+          state.strokeId = "";
+          state.strokeSeq = 0;
+          state.pendingPoints = [];
+          clearPreview();
+        }
+
+        function parsePoints(raw) {
+          if (!Array.isArray(raw)) return [];
+          const points = [];
+          for (const entry of raw) {
+            if (!Array.isArray(entry) || entry.length !== 2) continue;
+            const x = Number(entry[0]);
+            const y = Number(entry[1]);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+            points.push([clamp01(x), clamp01(y)]);
+          }
+          return points;
+        }
+
+        function remoteStrokeKey(fromUser, strokeId) {
+          return `${fromUser}:${strokeId}`;
+        }
+
+        function applyRemoteChunk(data, fromUser) {
+          const strokeId = typeof data?.stroke_id === "string" ? data.stroke_id : "";
+          if (!strokeId) return;
+          const points = parsePoints(data.points);
+          const style = styleFromPayload(data);
+          const ended = data.ended === true;
+          const key = remoteStrokeKey(fromUser || "unknown", strokeId);
+          let last = state.remoteLastByStroke.get(key) || null;
+
+          if (points.length === 0 && ended) {
+            state.remoteLastByStroke.delete(key);
+            return;
+          }
+
+          for (let i = 0; i < points.length; i += 1) {
+            const point = points[i];
+            if (last) {
+              drawSegment(last, point, style);
+            } else {
+              drawDot(point, style);
+            }
+            last = point;
+          }
+
+          if (ended) {
+            state.remoteLastByStroke.delete(key);
+          } else if (last) {
+            state.remoteLastByStroke.set(key, last);
+          }
+        }
+
+        function requestBoardSnapshot() {
+          if (!connected() || !state.joinedBoard) return;
+          sendFrame({
+            op: "channel_emit",
+            id: nextId(),
+            channel: state.boardChannel,
+            event: SYNC_REQUEST_EVENT,
+            data: { requester_user_id: state.userId },
+          });
+        }
+
+        function applySnapshot(snapshot) {
+          const chunks = Array.isArray(snapshot?.chunks) ? snapshot.chunks : [];
+          clearBoard();
+          state.remoteLastByStroke.clear();
+          for (let i = 0; i < chunks.length; i += 1) {
+            const chunk = chunks[i];
+            if (!chunk || typeof chunk !== "object") continue;
+            const senderUserId =
+              typeof chunk.sender_user_id === "string" && chunk.sender_user_id.trim().length > 0
+                ? chunk.sender_user_id.trim()
+                : "snapshot";
+            applyRemoteChunk(chunk, senderUserId);
+          }
+          state.syncReady = true;
+          const chunkCount = Number.isFinite(snapshot?.chunk_count) ? snapshot.chunk_count : chunks.length;
+          setBoardMeta(`Joined as ${state.userId} on ${state.boardChannel} • synced ${chunkCount} chunks`);
+        }
+
+        function resetBoardSessionState() {
+          state.joinedBoard = false;
+          state.syncReady = false;
+          state.remoteLastByStroke.clear();
+          stopLocalStroke();
+          setBoardMeta("Not joined");
+        }
+
+        async function loadUsers() {
+          const res = await fetch("/demo/users");
+          const users = await res.json();
+          state.users = users;
+          userSelect.innerHTML = "";
+          for (const user of users) {
+            const option = document.createElement("option");
+            option.value = user.user_id;
+            option.textContent = `${user.label} (${user.user_id})`;
+            userSelect.appendChild(option);
+          }
+          if (users[0]) {
+            userSelect.value = users[0].user_id;
+            state.userId = users[0].user_id;
+            state.token = users[0].token;
+          }
+        }
+
+        userSelect.addEventListener("change", () => {
+          const selected = state.users.find((user) => user.user_id === userSelect.value);
+          if (!selected) return;
+          state.userId = selected.user_id;
+          state.token = selected.token;
+        });
+
+        boardInput.addEventListener("input", () => {
+          state.boardChannel = boardInput.value.trim();
+        });
+
+        function renderColorSelection() {
+          for (const swatch of swatches) {
+            const color = clampColor(swatch.dataset.color);
+            swatch.classList.toggle("active", color === state.color);
+          }
+        }
+
+        toolSelect.addEventListener("change", () => {
+          state.tool = clampTool(toolSelect.value);
+        });
+
+        strokeWidthSelect.addEventListener("change", () => {
+          state.strokeWidth = clampStrokeWidth(strokeWidthSelect.value);
+        });
+
+        for (const swatch of swatches) {
+          swatch.addEventListener("click", () => {
+            state.color = clampColor(swatch.dataset.color);
+            renderColorSelection();
+          });
+        }
+
+        byId("connect").addEventListener("click", () => {
+          const boardChannel = boardInput.value.trim();
+          if (!boardChannel) {
+            logEvent("ERR missing board channel");
+            return;
+          }
+          if (!boardChannel.startsWith("board:")) {
+            logEvent("ERR board channel must start with board:");
+            return;
+          }
+          if (!state.token.trim()) {
+            logEvent("ERR missing token");
+            return;
+          }
+
+          state.boardChannel = boardChannel;
+          const previous = state.ws;
+          if (previous) previous.close();
+
+          const socket = new WebSocket(wsUrl(state.token));
+          state.ws = socket;
+          resetBoardSessionState();
+          setStatus("connecting");
+
+          socket.addEventListener("open", () => {
+            if (state.ws !== socket) return;
+            setStatus("connected");
+            logEvent("SYS socket.open");
+            sendFrame({
+              op: "channel_join",
+              id: nextId(),
+              channel: state.boardChannel,
+            });
+          });
+
+          socket.addEventListener("message", (event) => {
+            if (state.ws !== socket) return;
+            try {
+              const frame = JSON.parse(event.data);
+              const op = frame.op || "frame";
+              const channel = frame.channel ? ` channel=${frame.channel}` : "";
+              const ev = frame.event ? ` event=${frame.event}` : "";
+              const from = frame.from_user ? ` from=${frame.from_user}` : "";
+              const payloadInfo = frame.data ? ` ${previewPayload(frame.data)}` : "";
+              if (op === "ack" && frame.ok === false) {
+                const reason = frame?.error?.message || "unknown";
+                logEvent(`ERR IN op=ack fail=${reason}`);
+              } else {
+                logEvent(`IN op=${op}${channel}${ev}${from}${payloadInfo}`);
+              }
+
+              if (frame.op === "joined" && frame.channel === state.boardChannel) {
+                state.joinedBoard = true;
+                state.syncReady = false;
+                setStatus(`connected + joined ${state.boardChannel} (syncing)`);
+                setBoardMeta(`Joined as ${state.userId} on ${state.boardChannel} • syncing`);
+                requestBoardSnapshot();
+              }
+
+              if (frame.op === "left" && frame.channel === state.boardChannel) {
+                state.joinedBoard = false;
+                setBoardMeta("Left board");
+              }
+
+              if (frame.op === "event" && frame.channel === state.boardChannel && frame.event === STROKE_EVENT) {
+                if ((frame.from_user || "") === state.userId) return;
+                applyRemoteChunk(frame.data, frame.from_user || "peer");
+              }
+
+              if (
+                frame.op === "event" &&
+                frame.channel === state.boardChannel &&
+                frame.event === BOARD_CLEARED_EVENT
+              ) {
+                if ((frame.from_user || "") === state.userId) return;
+                applyBoardClear(frame.from_user || "peer");
+              }
+
+              if (
+                frame.op === "event" &&
+                frame.event === SYNC_SNAPSHOT_EVENT &&
+                frame.channel === `user:${state.userId}`
+              ) {
+                const snapshotBoardChannel = typeof frame.data?.board_channel === "string"
+                  ? frame.data.board_channel
+                  : "";
+                if (snapshotBoardChannel !== state.boardChannel) return;
+                applySnapshot(frame.data);
+                setStatus(`connected + joined ${state.boardChannel} (synced)`);
+              }
+            } catch (err) {
+              logEvent(`ERR invalid frame ${String(err)}`);
+            }
+          });
+
+          socket.addEventListener("close", () => {
+            if (state.ws !== socket) return;
+            state.ws = null;
+            resetBoardSessionState();
+            setStatus("disconnected");
+            logEvent("SYS socket.close");
+          });
+
+          socket.addEventListener("error", () => {
+            if (state.ws !== socket) return;
+            logEvent("ERR socket.error");
+          });
+        });
+
+        byId("disconnect").addEventListener("click", () => {
+          if (!state.ws) return;
+          state.ws.close();
+        });
+
+        byId("clear-local").addEventListener("click", () => {
+          if (!connected() || !state.joinedBoard) {
+            applyBoardClear("you");
+            return;
+          }
+
+          applyBoardClear("you");
+          try {
+            sendFrame({
+              op: "channel_emit",
+              id: nextId(),
+              channel: state.boardChannel,
+              event: BOARD_CLEARED_EVENT,
+              data: {
+                cleared_by: state.userId,
+                ts: Date.now(),
+              },
+            });
+          } catch (err) {
+            logEvent(`ERR send.clear ${String(err)}`);
+          }
+        });
+
+        canvas.addEventListener("pointerdown", (event) => {
+          if (!canDraw()) {
+            logEvent("ERR connect, join, and finish sync before drawing");
+            return;
+          }
+          if (state.drawing) return;
+
+          const point = eventToPoint(event);
+          if (!point) return;
+          state.drawing = true;
+          state.pointerId = event.pointerId;
+          state.strokeId = makeStrokeId();
+          state.strokeSeq = 0;
+          state.localLast = null;
+          state.shapeStart = null;
+          state.activeStyle = getCurrentStyle();
+          state.pendingPoints = [];
+
+          try {
+            canvas.setPointerCapture(event.pointerId);
+          } catch (_) {}
+
+          if (state.activeStyle.tool === TOOL_PEN) {
+            addLocalPoint(point);
+          } else {
+            state.shapeStart = point;
+            renderShapePreview([point], state.activeStyle);
+          }
+          event.preventDefault();
+        });
+
+        canvas.addEventListener("pointermove", (event) => {
+          if (!state.drawing || state.pointerId !== event.pointerId) return;
+          const point = eventToPoint(event);
+          if (!point) return;
+          if ((state.activeStyle?.tool || TOOL_PEN) === TOOL_PEN) {
+            addLocalPoint(point);
+          } else if (state.shapeStart) {
+            const points = shapePoints(state.activeStyle.tool, state.shapeStart, point);
+            renderShapePreview(points, state.activeStyle);
+          }
+          event.preventDefault();
+        });
+
+        function finalizePointer(event) {
+          if (!state.drawing || state.pointerId !== event.pointerId) return;
+          const point = eventToPoint(event);
+          const style = state.activeStyle || getCurrentStyle();
+          if (style.tool === TOOL_PEN) {
+            if (point) addLocalPoint(point);
+            stopLocalStroke();
+          } else {
+            if (point && state.shapeStart) {
+              const points = shapePoints(style.tool, state.shapeStart, point);
+              clearPreview();
+              strokePolylineOn(ctx, points, style);
+              emitShape(points, style);
+            }
+            stopLocalStroke();
+          }
+          try {
+            canvas.releasePointerCapture(event.pointerId);
+          } catch (_) {}
+          event.preventDefault();
+        }
+
+        canvas.addEventListener("pointerup", finalizePointer);
+        canvas.addEventListener("pointercancel", finalizePointer);
+        canvas.addEventListener("pointerleave", (event) => {
+          if (!state.drawing || state.pointerId !== event.pointerId) return;
+          clearPreview();
+          stopLocalStroke();
+          event.preventDefault();
+        });
+
+        window.addEventListener("resize", () => {
+          setCanvasMetrics();
+          logEvent("SYS canvas resized, local view reset");
+        });
+
+        toolSelect.value = state.tool;
+        strokeWidthSelect.value = String(state.strokeWidth);
+        renderColorSelection();
+        setCanvasMetrics();
+        setStatus("disconnected");
+        loadUsers().catch((err) => logEvent(`ERR load.users ${String(err)}`));
+      })();
+    </script>
+  </body>
+</html>

@@ -12,7 +12,7 @@ use axum::{
 };
 use serde::Deserialize;
 
-use super::{RealtimeError, RealtimeRuntimeState};
+use super::{RealtimeError, SocketAppState};
 
 #[derive(Debug, Clone)]
 pub struct RealtimeRouteOptions {
@@ -31,15 +31,15 @@ impl Default for RealtimeRouteOptions {
     }
 }
 
-struct HandlerState {
-    runtime: Arc<RealtimeRuntimeState>,
+struct SocketRouteState {
+    socket_server_handle: Arc<SocketAppState>,
     options: RealtimeRouteOptions,
 }
 
-impl Clone for HandlerState {
+impl Clone for SocketRouteState {
     fn clone(&self) -> Self {
         Self {
-            runtime: Arc::clone(&self.runtime),
+            socket_server_handle: Arc::clone(&self.socket_server_handle),
             options: self.options.clone(),
         }
     }
@@ -94,27 +94,30 @@ impl IntoResponse for RealtimeHttpError {
     }
 }
 
-pub fn router(runtime: Arc<RealtimeRuntimeState>) -> Router {
-    router_with_options(runtime, RealtimeRouteOptions::default())
+pub fn router(socket_server_handle: Arc<SocketAppState>) -> Router {
+    router_with_options(socket_server_handle, RealtimeRouteOptions::default())
 }
 
 pub fn router_with_options(
-    runtime: Arc<RealtimeRuntimeState>,
+    socket_server_handle: Arc<SocketAppState>,
     options: RealtimeRouteOptions,
 ) -> Router {
     let path = options.path;
     Router::new()
         .route(path, get(socket_handler))
-        .with_state(HandlerState { runtime, options })
+        .with_state(SocketRouteState {
+            socket_server_handle,
+            options,
+        })
 }
 
 async fn socket_handler(
-    State(handler_state): State<HandlerState>,
+    State(handler_state): State<SocketRouteState>,
     upgrade: Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
     headers: HeaderMap,
     Query(query): Query<SocketQuery>,
 ) -> Response {
-    let realtime = handler_state.runtime.handle.clone();
+    let realtime = handler_state.socket_server_handle.handle.clone();
 
     if !realtime.is_enabled() {
         return RealtimeHttpError::RealtimeDisabled.into_response();
@@ -130,7 +133,12 @@ async fn socket_handler(
         Err(err) => return err.into_response(),
     };
 
-    let auth = match handler_state.runtime.verifier.verify_token(&token).await {
+    let auth = match handler_state
+        .socket_server_handle
+        .verifier
+        .verify_token(&token)
+        .await
+    {
         Ok(auth) => auth,
         Err(err) => return RealtimeHttpError::VerifyFailed(err).into_response(),
     };

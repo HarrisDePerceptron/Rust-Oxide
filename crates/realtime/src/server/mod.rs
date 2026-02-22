@@ -10,7 +10,10 @@ mod types;
 pub use axum::RealtimeRouteOptions;
 pub use config::RealtimeConfig;
 pub use error::RealtimeError;
-pub use hub::{RealtimeHandle, SubscriptionId};
+pub use hub::{SocketServerHandle, SubscriptionId};
 pub use policy::{ChannelPolicy, DefaultChannelPolicy};
-pub use runtime::{RealtimeRuntimeState, RealtimeTokenVerifier};
-pub use types::{ChannelName, ConnectionId, ConnectionMeta, DisconnectReason, SessionAuth};
+pub use runtime::{RealtimeTokenVerifier, SocketAppState};
+pub use types::{
+    Channel, ChannelName, ConnectionId, ConnectionMeta, DisconnectReason, Event, Payload,
+    SessionAuth, UserId,
+};

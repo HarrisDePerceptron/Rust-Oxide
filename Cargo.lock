@@ -2557,55 +2557,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust-oxide-cli"
-version = "0.7.0"
-dependencies = [
- "anyhow",
- "clap",
- "crossterm",
- "dotenvy",
- "ratatui",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "walkdir",
-]
-
-[[package]]
-name = "rust-oxide-realtime"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "axum",
- "chrono",
- "futures-util",
- "serde",
- "serde_json",
- "tokio",
- "tokio-tungstenite",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "rust_decimal"
-version = "1.40.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61f703d19852dbf87cbc513643fa81428361eb6940f1ac14fd58155d295a3eb0"
-dependencies = [
- "arrayvec",
- "borsh",
- "bytes",
- "num-traits",
- "rand 0.8.5",
- "rkyv",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "rust_oxide"
+name = "rust-oxide"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2635,6 +2587,54 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "rust-oxide-cli"
+version = "0.7.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "crossterm",
+ "dotenvy",
+ "ratatui",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "walkdir",
+]
+
+[[package]]
+name = "rust-oxide-realtime"
+version = "0.1.1"
+dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "rust_decimal"
+version = "1.40.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61f703d19852dbf87cbc513643fa81428361eb6940f1ac14fd58155d295a3eb0"
+dependencies = [
+ "arrayvec",
+ "borsh",
+ "bytes",
+ "num-traits",
+ "rand 0.8.5",
+ "rkyv",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

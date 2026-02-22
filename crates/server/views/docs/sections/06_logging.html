@@ -42,13 +42,13 @@ error!(error = ?err, "database operation failed");</code></pre>
                 </button>
               </div>
               <pre class="overflow-x-auto px-4 py-4 text-xs text-white"><code id="terminal-logging-levels"># default behavior
-RUST_LOG=info,tower_http=info cargo run -p rust_oxide
+RUST_LOG=info,tower_http=info cargo run -p rust-oxide
 
 # include request/response debug events
-RUST_LOG=debug,tower_http=debug cargo run -p rust_oxide
+RUST_LOG=debug,tower_http=debug cargo run -p rust-oxide
 
 # very verbose (including trace)
-RUST_LOG=trace,tower_http=trace cargo run -p rust_oxide</code></pre>
+RUST_LOG=trace,tower_http=trace cargo run -p rust-oxide</code></pre>
             </div>
           </section>
 
