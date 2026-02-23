@@ -44,6 +44,15 @@ pub enum ClientFrame {
         #[serde(default)]
         ts: Option<i64>,
     },
+    ChannelEmitUnreliable {
+        id: String,
+        channel: String,
+        event: String,
+        #[serde(default)]
+        data: Value,
+        #[serde(default)]
+        ts: Option<i64>,
+    },
     Ping {
         id: String,
         #[serde(default)]

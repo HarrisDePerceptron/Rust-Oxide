@@ -321,6 +321,12 @@ pub(crate) enum HubCommand {
         payload: Payload,
         req_id: String,
     },
+    EmitUnreliable {
+        conn_id: ConnectionId,
+        channel: ChannelName,
+        event: Event,
+        payload: Payload,
+    },
     Ping {
         conn_id: ConnectionId,
         req_id: String,
@@ -407,6 +413,12 @@ impl SocketServer {
                 payload,
                 req_id,
             } => self.handle_emit(conn_id, channel, event, payload, req_id),
+            HubCommand::EmitUnreliable {
+                conn_id,
+                channel,
+                event,
+                payload,
+            } => self.handle_emit_unreliable(conn_id, channel, event, payload),
             HubCommand::Ping { conn_id, req_id } => self.handle_ping(conn_id, req_id),
             HubCommand::SendToChannel {
                 channel,
@@ -716,6 +728,54 @@ impl SocketServer {
         }
 
         self.send_frame(conn_id, ServerFrame::ack_ok(req_id));
+    }
+
+    fn handle_emit_unreliable(
+        &mut self,
+        conn_id: ConnectionId,
+        channel: ChannelName,
+        event: Event,
+        payload: Payload,
+    ) {
+        if !self.check_emit_rate(conn_id) {
+            return;
+        }
+
+        let Some(meta) = self.connections.get(&conn_id).map(|conn| conn.meta.clone()) else {
+            return;
+        };
+
+        if self.policy.can_publish(&meta, &channel, &event).is_err() {
+            return;
+        }
+
+        let sender_is_member = self
+            .connection_channels
+            .get(&conn_id)
+            .is_some_and(|set| set.contains(&channel));
+        if !sender_is_member {
+            return;
+        }
+
+        let recipients = self.channels.get(&channel).cloned().unwrap_or_default();
+        let include_sender = should_echo_to_sender(&channel);
+        self.publish_inbound(InboundMessage {
+            channel: channel.to_string(),
+            event: event.clone(),
+            payload: payload.clone(),
+        });
+        let event_frame = ServerFrame::event(
+            channel.to_string(),
+            event,
+            payload,
+            Some(meta.user_id.clone()),
+        );
+        for recipient_id in recipients {
+            if recipient_id == conn_id && !include_sender {
+                continue;
+            }
+            self.send_frame(recipient_id, event_frame.clone());
+        }
     }
 
     fn handle_ping(&mut self, conn_id: ConnectionId, req_id: String) {

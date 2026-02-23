@@ -488,8 +488,16 @@
         const MAX_EVENT_LINES = 260;
         const FLUSH_INTERVAL_MS = 28;
         const MIN_POINT_DELTA = 0.0008;
-        const CURSOR_SEND_INTERVAL_MS = 55;
+        const CURSOR_SEND_INTERVAL_FAST_MS = 20;
+        const CURSOR_SEND_INTERVAL_BASE_MS = 30;
+        const CURSOR_SEND_INTERVAL_IDLE_MS = 48;
+        const CURSOR_SEND_INTERVAL_BACKPRESSURE_MS = 85;
+        const CURSOR_SPEED_FAST = 0.85;
+        const CURSOR_SPEED_IDLE = 0.2;
+        const CURSOR_BACKPRESSURE_BYTES = 64 * 1024;
         const CURSOR_IDLE_MS = 2200;
+        const CURSOR_INTERPOLATION_MS = 80;
+        const CURSOR_INTERPOLATION_EPSILON = 0.00012;
         const SHAPE_MOVE_SEND_INTERVAL_MS = 38;
         const MAX_TEXT_CHARS = 400;
 
@@ -518,6 +526,10 @@
           shapeObjects: new Map(),
           remoteCursors: new Map(),
           cursorLastSentAt: 0,
+          cursorSeq: 0,
+          cursorLastSamplePoint: null,
+          cursorLastSampleAt: 0,
+          cursorSendIntervalMs: CURSOR_SEND_INTERVAL_BASE_MS,
           activeStyle: null,
           textObjects: new Map(),
           activeTextEditId: null,
@@ -620,12 +632,28 @@
           eventsEl.scrollTop = eventsEl.scrollHeight;
         }
 
+        function shouldLogOutgoingFrame(frame) {
+          if (!frame || typeof frame !== "object") return true;
+          const op = String(frame.op || "").trim().toLowerCase();
+          if (op === "channel_emit_unreliable" || op === "ping") return false;
+          return frame.event !== CURSOR_EVENT;
+        }
+
+        function shouldLogIncomingFrame(frame) {
+          if (!frame || typeof frame !== "object") return false;
+          const op = String(frame.op || "").trim().toLowerCase();
+          if (op === "pong") return false;
+          if (op === "ack" && frame.ok !== false) return false;
+          if (op === "event" && frame.event === CURSOR_EVENT) return false;
+          return true;
+        }
+
         function sendFrame(frame) {
           if (!connected()) {
             throw new Error("Socket is not connected");
           }
           state.ws.send(JSON.stringify(frame));
-          if (frame.event !== CURSOR_EVENT) {
+          if (shouldLogOutgoingFrame(frame)) {
             const op = frame.op || "frame";
             const channel = frame.channel ? ` channel=${frame.channel}` : "";
             const event = frame.event ? ` event=${frame.event}` : "";
@@ -1573,11 +1601,18 @@
         function emitCursor(point, visible, force) {
           if (!connected() || !state.joinedBoard) return;
           const now = Date.now();
-          if (!force && now - state.cursorLastSentAt < CURSOR_SEND_INTERVAL_MS) return;
+          const interval = nextCursorSendInterval(point, now);
+          state.cursorSendIntervalMs = interval;
+          if (!force && now - state.cursorLastSentAt < interval) return;
           state.cursorLastSentAt = now;
+          if (point) {
+            state.cursorLastSamplePoint = [point[0], point[1]];
+            state.cursorLastSampleAt = now;
+          }
+          state.cursorSeq += 1;
           try {
             sendFrame({
-              op: "channel_emit",
+              op: "channel_emit_unreliable",
               id: nextId(),
               channel: state.boardChannel,
               event: CURSOR_EVENT,
@@ -1587,15 +1622,35 @@
                 y: point ? Number(point[1].toFixed(5)) : null,
                 color: clampColor(state.color),
                 label: state.userId,
+                cursor_seq: state.cursorSeq,
+                sent_at_ms: now,
               },
             });
           } catch (_) {}
         }
 
+        function nextCursorSendInterval(point, nowMs) {
+          if (connected() && state.ws && Number(state.ws.bufferedAmount) > CURSOR_BACKPRESSURE_BYTES) {
+            return CURSOR_SEND_INTERVAL_BACKPRESSURE_MS;
+          }
+          if (!point || !state.cursorLastSamplePoint || state.cursorLastSampleAt <= 0) {
+            return CURSOR_SEND_INTERVAL_BASE_MS;
+          }
+          const elapsed = Math.max(1, nowMs - state.cursorLastSampleAt);
+          const speedPerSec = (pointDistance(point, state.cursorLastSamplePoint) * 1000) / elapsed;
+          if (speedPerSec >= CURSOR_SPEED_FAST) {
+            return CURSOR_SEND_INTERVAL_FAST_MS;
+          }
+          if (speedPerSec <= CURSOR_SPEED_IDLE) {
+            return CURSOR_SEND_INTERVAL_IDLE_MS;
+          }
+          return CURSOR_SEND_INTERVAL_BASE_MS;
+        }
+
         function renderRemoteCursors() {
           clearCursorLayer();
           for (const cursor of state.remoteCursors.values()) {
-            const pos = normToPx([cursor.x, cursor.y]);
+            const pos = normToPx([cursor.renderX, cursor.renderY]);
             const color = clampColor(cursor.color);
             const label = String(cursor.label || "user");
 
@@ -1638,17 +1693,79 @@
           const x = Number(payload?.x);
           const y = Number(payload?.y);
           if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+          const now = Date.now();
+          const nextTargetX = clamp01(x);
+          const nextTargetY = clamp01(y);
+          const maybeSeq = Number(payload?.cursor_seq);
+
+          const existing = state.remoteCursors.get(normalizedUser);
+          if (existing) {
+            if (Number.isFinite(maybeSeq) && maybeSeq <= existing.lastSeq) {
+              return;
+            }
+            existing.targetX = nextTargetX;
+            existing.targetY = nextTargetY;
+            existing.color = clampColor(payload?.color);
+            existing.label =
+              typeof payload?.label === "string" && payload.label.trim().length > 0
+                ? payload.label.trim()
+                : normalizedUser;
+            existing.seenAt = now;
+            existing.lastSeq = Number.isFinite(maybeSeq) ? maybeSeq : existing.lastSeq + 1;
+            return;
+          }
+
           state.remoteCursors.set(normalizedUser, {
-            x: clamp01(x),
-            y: clamp01(y),
+            renderX: nextTargetX,
+            renderY: nextTargetY,
+            targetX: nextTargetX,
+            targetY: nextTargetY,
             color: clampColor(payload?.color),
             label:
               typeof payload?.label === "string" && payload.label.trim().length > 0
                 ? payload.label.trim()
                 : normalizedUser,
-            seenAt: Date.now(),
+            seenAt: now,
+            lastRenderedAt: now,
+            lastSeq: Number.isFinite(maybeSeq) ? maybeSeq : 0,
           });
           renderRemoteCursors();
+        }
+
+        function tickRemoteCursorInterpolation() {
+          const nowMs = Date.now();
+          let changed = false;
+          for (const [userId, cursor] of state.remoteCursors.entries()) {
+            if (nowMs - cursor.seenAt > CURSOR_IDLE_MS) {
+              state.remoteCursors.delete(userId);
+              changed = true;
+              continue;
+            }
+            const elapsed = Math.max(1, nowMs - (cursor.lastRenderedAt || nowMs));
+            const alpha = Math.min(1, elapsed / CURSOR_INTERPOLATION_MS);
+            const nextX = cursor.renderX + (cursor.targetX - cursor.renderX) * alpha;
+            const nextY = cursor.renderY + (cursor.targetY - cursor.renderY) * alpha;
+            if (
+              Math.abs(nextX - cursor.renderX) > CURSOR_INTERPOLATION_EPSILON ||
+              Math.abs(nextY - cursor.renderY) > CURSOR_INTERPOLATION_EPSILON
+            ) {
+              cursor.renderX = nextX;
+              cursor.renderY = nextY;
+              changed = true;
+            } else if (
+              Math.abs(cursor.targetX - cursor.renderX) > CURSOR_INTERPOLATION_EPSILON ||
+              Math.abs(cursor.targetY - cursor.renderY) > CURSOR_INTERPOLATION_EPSILON
+            ) {
+              cursor.renderX = cursor.targetX;
+              cursor.renderY = cursor.targetY;
+              changed = true;
+            }
+            cursor.lastRenderedAt = nowMs;
+          }
+          if (changed) {
+            renderRemoteCursors();
+          }
+          requestAnimationFrame(tickRemoteCursorInterpolation);
         }
 
         function pruneRemoteCursors() {
@@ -1749,6 +1866,10 @@
           clearTextObjects();
           state.remoteCursors.clear();
           state.cursorLastSentAt = 0;
+          state.cursorSeq = 0;
+          state.cursorLastSamplePoint = null;
+          state.cursorLastSampleAt = 0;
+          state.cursorSendIntervalMs = CURSOR_SEND_INTERVAL_BASE_MS;
           stopLocalStroke();
           renderRemoteCursors();
           setBoardMeta("Not joined");
@@ -1931,13 +2052,10 @@
               const ev = frame.event ? ` event=${frame.event}` : "";
               const from = frame.from_user ? ` from=${frame.from_user}` : "";
               const payloadInfo = frame.data ? ` ${previewPayload(frame.data)}` : "";
-              const isCursorFrame = frame.op === "event" && frame.event === CURSOR_EVENT;
-              if (isCursorFrame) {
-                // Cursor frames are high-frequency; keep event log signal clean.
-              } else if (op === "ack" && frame.ok === false) {
+              if (op === "ack" && frame.ok === false && shouldLogIncomingFrame(frame)) {
                 const reason = frame?.error?.message || "unknown";
                 logEvent(`ERR IN op=ack fail=${reason}`);
-              } else {
+              } else if (shouldLogIncomingFrame(frame)) {
                 logEvent(`IN op=${op}${channel}${ev}${from}${payloadInfo}`);
               }
 
@@ -2215,6 +2333,7 @@
         });
 
         setInterval(pruneRemoteCursors, 500);
+        requestAnimationFrame(tickRemoteCursorInterpolation);
         renderToolModeControls();
         strokeWidthSelect.value = String(state.strokeWidth);
         fontSizeSelect.value = String(state.fontSize);

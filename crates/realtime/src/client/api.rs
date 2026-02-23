@@ -140,6 +140,24 @@ impl RealtimeClient {
         .await
     }
 
+    pub async fn send_event_unreliable(
+        &self,
+        channel: &str,
+        event: &str,
+        message: Value,
+    ) -> ClientResult<()> {
+        self.outbound_tx
+            .send(ClientFrame::ChannelEmitUnreliable {
+                id: Uuid::new_v4().to_string(),
+                channel: channel.to_string(),
+                event: event.to_string(),
+                data: message,
+                ts: None,
+            })
+            .await
+            .map_err(|err| format!("failed to send request: {err}"))
+    }
+
     pub fn on_message<F>(&self, channel: &str, handler: F) -> SubscriptionId
     where
         F: Fn(Value) + Send + Sync + 'static,
@@ -518,6 +536,7 @@ fn frame_id(frame: &ClientFrame) -> &str {
         ClientFrame::ChannelJoin { id, .. } => id,
         ClientFrame::ChannelLeave { id, .. } => id,
         ClientFrame::ChannelEmit { id, .. } => id,
+        ClientFrame::ChannelEmitUnreliable { id, .. } => id,
         ClientFrame::Ping { id, .. } => id,
     }
 }

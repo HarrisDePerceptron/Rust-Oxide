@@ -216,6 +216,27 @@ async fn dispatch_client_frame(
                 req_id: id,
             }
         }
+        ClientFrame::ChannelEmitUnreliable {
+            channel,
+            event,
+            data,
+            ..
+        } => {
+            let channel = match ChannelName::parse(&channel) {
+                Ok(channel) => channel,
+                Err(err) => {
+                    let message = err.message().to_string();
+                    let _ = send_direct_error(ws_sender, "invalid_channel", &message).await;
+                    return Ok(());
+                }
+            };
+            HubCommand::EmitUnreliable {
+                conn_id,
+                channel,
+                event,
+                payload: data,
+            }
+        }
         ClientFrame::Ping { id, .. } => HubCommand::Ping {
             conn_id,
             req_id: id,
