@@ -83,6 +83,9 @@ pub fn run(mut args: InitArgs) -> Result<()> {
     if args.no_docs {
         args.docs = false;
     }
+    if args.no_realtime {
+        args.realtime = false;
+    }
 
     let interactive = !args.non_interactive && io::stdout().is_terminal();
     let mut temp_dir: Option<TempDir> = None;
@@ -209,6 +212,7 @@ pub fn run(mut args: InitArgs) -> Result<()> {
     }
 
     replace_in_dir(&out_dir, DEFAULT_REPLACE_FROM, &crate_name)?;
+    rewrite_package_name(&out_dir.join("Cargo.toml"), &crate_name)?;
 
     if !args.auth_local {
         disable_local_auth_profile(&out_dir)?;
@@ -218,6 +222,9 @@ pub fn run(mut args: InitArgs) -> Result<()> {
     }
     if !args.docs {
         disable_docs_profile(&out_dir)?;
+    }
+    if !args.realtime {
+        disable_realtime_profile(&out_dir)?;
     }
 
     apply_database_profile(&out_dir, &args.db)?;
@@ -344,6 +351,39 @@ fn replace_in_file(path: &Path, from: &str, to: &str) -> Result<()> {
     Ok(())
 }
 
+fn rewrite_package_name(path: &Path, package_name: &str) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let contents =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let mut in_package = false;
+    let mut changed = false;
+    let mut out = String::new();
+
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            in_package = trimmed == "[package]";
+        }
+
+        if in_package && trimmed.starts_with("name = ") {
+            out.push_str(&format!("name = \"{package_name}\"\n"));
+            changed = true;
+            continue;
+        }
+
+        out.push_str(line);
+        out.push('\n');
+    }
+
+    if changed {
+        fs::write(path, out).with_context(|| format!("failed to write {}", path.display()))?;
+    }
+    Ok(())
+}
+
 fn disable_local_auth_profile(root: &Path) -> Result<()> {
     let files_to_remove = [
         "src/auth/providers/local.rs",
@@ -448,6 +488,7 @@ fn disable_todo_example_profile(root: &Path) -> Result<()> {
         &root.join("src/routes/api/router.rs"),
         &[".merge(todo_crud::router("],
     )?;
+    remove_use_group_item(&root.join("src/routes/api/router.rs"), "todo_crud")?;
     replace_in_file_if_exists(
         &root.join("src/routes/api/router.rs"),
         "admin, auth, protected, public, todo_crud",
@@ -469,6 +510,7 @@ fn disable_todo_example_profile(root: &Path) -> Result<()> {
         &root.join("src/routes/views/router.rs"),
         &["merge(todo::router())"],
     )?;
+    remove_use_group_item(&root.join("src/routes/views/router.rs"), "todo")?;
     replace_in_file_if_exists(
         &root.join("src/routes/views/router.rs"),
         "super::{public, todo};",
@@ -542,6 +584,137 @@ fn disable_docs_profile(root: &Path) -> Result<()> {
     Ok(())
 }
 
+fn disable_realtime_profile(root: &Path) -> Result<()> {
+    let files_to_remove = [
+        "src/routes/api/realtime.rs",
+        "src/realtime/mod.rs",
+        "src/realtime/verifier.rs",
+        "examples/realtime_client.rs",
+        "tests/auth_flow.rs",
+        "tests/mock_routes.rs",
+        "tests/todo_routes.rs",
+        "src/test_helpers.rs",
+    ];
+    for rel in files_to_remove {
+        remove_file_if_exists(&root.join(rel))?;
+    }
+
+    remove_dir_if_exists(&root.join("src/realtime"))?;
+
+    remove_lines_containing(&root.join("src/routes/api/mod.rs"), &["pub mod realtime;"])?;
+
+    replace_in_file_if_exists(
+        &root.join("src/main.rs"),
+        "    realtime::{AppRealtimeVerifier, SocketAppState},\n",
+        "",
+    )?;
+    remove_lines_containing(
+        &root.join("src/main.rs"),
+        &["SocketServerHandle::spawn(cfg.realtime.clone())"],
+    )?;
+    remove_line_block(
+        &root.join("src/main.rs"),
+        "let realtime_runtime = Arc::new(SocketAppState::new(",
+        "));",
+    )?;
+    replace_in_file_if_exists(
+        &root.join("src/main.rs"),
+        ".merge(router(Arc::clone(&state), realtime_runtime))",
+        ".merge(router(Arc::clone(&state)))",
+    )?;
+
+    replace_in_file_if_exists(
+        &root.join("src/routes/entry.rs"),
+        "use crate::{realtime::SocketAppState, state::AppState};",
+        "use crate::state::AppState;",
+    )?;
+    replace_in_file_if_exists(
+        &root.join("src/routes/entry.rs"),
+        "pub fn router(state: Arc<AppState>, realtime_runtime: Arc<SocketAppState>) -> Router {",
+        "pub fn router(state: Arc<AppState>) -> Router {",
+    )?;
+    replace_in_file_if_exists(
+        &root.join("src/routes/entry.rs"),
+        ".nest(API_PREFIX, api::router(state.clone(), realtime_runtime))",
+        ".nest(API_PREFIX, api::router(state.clone()))",
+    )?;
+
+    replace_in_file_if_exists(
+        &root.join("src/routes/api/router.rs"),
+        "use crate::{realtime::SocketAppState, state::AppState};",
+        "use crate::state::AppState;",
+    )?;
+    remove_use_group_item(&root.join("src/routes/api/router.rs"), "realtime")?;
+    replace_in_file_if_exists(
+        &root.join("src/routes/api/router.rs"),
+        "pub fn router(state: Arc<AppState>, realtime_runtime: Arc<SocketAppState>) -> Router {",
+        "pub fn router(state: Arc<AppState>) -> Router {",
+    )?;
+    remove_lines_containing(
+        &root.join("src/routes/api/router.rs"),
+        &[".merge(realtime::router("],
+    )?;
+
+    remove_lines_containing(
+        &root.join("src/lib.rs"),
+        &["pub mod realtime;", "pub mod test_helpers;"],
+    )?;
+
+    remove_method_block(
+        &root.join("src/error.rs"),
+        "impl From<realtime::server::RealtimeError> for AppError {",
+    )?;
+
+    rewrite_configs_without_realtime(&root.join("src/config/configs.rs"))?;
+
+    remove_dependency(&root.join("Cargo.toml"), "realtime")?;
+    replace_in_file_if_exists(
+        &root.join("Cargo.toml"),
+        "axum = { version=\"0.8.7\", features=[\"json\", \"ws\"] }",
+        "axum = { version=\"0.8.7\", features=[\"json\"] }",
+    )?;
+    replace_in_file_if_exists(
+        &root.join("Cargo.toml"),
+        "axum = { version = \"0.8.7\", features = [\"json\", \"ws\"] }",
+        "axum = { version = \"0.8.7\", features = [\"json\"] }",
+    )?;
+
+    Ok(())
+}
+
+fn rewrite_configs_without_realtime(path: &Path) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let contents =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let mut updated = contents.replace("pub use realtime::server::RealtimeConfig;\n", "");
+    if updated.contains("pub struct RealtimeConfig") {
+        if updated != contents {
+            fs::write(path, updated)
+                .with_context(|| format!("failed to write {}", path.display()))?;
+        }
+        return Ok(());
+    }
+
+    let marker = "use super::{defaults, envconfig::EnvConfig, validate};\n";
+    let replacement = "use super::{defaults, envconfig::EnvConfig, validate};\n\n#[derive(Debug, Clone, Deserialize, Serialize)]\n#[serde(default, deny_unknown_fields)]\npub struct RealtimeConfig {\n    pub enabled: bool,\n    pub max_connections: usize,\n    pub max_channels_per_connection: usize,\n    pub max_message_bytes: usize,\n    pub heartbeat_interval_secs: u64,\n    pub idle_timeout_secs: u64,\n    pub outbound_queue_size: usize,\n    pub emit_rate_per_sec: u32,\n    pub join_rate_per_sec: u32,\n}\n\nimpl Default for RealtimeConfig {\n    fn default() -> Self {\n        Self {\n            enabled: defaults::DEFAULT_REALTIME_ENABLED,\n            max_connections: defaults::DEFAULT_REALTIME_MAX_CONNECTIONS,\n            max_channels_per_connection: defaults::DEFAULT_REALTIME_MAX_CHANNELS_PER_CONNECTION,\n            max_message_bytes: defaults::DEFAULT_REALTIME_MAX_MESSAGE_BYTES,\n            heartbeat_interval_secs: defaults::DEFAULT_REALTIME_HEARTBEAT_INTERVAL_SECS,\n            idle_timeout_secs: defaults::DEFAULT_REALTIME_IDLE_TIMEOUT_SECS,\n            outbound_queue_size: defaults::DEFAULT_REALTIME_OUTBOUND_QUEUE_SIZE,\n            emit_rate_per_sec: defaults::DEFAULT_REALTIME_EMIT_RATE_PER_SEC,\n            join_rate_per_sec: defaults::DEFAULT_REALTIME_JOIN_RATE_PER_SEC,\n        }\n    }\n}\n";
+    if updated.contains(marker) {
+        updated = updated.replacen(marker, replacement, 1);
+    } else {
+        bail!(
+            "failed to locate config import marker while disabling realtime profile in {}",
+            path.display()
+        );
+    }
+
+    if updated != contents {
+        fs::write(path, updated).with_context(|| format!("failed to write {}", path.display()))?;
+    }
+    Ok(())
+}
+
 fn remove_lines_containing(path: &Path, needles: &[&str]) -> Result<()> {
     if !path.exists() {
         return Ok(());
@@ -610,6 +783,89 @@ fn remove_method_block(path: &Path, signature_fragment: &str) -> Result<()> {
     }
 
     bail!("failed to locate end of method block in {}", path.display())
+}
+
+fn remove_line_block(path: &Path, start_fragment: &str, end_fragment: &str) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let contents =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let mut lines: Vec<String> = contents.lines().map(|line| line.to_string()).collect();
+    let Some(start_idx) = lines.iter().position(|line| line.contains(start_fragment)) else {
+        return Ok(());
+    };
+    let Some(relative_end) = lines[start_idx..]
+        .iter()
+        .position(|line| line.contains(end_fragment))
+    else {
+        bail!(
+            "failed to locate end marker '{end_fragment}' while editing {}",
+            path.display()
+        );
+    };
+    let end_idx = start_idx + relative_end;
+    lines.drain(start_idx..=end_idx);
+    let mut updated = lines.join("\n");
+    if contents.ends_with('\n') {
+        updated.push('\n');
+    }
+    fs::write(path, updated).with_context(|| format!("failed to write {}", path.display()))?;
+    Ok(())
+}
+
+fn remove_use_group_item(path: &Path, item: &str) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let contents =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let mut changed = false;
+    let mut out = String::new();
+
+    for line in contents.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("use super::{")
+            && line.contains(item)
+            && let (Some(open), Some(close)) = (line.find('{'), line.rfind('}'))
+        {
+            let tokens: Vec<&str> = line[open + 1..close]
+                .split(',')
+                .map(str::trim)
+                .filter(|token| !token.is_empty())
+                .collect();
+            let mut filtered: Vec<&str> = Vec::with_capacity(tokens.len());
+            for token in &tokens {
+                if *token != item {
+                    filtered.push(*token);
+                }
+            }
+            if filtered.len() != tokens.len() {
+                changed = true;
+                if filtered.is_empty() {
+                    continue;
+                }
+                let rebuilt = format!(
+                    "{}{}{}",
+                    &line[..open + 1],
+                    filtered.join(", "),
+                    &line[close..]
+                );
+                out.push_str(&rebuilt);
+                out.push('\n');
+                continue;
+            }
+        }
+
+        out.push_str(line);
+        out.push('\n');
+    }
+
+    if changed {
+        fs::write(path, out).with_context(|| format!("failed to write {}", path.display()))?;
+    }
+    Ok(())
 }
 
 fn brace_delta(line: &str) -> i32 {

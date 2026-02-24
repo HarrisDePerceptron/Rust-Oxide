@@ -55,6 +55,12 @@ pub struct InitArgs {
     /// Exclude docs page
     #[arg(long = "no-docs", default_value_t = false)]
     pub no_docs: bool,
+    /// Include realtime websocket scaffolding
+    #[arg(long = "realtime", default_value_t = true)]
+    pub realtime: bool,
+    /// Exclude realtime websocket scaffolding
+    #[arg(long = "no-realtime", default_value_t = false)]
+    pub no_realtime: bool,
     /// Template repo URL (or set SAMPLE_SERVER_TEMPLATE_REPO)
     #[arg(long)]
     pub repo: Option<String>,

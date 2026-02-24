@@ -33,6 +33,7 @@ enum Step {
     Auth,
     TodoExample,
     Docs,
+    Realtime,
     OutputDir,
     Summary,
     Cloning,
@@ -48,14 +49,15 @@ impl Step {
             Step::Auth => 5,
             Step::TodoExample => 6,
             Step::Docs => 7,
-            Step::OutputDir => 8,
-            Step::Summary => 9,
-            Step::Cloning => 10,
+            Step::Realtime => 8,
+            Step::OutputDir => 9,
+            Step::Summary => 10,
+            Step::Cloning => 11,
         }
     }
 
     fn total() -> usize {
-        10
+        11
     }
 
     fn title(self) -> &'static str {
@@ -67,6 +69,7 @@ impl Step {
             Step::Auth => "Auth",
             Step::TodoExample => "Todo Example",
             Step::Docs => "Docs",
+            Step::Realtime => "Realtime",
             Step::OutputDir => "Output directory",
             Step::Summary => "Summary",
             Step::Cloning => "Cloning",
@@ -81,7 +84,8 @@ impl Step {
             Step::DatabaseUrl => Step::Auth,
             Step::Auth => Step::TodoExample,
             Step::TodoExample => Step::Docs,
-            Step::Docs => Step::OutputDir,
+            Step::Docs => Step::Realtime,
+            Step::Realtime => Step::OutputDir,
             Step::OutputDir => Step::Summary,
             Step::Summary => Step::Cloning,
             Step::Cloning => Step::Cloning,
@@ -97,7 +101,8 @@ impl Step {
             Step::Auth => Step::DatabaseUrl,
             Step::TodoExample => Step::Auth,
             Step::Docs => Step::TodoExample,
-            Step::OutputDir => Step::Docs,
+            Step::Realtime => Step::Docs,
+            Step::OutputDir => Step::Realtime,
             Step::Summary => Step::OutputDir,
             Step::Cloning => Step::Summary,
         }
@@ -115,6 +120,7 @@ struct UiState {
     auth_index: usize,
     todo_index: usize,
     docs_index: usize,
+    realtime_index: usize,
     cursor: usize,
     db_url: String,
     db_url_source: DbUrlSource,
@@ -191,6 +197,7 @@ pub(super) fn run_tui(args: InitArgs, repo: String) -> Result<TuiOutcome> {
         auth_index: auth_option_index(args.auth_local),
         todo_index: todo_option_index(args.todo_example),
         docs_index: docs_option_index(args.docs),
+        realtime_index: realtime_option_index(args.realtime),
         cursor: 0,
         db_url: args.database_url.clone().unwrap_or_default(),
         db_url_source: if args.database_url.is_some() {
@@ -260,6 +267,7 @@ fn build_args(state: &UiState, args: &InitArgs) -> InitArgs {
         auth_local: AUTH_LOCAL_VALUES[state.auth_index],
         todo_example: TODO_EXAMPLE_VALUES[state.todo_index],
         docs: DOCS_VALUES[state.docs_index],
+        realtime: REALTIME_VALUES[state.realtime_index],
         database_url: if state.db_url.is_empty() {
             None
         } else {
@@ -272,6 +280,7 @@ fn build_args(state: &UiState, args: &InitArgs) -> InitArgs {
         no_auth_local: !AUTH_LOCAL_VALUES[state.auth_index],
         no_todo_example: !TODO_EXAMPLE_VALUES[state.todo_index],
         no_docs: !DOCS_VALUES[state.docs_index],
+        no_realtime: !REALTIME_VALUES[state.realtime_index],
     }
 }
 
@@ -333,6 +342,10 @@ fn handle_choice_delta(state: &mut UiState, delta: isize) {
         }
         Step::Docs => {
             state.docs_index = adjust_choice_index(state.docs_index, DOCS_OPTIONS, delta);
+        }
+        Step::Realtime => {
+            state.realtime_index =
+                adjust_choice_index(state.realtime_index, REALTIME_OPTIONS, delta);
         }
         _ => {}
     }
@@ -404,6 +417,19 @@ fn docs_option_index(docs: bool) -> usize {
     }
 }
 
+fn realtime_option_index(realtime: bool) -> usize {
+    let target = if realtime { 0 } else { 1 };
+    if REALTIME_OPTIONS
+        .get(target)
+        .map(|opt| opt.enabled)
+        .unwrap_or(false)
+    {
+        target
+    } else {
+        first_enabled_index(REALTIME_OPTIONS)
+    }
+}
+
 fn apply_step(state: &mut UiState) -> Result<bool> {
     state.error = None;
     match state.step {
@@ -457,6 +483,10 @@ fn apply_step(state: &mut UiState) -> Result<bool> {
             sync_input(state);
         }
         Step::Docs => {
+            state.step = state.step.next();
+            sync_input(state);
+        }
+        Step::Realtime => {
             state.step = state.step.next();
             sync_input(state);
         }
@@ -602,6 +632,7 @@ fn draw_ui(frame: &mut Frame<'_>, state: &UiState) {
         Step::Auth => choice_lines("Auth", AUTH_OPTIONS, state.auth_index),
         Step::TodoExample => choice_lines("Todo example", TODO_OPTIONS, state.todo_index),
         Step::Docs => choice_lines("Docs", DOCS_OPTIONS, state.docs_index),
+        Step::Realtime => choice_lines("Realtime", REALTIME_OPTIONS, state.realtime_index),
         Step::OutputDir => text_input_lines(
             "Output directory",
             &state.input,
@@ -629,6 +660,10 @@ fn draw_ui(frame: &mut Frame<'_>, state: &UiState) {
             Line::from(format!(
                 "Docs:         {}",
                 DOCS_OPTIONS[state.docs_index].label
+            )),
+            Line::from(format!(
+                "Realtime:     {}",
+                REALTIME_OPTIONS[state.realtime_index].label
             )),
             Line::from(""),
             Line::from("Press Enter to generate."),
@@ -993,3 +1028,16 @@ const DOCS_OPTIONS: &[ChoiceOption] = &[
 ];
 
 const DOCS_VALUES: &[bool] = &[true, false];
+
+const REALTIME_OPTIONS: &[ChoiceOption] = &[
+    ChoiceOption {
+        label: "included",
+        enabled: true,
+    },
+    ChoiceOption {
+        label: "excluded",
+        enabled: true,
+    },
+];
+
+const REALTIME_VALUES: &[bool] = &[true, false];
