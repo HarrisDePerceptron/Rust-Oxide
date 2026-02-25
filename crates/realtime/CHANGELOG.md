@@ -4,6 +4,13 @@ All notable changes to this crate will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.3.0](https://github.com/HarrisDePerceptron/Rust-Oxide/compare/rust-oxide-realtime-v0.2.0...rust-oxide-realtime-v0.3.0) (2026-02-25)
+
+
+### Features
+
+* added unrealiable emmit ([34f8764](https://github.com/HarrisDePerceptron/Rust-Oxide/commit/34f87643290d2c8928221236da7ccb8257ee8fac))
+
 ## [0.2.0](https://github.com/HarrisDePerceptron/Rust-Oxide/compare/rust-oxide-realtime-v0.1.1...rust-oxide-realtime-v0.2.0) (2026-02-22)
 
 
