@@ -260,14 +260,19 @@ pub(super) fn run_tui(args: InitArgs, repo: String) -> Result<TuiOutcome> {
 }
 
 fn build_args(state: &UiState, args: &InitArgs) -> InitArgs {
+    let auth_local = AUTH_LOCAL_VALUES[state.auth_index];
+    let todo_example = auth_local && TODO_EXAMPLE_VALUES[state.todo_index];
+    let docs = DOCS_VALUES[state.docs_index];
+    let realtime = REALTIME_VALUES[state.realtime_index];
+
     InitArgs {
         name: Some(state.name.clone()),
         out: Some(PathBuf::from(state.out_dir.clone())),
         db: DB_OPTIONS[state.db_index].label.to_string(),
-        auth_local: AUTH_LOCAL_VALUES[state.auth_index],
-        todo_example: TODO_EXAMPLE_VALUES[state.todo_index],
-        docs: DOCS_VALUES[state.docs_index],
-        realtime: REALTIME_VALUES[state.realtime_index],
+        auth_local,
+        todo_example,
+        docs,
+        realtime,
         database_url: if state.db_url.is_empty() {
             None
         } else {
@@ -277,10 +282,10 @@ fn build_args(state: &UiState, args: &InitArgs) -> InitArgs {
         repo: args.repo.clone(),
         force: args.force,
         non_interactive: args.non_interactive,
-        no_auth_local: !AUTH_LOCAL_VALUES[state.auth_index],
-        no_todo_example: !TODO_EXAMPLE_VALUES[state.todo_index],
-        no_docs: !DOCS_VALUES[state.docs_index],
-        no_realtime: !REALTIME_VALUES[state.realtime_index],
+        no_auth_local: !auth_local,
+        no_todo_example: !todo_example,
+        no_docs: !docs,
+        no_realtime: !realtime,
     }
 }
 

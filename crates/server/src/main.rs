@@ -4,12 +4,13 @@ use anyhow::Context;
 use axum::{Router, middleware};
 use tower_http::trace::TraceLayer;
 
+#[cfg(feature = "realtime")]
+use rust_oxide::realtime::{AppRealtimeVerifier, SocketAppState};
 use rust_oxide::{
     auth::bootstrap::init_providers,
     config::AppConfig,
     db::connection,
     logging::init_tracing,
-    realtime::{AppRealtimeVerifier, SocketAppState},
     routes::{
         middleware::{catch_panic_layer, json_error_middleware},
         router,
@@ -41,24 +42,33 @@ async fn run() -> anyhow::Result<()> {
         .database
         .as_ref()
         .context("database config missing; set APP_DATABASE__URL")?;
-    let auth_cfg = cfg.auth.as_ref().context(
-        "auth config missing; set APP_AUTH__JWT_SECRET, APP_AUTH__ADMIN_EMAIL, APP_AUTH__ADMIN_PASSWORD",
-    )?;
-
     let db = connection::connect(db_cfg).await?;
     let services = ServiceContext::new(&db);
 
-    let providers = init_providers(auth_cfg, &services).await?;
-    let realtime = rust_oxide::realtime::SocketServerHandle::spawn(cfg.realtime.clone());
-    let realtime_runtime = Arc::new(SocketAppState::new(
-        realtime.clone(),
-        AppRealtimeVerifier::new(providers.clone()),
-    ));
+    let providers = init_providers(cfg.auth.as_ref(), &services).await?;
 
     let state = AppState::new(cfg, db, providers);
 
+    #[cfg(feature = "realtime")]
+    let realtime_runtime = {
+        let realtime =
+            rust_oxide::realtime::SocketServerHandle::spawn(state.config.realtime.clone());
+        Arc::new(SocketAppState::new(
+            realtime,
+            AppRealtimeVerifier::new(state.auth_providers.clone()),
+        ))
+    };
+
+    #[cfg(feature = "realtime")]
     let app = Router::new()
         .merge(router(Arc::clone(&state), realtime_runtime))
+        .layer(middleware::from_fn(json_error_middleware))
+        .layer(catch_panic_layer())
+        .layer(TraceLayer::new_for_http());
+
+    #[cfg(not(feature = "realtime"))]
+    let app = Router::new()
+        .merge(router(Arc::clone(&state)))
         .layer(middleware::from_fn(json_error_middleware))
         .layer(catch_panic_layer())
         .layer(TraceLayer::new_for_http());

@@ -3,8 +3,10 @@ pub mod config;
 pub mod db;
 pub mod error;
 pub mod logging;
+#[cfg(feature = "realtime")]
 pub mod realtime;
 pub mod routes;
 pub mod services;
 pub mod state;
+#[cfg(feature = "realtime")]
 pub mod test_helpers;

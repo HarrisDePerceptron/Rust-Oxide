@@ -115,6 +115,7 @@ impl From<crate::db::dao::DaoLayerError> for AppError {
     }
 }
 
+#[cfg(feature = "realtime")]
 impl From<realtime::server::RealtimeError> for AppError {
     fn from(err: realtime::server::RealtimeError) -> Self {
         match err {

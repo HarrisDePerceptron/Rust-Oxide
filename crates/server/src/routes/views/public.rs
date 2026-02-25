@@ -15,12 +15,14 @@ use crate::db::entity_catalog::{self, EntityInfo};
 use crate::routes::route_list::routes;
 use crate::state::AppState;
 
+#[cfg(feature = "docs")]
 include!(concat!(env!("OUT_DIR"), "/docs_sections_generated.rs"));
 
 #[derive(Clone, Copy)]
 struct NavVisibility {
     show_docs_link: bool,
     show_debug_links: bool,
+    show_todo_link: bool,
 }
 
 #[cfg(debug_assertions)]
@@ -49,6 +51,7 @@ struct IndexTemplate {
     project_name: String,
     show_docs_link: bool,
     show_debug_links: bool,
+    show_todo_link: bool,
 }
 
 #[cfg(debug_assertions)]
@@ -60,6 +63,7 @@ struct RoutesTemplate {
     project_name: String,
     show_docs_link: bool,
     show_debug_links: bool,
+    show_todo_link: bool,
 }
 
 #[cfg(debug_assertions)]
@@ -72,8 +76,10 @@ struct EntitiesTemplate {
     project_name: String,
     show_docs_link: bool,
     show_debug_links: bool,
+    show_todo_link: bool,
 }
 
+#[cfg(feature = "docs")]
 #[derive(Template)]
 #[template(path = "docs.html")]
 struct DocsTemplate {
@@ -82,6 +88,7 @@ struct DocsTemplate {
     sections_html: String,
     show_docs_link: bool,
     show_debug_links: bool,
+    show_todo_link: bool,
 }
 
 #[derive(Template)]
@@ -91,6 +98,7 @@ struct NotAvailableTemplate {
     project_name: String,
     show_docs_link: bool,
     show_debug_links: bool,
+    show_todo_link: bool,
 }
 
 type HtmlError = (StatusCode, Html<String>);
@@ -104,15 +112,18 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/", get(index))
         .route("/not-available", get(not_available_view));
 
-    #[cfg(debug_assertions)]
+    #[cfg(all(debug_assertions, feature = "docs"))]
     let router = router.route("/docs", get(docs_view));
 
-    #[cfg(not(debug_assertions))]
+    #[cfg(all(not(debug_assertions), feature = "docs"))]
     let router = if docs_enabled {
         router.route("/docs", get(docs_view))
     } else {
         router.route("/docs", get(not_available_redirect))
     };
+
+    #[cfg(not(feature = "docs"))]
+    let router = router.route("/docs", get(not_available_view));
 
     #[cfg(debug_assertions)]
     let router = router
@@ -154,13 +165,27 @@ fn resolve_public_dir() -> PathBuf {
 }
 
 fn docs_enabled(state: &AppState) -> bool {
-    cfg!(debug_assertions) || state.config.general.enable_docs_in_release
+    #[cfg(feature = "docs")]
+    {
+        return cfg!(debug_assertions) || state.config.general.enable_docs_in_release;
+    }
+
+    #[cfg(not(feature = "docs"))]
+    {
+        let _ = state;
+        false
+    }
+}
+
+fn todo_ui_enabled() -> bool {
+    cfg!(feature = "todo-example") && cfg!(debug_assertions)
 }
 
 fn nav_visibility(state: &AppState) -> NavVisibility {
     NavVisibility {
         show_docs_link: docs_enabled(state),
         show_debug_links: cfg!(debug_assertions),
+        show_todo_link: todo_ui_enabled(),
     }
 }
 
@@ -173,6 +198,7 @@ async fn index(State(state): State<Arc<AppState>>) -> Result<Html<String>, HtmlE
         project_name,
         show_docs_link: nav.show_docs_link,
         show_debug_links: nav.show_debug_links,
+        show_todo_link: nav.show_todo_link,
     }
     .render()
     .map_err(|_| html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render index"))?;
@@ -191,6 +217,7 @@ async fn routes_view(State(state): State<Arc<AppState>>) -> Result<Html<String>,
         project_name,
         show_docs_link: nav.show_docs_link,
         show_debug_links: nav.show_debug_links,
+        show_todo_link: nav.show_todo_link,
     }
     .render()
     .map_err(|_| html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render routes"))?;
@@ -211,6 +238,7 @@ async fn entities_view(State(state): State<Arc<AppState>>) -> Result<Html<String
         project_name,
         show_docs_link: nav.show_docs_link,
         show_debug_links: nav.show_debug_links,
+        show_todo_link: nav.show_todo_link,
     }
     .render()
     .map_err(|_| {
@@ -222,6 +250,7 @@ async fn entities_view(State(state): State<Arc<AppState>>) -> Result<Html<String
     Ok(Html(rendered))
 }
 
+#[cfg(feature = "docs")]
 async fn docs_view(State(state): State<Arc<AppState>>) -> Result<Html<String>, HtmlError> {
     let now = formatted_build_time();
     let project_name = project_name();
@@ -233,6 +262,7 @@ async fn docs_view(State(state): State<Arc<AppState>>) -> Result<Html<String>, H
         sections_html,
         show_docs_link: nav.show_docs_link,
         show_debug_links: nav.show_debug_links,
+        show_todo_link: nav.show_todo_link,
     }
     .render()
     .map_err(|_| html_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to render docs"))?;
@@ -248,6 +278,7 @@ async fn not_available_view(State(state): State<Arc<AppState>>) -> Result<Html<S
         project_name,
         show_docs_link: nav.show_docs_link,
         show_debug_links: nav.show_debug_links,
+        show_todo_link: nav.show_todo_link,
     }
     .render()
     .map_err(|_| {

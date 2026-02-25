@@ -3,16 +3,23 @@ name = "rust-oxide"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["auth-local", "todo-example", "docs", "realtime"]
+auth-local = ["dep:argon2", "dep:jsonwebtoken", "dep:rand"]
+todo-example = ["auth-local"]
+docs = []
+realtime = ["dep:realtime", "axum/ws"]
+
 [dependencies]
-axum = { version="0.8.7", features=["json", "ws"] }
+axum = { version="0.8.7", features=["json"] }
 anyhow = { version = "1.0.100", features = ["std"] }
-argon2 = { version = "0.5", features = ["alloc"] }
+argon2 = { version = "0.5", features = ["alloc"], optional = true }
 askama = "0.15.1"
 base_entity_derive = { path = "../base_entity_derive" }
 chrono = { version = "0.4", features = ["clock", "serde", "std"] }
 futures-util = "0.3"
-jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }
-rand = "0.8"
+jsonwebtoken = { version = "10", features = ["aws_lc_rs"], optional = true }
+rand = { version = "0.8", optional = true }
 reqwest={version = "0.12.26", features=["json"]}
 sea-orm = { version = "2.0.0-rc.26", features = ["entity-registry", "macros", "mock", "runtime-tokio-rustls", "schema-sync", "sqlx-postgres", "sqlx-sqlite", "with-chrono", "with-uuid", "with-json"] }
 serde = { version = "1.0.228", features = ["derive"] }
@@ -27,12 +34,16 @@ uuid = { version = "1.11", features = ["v4", "serde"] }
 dotenvy="0.15.7"
 async-trait = "0.1.89"
 config = "0.15.18"
-realtime = { package = "rust-oxide-realtime", path = "../realtime" }
+realtime = { package = "rust-oxide-realtime", path = "../realtime", optional = true }
 
 [build-dependencies]
 quote = "1"
 proc-macro2 = { version = "1", features = ["span-locations"] }
 syn = { version = "2", features = ["full", "visit"] }
+
+[[example]]
+name = "realtime_client"
+required-features = ["realtime"]
 
 [profile.release]
 opt-level = 3

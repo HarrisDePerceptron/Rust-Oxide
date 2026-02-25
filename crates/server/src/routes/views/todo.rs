@@ -14,6 +14,7 @@ struct TodoUiTemplate {
     project_name: String,
     show_docs_link: bool,
     show_debug_links: bool,
+    show_todo_link: bool,
 }
 
 #[cfg(debug_assertions)]
@@ -35,8 +36,9 @@ async fn todo_ui() -> Result<Html<String>, HtmlError> {
     let rendered = TodoUiTemplate {
         now,
         project_name,
-        show_docs_link: true,
-        show_debug_links: true,
+        show_docs_link: cfg!(feature = "docs"),
+        show_debug_links: cfg!(debug_assertions),
+        show_todo_link: cfg!(feature = "todo-example") && cfg!(debug_assertions),
     }
     .render()
     .map_err(|_| {

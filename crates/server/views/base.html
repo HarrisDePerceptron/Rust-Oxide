@@ -260,6 +260,7 @@
               data-nav-path="/entities"
               >Entities</a
             >
+            {% if show_todo_link %}
             <a
               class="nav-pill px-4 py-2 text-xs uppercase shadow-lg shadow-black/5 transition hover:-translate-y-0.5"
               href="/todo/ui"
@@ -267,6 +268,7 @@
               data-nav-path="/todo/ui"
               >Todo UI</a
             >
+            {% endif %}
             {% endif %}
           </nav>
         </div>
@@ -321,6 +323,7 @@
               data-nav-path="/entities"
               >Entities</a
             >
+            {% if show_todo_link %}
             <a
               class="nav-mobile-link block border-l-2 border-transparent px-3 py-3 text-sm transition"
               data-top-nav-link
@@ -329,6 +332,7 @@
               data-nav-path="/todo/ui"
               >Todo UI</a
             >
+            {% endif %}
             {% endif %}
           </nav>
         </aside>

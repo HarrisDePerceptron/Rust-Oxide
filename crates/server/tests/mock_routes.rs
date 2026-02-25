@@ -1,3 +1,5 @@
+#![cfg(all(feature = "auth-local", feature = "todo-example", feature = "realtime"))]
+
 use axum::{
     Router,
     body::{self, Body},

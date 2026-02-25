@@ -1,3 +1,5 @@
+#![cfg(all(feature = "auth-local", feature = "realtime"))]
+
 use std::time::Duration;
 
 use axum::{

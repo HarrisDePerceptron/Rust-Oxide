@@ -1,10 +1,44 @@
 use anyhow::Result;
-pub use realtime::server::RealtimeConfig;
 use serde::{Deserialize, Serialize};
 
 use crate::auth::providers::AuthProviderId;
 
 use super::{defaults, envconfig::EnvConfig, validate};
+
+#[cfg(feature = "realtime")]
+pub use realtime::server::RealtimeConfig;
+
+#[cfg(not(feature = "realtime"))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct RealtimeConfig {
+    pub enabled: bool,
+    pub max_connections: usize,
+    pub max_channels_per_connection: usize,
+    pub max_message_bytes: usize,
+    pub heartbeat_interval_secs: u64,
+    pub idle_timeout_secs: u64,
+    pub outbound_queue_size: usize,
+    pub emit_rate_per_sec: u32,
+    pub join_rate_per_sec: u32,
+}
+
+#[cfg(not(feature = "realtime"))]
+impl Default for RealtimeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: defaults::DEFAULT_REALTIME_ENABLED,
+            max_connections: defaults::DEFAULT_REALTIME_MAX_CONNECTIONS,
+            max_channels_per_connection: defaults::DEFAULT_REALTIME_MAX_CHANNELS_PER_CONNECTION,
+            max_message_bytes: defaults::DEFAULT_REALTIME_MAX_MESSAGE_BYTES,
+            heartbeat_interval_secs: defaults::DEFAULT_REALTIME_HEARTBEAT_INTERVAL_SECS,
+            idle_timeout_secs: defaults::DEFAULT_REALTIME_IDLE_TIMEOUT_SECS,
+            outbound_queue_size: defaults::DEFAULT_REALTIME_OUTBOUND_QUEUE_SIZE,
+            emit_rate_per_sec: defaults::DEFAULT_REALTIME_EMIT_RATE_PER_SEC,
+            join_rate_per_sec: defaults::DEFAULT_REALTIME_JOIN_RATE_PER_SEC,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 #[serde(default, deny_unknown_fields)]
