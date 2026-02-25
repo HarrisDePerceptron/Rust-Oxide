@@ -1,4 +1,4 @@
 {
-  "crates/companion_cli": "0.7.0",
-  "crates/realtime": "0.2.0"
+  "crates/companion_cli": "0.8.0",
+  "crates/realtime": "0.3.0"
 }

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/HarrisDePerceptron/Rust-Oxide/compare/rust-oxide-cli-v0.7.0...rust-oxide-cli-v0.8.0) (2026-02-25)
+
+
+### Features
+
+* realtime cli option added ([67b1f33](https://github.com/HarrisDePerceptron/Rust-Oxide/commit/67b1f3370d3563dc35e45eba00caf5bc9c503b7c))
+* refactor and templated with featured ([437b510](https://github.com/HarrisDePerceptron/Rust-Oxide/commit/437b5102c1fa9ab619dddc568f83fa1b66761bf1))
+
 ## [0.7.0](https://github.com/HarrisDePerceptron/Rust-Oxide/compare/rust-oxide-cli-v0.6.1...rust-oxide-cli-v0.7.0) (2026-02-21)
 
 
